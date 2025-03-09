@@ -1,0 +1,57 @@
+Lorenz:
+  name_cpp: "plant::ode::test::Lorenz"
+  constructor:
+    args: [sigma: double, R: double, b: double]
+  active:
+    ode_size: {type: size_t, access: member}
+    ode_state: {type: "plant::ode::state_type", access: function, name_cpp: "plant::ode::r_ode_state", name_cpp_set: "plant::ode::r_set_ode_state"}
+    ode_rates: {type: "plant::ode::state_type", access: function, name_cpp: "plant::ode::r_ode_rates"}
+    pars: {type: "std::vector<double>", access: member}
+
+OdeR:
+  name_cpp: "plant::ode::test::OdeR"
+  forward_declare: true
+  constructor:
+    args: [derivs: "Rcpp::Function", state: "Rcpp::Function", time: double]
+  methods:
+    update_state: {return_type: void}
+
+
+OdeRunner:
+  name_cpp: "plant::ode::Runner<T>"
+  templates:
+    parameters: T
+    concrete:
+      - ["Lorenz": "plant::ode::test::Lorenz"]
+      - ["OdeR":   "plant::ode::test::OdeR"]
+  constructor:
+    args: [obj: T, control: "plant::ode::OdeControl=OdeControl()"]
+  active:
+    time: {type: double, access: member}
+    state: {type: "plant::ode::state_type", access: member}
+    times: {type: "std::vector<double>", access: member}
+    object: {type: T, access: member}
+  methods:
+    advance_adaptive: {return_type: void, args: [time: double]}
+    advance_fixed: {return_type: void, args: [time: "std::vector<double>"]}
+    step: {return_type: void}
+    step_to: {return_type: void, args: [time: double]}
+    set_state: {return_type: void, args: [y: "plant::ode::state_type", time: double]}
+    set_state_from_system: {return_type: void}
+
+OdeControl:
+  name_cpp: "plant::ode::OdeControl"
+  roxygen: |
+    Control parameters for the ode system
+    @title ODE Control parameters
+    @param ...,values Values to initialise the struct with (either as
+    variadic arguments, or as a list, but not both).
+  list:
+    - tol_abs: double
+    - tol_rel: double
+    - a_y: double
+    - a_dydt: double
+    - step_size_min: double
+    - step_size_max: double
+    - step_size_initial: double
+

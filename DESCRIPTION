@@ -1,0 +1,26 @@
+Package: plant
+Title: A Package for Modelling Forest Trait Ecology and Evolution
+Version: 2.0.0.9000
+Authors@R: c(
+    person("Daniel", "Falster", , "daniel.falster@unsw.edu.au", c("aut", "cre"), 
+            comment = c(ORCID = "0000-0002-9814-092X")),
+    person("Richard", "FitzJohn", , "", "aut"),
+    person("Andrew", "O'Reilly-Nugent", , "", "aut")
+    )
+Maintainer: Daniel Falster <daniel.falster@unsw.edu.au>
+Description: ODE solver
+Depends:
+    R (>= 4.1.0)
+Encoding: UTF-8
+License: GPL-2
+LinkingTo: Rcpp
+Imports:
+    Rcpp,
+Suggests:
+    deSolve,
+    numDeriv,
+    RcppR6 (>= 0.2.3),
+VignetteBuilder: knitr
+URL: https://github.com/traitecoevo/plant
+BugReports: https://github.com/traitecoevo/plant/issues
+RoxygenNote: 7.3.1
