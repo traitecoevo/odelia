@@ -1,12 +1,12 @@
 // -*-c++-*-
-#ifndef PLANT_PLANT_ODE_STEP_H_
-#define PLANT_PLANT_ODE_STEP_H_
+#ifndef ODESTEPPER_ODE_STEP_HPP_
+#define ODESTEPPER_ODE_STEP_HPP_
 
 #include <vector>
 #include <cstddef>
-#include <plant/ode_solver/ode_interface.h>
+#include <odestepper/ode_interface.hpp>
 
-namespace plant {
+namespace odestepper {
 namespace ode {
 
 template <class System>

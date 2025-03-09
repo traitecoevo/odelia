@@ -15,7 +15,7 @@ v2.0.0 was released on 25/02/2021
 ### Minor changes
 
 * Moved strategy defaults to header
-* Moved strategy and environment specific files to `inst/include/plant/models`
+* Moved strategy and environment specific files to `inst/include/odestepper/models`
 * Renamed several functions, including:
   * `germination` -> `establishment`
   * `Plant` -> `Individual`
@@ -31,7 +31,7 @@ v2.0.0 was released on 25/02/2021
 * Fixed compiler warnings
 * Removed PlantPlus
 
-A full account of changes from the previous version is available on GitHub: [v1.2.1...v2.0.0](https://github.com/traitecoevo/plant/compare/v1.2.1...v2.0.0)
+A full account of changes from the previous version is available on GitHub: [v1.2.1...v2.0.0](https://github.com/traitecoevo/odestepper/compare/v1.2.1...v2.0.0)
 
 ## Plant 1.2.1  Release Notes
 
@@ -44,7 +44,7 @@ v1.2.1 was released on 20/09/2019
 - update Makefile to use `pkgbuild` instead of `devtools` for building dll ( because of upstream changes )
 - switching to using `remotes` instead of `devtools` for installing from github ( because of upstream changes )
 
-A full account of changes from the previous version is available on Github: [v1.2.0...v1.2.1](https://github.com/traitecoevo/plant/compare/v1.2.0...v1.2.1)
+A full account of changes from the previous version is available on Github: [v1.2.0...v1.2.1](https://github.com/traitecoevo/odestepper/compare/v1.2.0...v1.2.1)
 
 ## Plant 1.2.0  Release Notes
 
@@ -63,7 +63,7 @@ v1.2.0 was released on 20/03/2018
 - add `CITATION` file
 - Address many issues in documentation and package setup causing rcmdcheck to fail
 
-A full account of changes from the previous version is available on Github: [v1.1.0...v1.2.0](https://github.com/traitecoevo/plant/compare/v1.1.0...v1.2.0)
+A full account of changes from the previous version is available on Github: [v1.1.0...v1.2.0](https://github.com/traitecoevo/odestepper/compare/v1.1.0...v1.2.0)
 
 ## Plant 1.1.0 Release Notes
 
@@ -84,7 +84,7 @@ v1.1.0 was released on 2/02/2018
 - roxygen & Rcpp updates
 - Added a `NEWS.md` file to track changes to the package.
 
-A full account of changes from the previous version is available on Github: [v1.0.0...v1.1.0](https://github.com/traitecoevo/plant/compare/v1.0.0...v1.1.0)
+A full account of changes from the previous version is available on Github: [v1.0.0...v1.1.0](https://github.com/traitecoevo/odestepper/compare/v1.0.0...v1.1.0)
 
 ## Plant 1.0.0 Release Notes
 
@@ -94,7 +94,7 @@ This version corresponds to the paper describing the package:
 
 Falster, DS, RG FitzJohn, Å Brännström, U Dieckmann, M Westoby (2016) plant: A package for modelling forest trait ecology and evolution. Methods in Ecology and Evolution 7: 136-146, doi: [10.1111/2041-210X.12525](http://doi.org/10.1111/2041-210X.12525)
 
-A full account of changes from the previous version is available on Github: [v0.2.2...v1.0.0](https://github.com/traitecoevo/plant/compare/v0.2.2...v1.0.0)
+A full account of changes from the previous version is available on Github: [v0.2.2...v1.0.0](https://github.com/traitecoevo/odestepper/compare/v0.2.2...v1.0.0)
 
 
 ## Plant 0.2.2 Release Notes

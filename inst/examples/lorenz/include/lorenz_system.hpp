@@ -1,24 +1,16 @@
-// -*-c++-*-
-#ifndef PLANT_PLANT_LORENZ_H_
-#define PLANT_PLANT_LORENZ_H_
+#ifndef LORENZ_SYSTEM_HPP_
+#define LORENZ_SYSTEM_HPP_
 
-#include <plant/ode_solver/ode_interface.h>
+#include <odestepper/ode_solver.hpp>
 
-namespace plant {
+namespace odestepper {
 namespace ode {
-namespace test {
 
-// This is meant to be a simple test case for the ODE solver.  We
-// mimick a class that has some nontrivial internal state (this
-// doesn't of course, but we pretend that it does).
-//
-// Probably what I should test at some point is that a *collection*
-// of these works as expected.
 class Lorenz {
 public:
   Lorenz(double sigma_, double R_, double b_)
     : sigma(sigma_), R(R_), b(b_),
-      y0(0.0), y1(0.0), y2(0.0),
+      y0(1.0), y1(1.0), y2(1.0),
       dy0dt(0.0), dy1dt(0.0), dy2dt(0.0) {
   }
 
@@ -33,18 +25,21 @@ public:
     dy2dt = -b * y2 + y0 * y1;
     return it;
   }
+
   ode::iterator ode_state(ode::iterator it) const {
     *it++ = y0;
     *it++ = y1;
     *it++ = y2;
     return it;
   }
+
   ode::iterator ode_rates(ode::iterator it) const {
     *it++ = dy0dt;
     *it++ = dy1dt;
     *it++ = dy2dt;
     return it;
   }
+  
   std::vector<double> pars() const {
     std::vector<double> ret;
     ret.push_back(sigma);
@@ -62,6 +57,4 @@ private:
 
 }
 }
-}
-
 #endif

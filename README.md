@@ -1,8 +1,8 @@
 # plant: A package for modelling forest trait ecology and evolution
 
 <!-- badges: start -->
-[![R-CMD-check](https://github.com/traitecoevo/plant/workflows/R-CMD-check/badge.svg)](https://github.com/traitecoevo/plant/master)
-[![Codecov test coverage](https://codecov.io/gh/traitecoevo/plant/branch/master/graph/badge.svg)](https://codecov.io/gh/traitecoevo/plant?branch=master)
+[![R-CMD-check](https://github.com/traitecoevo/odestepper/workflows/R-CMD-check/badge.svg)](https://github.com/traitecoevo/odestepper/master)
+[![Codecov test coverage](https://codecov.io/gh/traitecoevo/odestepper/branch/master/graph/badge.svg)](https://codecov.io/gh/traitecoevo/plant?branch=master)
 <!-- badges: end -->
 
 The plant package for R is an extensible framework for modelling size- and trait-structured demography, ecology and evolution in simulated forests. At its core, plant is an individual-based model where plant physiology and demography are mediated by traits. Individual plants from multiple species can be grown in isolation, in patches of competing plants or in metapopulations under a disturbance regime. These dynamics can be integrated into metapopulation-level estimates of invasion fitness and vegetation structure. Accessed from R, the core routines in plant are written in C++. The package provides for alternative physiology models and for capturing trade-offs among parameters. A detailed test suite is provided to ensure correct behaviour of the code.
@@ -15,11 +15,11 @@ Falster DS, FitzJohn RG, Brännström Å, Dieckmann U, Westoby M (2016) plant: A
 
 An overview of the plant package is given by the above publication. Further background on the default `FF16` growth model is available in Falster *et al* 2011 ([10.1111/j.1365-2745.2010.01735.x](http://doi.org/10.1111/j.1365-2745.2010.01735.x)) and Falster *et al* 2017 ([10.1101/083451](http://doi.org/10.1101/083451)).
 
-`plant` comes with a lot of documentation, available at [https://traitecoevo.github.io/plant/](https://traitecoevo.github.io/plant/). Initial versions for some of the material there was also  included as supplementary material with the publication about plant, which can be accessed [here](http://onlinelibrary.wiley.com/doi/10.1111/2041-210X.12525/abstract#footer-support-info). 
+`plant` comes with a lot of documentation, available at [https://traitecoevo.github.io/odestepper/](https://traitecoevo.github.io/odestepper/). Initial versions for some of the material there was also  included as supplementary material with the publication about plant, which can be accessed [here](http://onlinelibrary.wiley.com/doi/10.1111/2041-210X.12525/abstract#footer-support-info). 
 
 ## Package structure
 
-Plant is a complex package, using [c++14](https://en.wikipedia.org/wiki/C%2B%2B14) behind the scenes for speed with [R6 classes](https://cran.r-project.org/web/packages/R6/vignettes/Introduction.html) (via the [Rcpp](https://cran.r-project.org/web/packages/Rcpp/index.html) and [RcppR6](https://github.com/richfitz/RcppR6) packages).  In this blog post, Rich FitzJohn and I describe the [key technologies used to build the plant package](https://methodsblog.wordpress.com/2016/02/23/plant/). 
+Plant is a complex package, using [c++14](https://en.wikipedia.org/wiki/C%2B%2B14) behind the scenes for speed with [R6 classes](https://cran.r-project.org/web/packages/R6/vignettes/Introduction.html) (via the [Rcpp](https://cran.r-project.org/web/packages/Rcpp/index.html) and [RcppR6](https://github.com/richfitz/RcppR6) packages).  In this blog post, Rich FitzJohn and I describe the [key technologies used to build the plant package](https://methodsblog.wordpress.com/2016/02/23/odestepper/). 
 
 If you are interested in developing plant you should read the Developer Notes.
 
@@ -39,7 +39,7 @@ The `plant` package can be installed direct from github using the [`remotes`](ht
 remotes::install_github("traitecoevo/plant", dependencies=TRUE)
 ```
 
-To install a specific (older) release, decide for the version number that you want to install in https://github.com/traitecoevo/plant/releases  e.g.
+To install a specific (older) release, decide for the version number that you want to install in https://github.com/traitecoevo/odestepper/releases  e.g.
 
 ```r
 remotes::install_github("traitecoevo/plant@v1.0.0", dependencies=TRUE)

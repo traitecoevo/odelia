@@ -1,17 +1,16 @@
 // -*-c++-*-
-#ifndef PLANT_PLANT_ODE_SOLVER_H_
-#define PLANT_PLANT_ODE_SOLVER_H_
+#ifndef ODESTEPPER_ODE_SOLVER_HPP_
+#define ODESTEPPER_ODE_SOLVER_HPP_
 
-#include <plant/ode_solver/ode_interface.h>
-#include <plant/ode_solver/ode_control.h>
-#include <plant/ode_solver/ode_step.h>
-#include <plant/util.h>
+#include <odestepper/ode_interface.hpp>
+#include <odestepper/ode_control.hpp>
+#include <odestepper/ode_step.hpp>
 
 #include <limits>
 #include <vector>
 #include <cstddef>
 
-namespace plant {
+namespace odestepper {
 namespace ode {
 
 template <class System>
@@ -133,7 +132,8 @@ void Solver<System>::advance_fixed(System& system,
     util::stop("'times' must be vector of at least length 1");
   }
   std::vector<double>::const_iterator t = times.begin();
-  if (!util::identical(*t++, time)) {
+  if (!util::identical(*t++, time))
+  {
     util::stop("First element in 'times' must be same as current time");
   }
   while (t != times.end()) {
@@ -204,7 +204,7 @@ void Solver<System>::step(System& system) {
       } else {
       	// We've reached limits of machine accuracy in differences of
       	// step sizes or time (or both).
-      	util::stop("Cannot achieve the desired accuracy");
+        util::stop("Cannot achieve the desired accuracy");
       }
     } else {
       // We have successfully taken a step and will return.  Update
@@ -277,10 +277,11 @@ template <typename System>
 void Solver<System>::set_time(double t) {
   const int ulp = 2; // units in the last place (accuracy)
   if (prev_times.size() > 0 &&
-      !util::almost_equal(prev_times.back(), t, ulp)) {
+      !util::almost_equal(prev_times.back(), t, ulp))
+  {
     util::stop("Time does not match previous (delta = " +
-	       util::to_string(prev_times.back() - t) +
-	       "). Reset solver first.");
+               util::to_string(prev_times.back() - t) +
+               "). Reset solver first.");
   }
   time = t;
   if (prev_times.empty()) { // only if first time (avoids duplicate times)

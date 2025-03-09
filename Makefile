@@ -8,10 +8,6 @@ rebuild: clean RcppR6 full_compile roxygen
 compile:
 	Rscript -e 'pkgbuild::compile_dll(compile_attributes = FALSE, debug=FALSE)' 
 
-debug: RcppR6
-	Rscript -e 'pkgbuild::compile_dll(debug=TRUE)' \ 
-	make roxygen
-
 # compared to compile, also generates src/RcppExports.cpp, R/RcppExports.R 
 full_compile:
 	Rscript -e 'pkgbuild::compile_dll(debug=FALSE)' 
@@ -31,9 +27,6 @@ roxygen:
 
 test: all
 	Rscript -e 'library(methods); devtools::test()'
-
-benchmark:
-	Rscript scripts/benchmark.R
 
 install:
 	R CMD INSTALL .

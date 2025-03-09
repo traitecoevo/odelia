@@ -1,26 +1,23 @@
 // -*-c++-*-
-#ifndef PLANT_PLANT_ODE_CONTROL_H_
-#define PLANT_PLANT_ODE_CONTROL_H_
+#ifndef ODESTEPPER_ODE_CONTROL_HPP_
+#define ODESTEPPER_ODE_CONTROL_HPP_
 
 #include <vector>
 #include <cstddef>
+#include <odestepper/ode_util.hpp>
 
-namespace plant {
+namespace odestepper {
 namespace ode {
 
 struct OdeControl {
   typedef std::vector<double> state_type;
-  OdeControl();
-  OdeControl(double tol_abs_, double tol_rel_,
-	     double a_y_, double a_dydt_,
-	     double step_size_min_, double step_size_max_,
-	     double step_size_initial_);
 
-  OdeControl::OdeControl() : OdeControl(1e-8, 1e-8, 1.0, 0.0,
+
+  OdeControl() : OdeControl(1e-8, 1e-8, 1.0, 0.0,
                                         1e-8, 10.0, 1e-6)
   {
   }
-  OdeControl::OdeControl(double tol_abs_, double tol_rel_,
+  OdeControl(double tol_abs_, double tol_rel_,
                          double a_y_, double a_dydt_,
                          double step_size_min_, double step_size_max_,
                          double step_size_initial_)
@@ -35,7 +32,7 @@ struct OdeControl {
   {
   }
 
-  double OdeControl::adjust_step_size(size_t dim, size_t ord,
+  double adjust_step_size(size_t dim, size_t ord,
                                       double step_size,
                                       const state_type &y,
                                       const state_type &yerr,
@@ -100,7 +97,7 @@ struct OdeControl {
     return step_size;
   }
 
-  double OdeControl::errlevel(double y, double dydt, double h) const
+  double errlevel(double y, double dydt, double h) const
   {
     const double errlev = tol_rel * (a_y * std::abs(y) +
                                      a_dydt * std::abs(h * dydt)) +
@@ -112,7 +109,7 @@ struct OdeControl {
     return errlev;
   }
 
-  bool OdeControl::step_size_shrank() const
+  bool step_size_shrank() const
   {
     return last_step_size_shrank;
   }

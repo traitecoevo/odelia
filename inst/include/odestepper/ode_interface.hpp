@@ -1,8 +1,10 @@
 // -*-c++-*-
-#ifndef PLANT_PLANT_ODE_INTERFACE_H_
-#define PLANT_PLANT_ODE_INTERFACE_H_
+#ifndef ODESTEPPER_ODE_INTERFACE_HPP_
+#define ODESTEPPER_ODE_INTERFACE_HPP_
 
-namespace plant {
+#include <odestepper/ode_util.hpp>
+
+namespace odestepper {
 namespace ode {
 
 // These are utilities designed to make it more pleasant to work with
