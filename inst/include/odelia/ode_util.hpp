@@ -1,11 +1,11 @@
 // -*-c++-*-
-#ifndef ODESTEPPER_UTIL_HPP_
-#define ODESTEPPER_UTIL_HPP_
+#ifndef ODELIA_UTIL_HPP_
+#define ODELIA_UTIL_HPP_
 
 #include <stddef.h> // size_t
 #include <RcppCommon.h> // as/wrap/SEXP
 
-namespace odestepper {
+namespace odelia {
 namespace util {
 
 struct index {
@@ -129,9 +129,9 @@ std::string to_string(T x) {
 }
 
 namespace Rcpp {
-template <> SEXP wrap(const odestepper::util::index&);
-template <> odestepper::util::index as(SEXP);
-template <> SEXP wrap(const std::vector<odestepper::util::index>&);
+template <> SEXP wrap(const odelia::util::index&);
+template <> odelia::util::index as(SEXP);
+template <> SEXP wrap(const std::vector<odelia::util::index>&);
 }
 
 #endif

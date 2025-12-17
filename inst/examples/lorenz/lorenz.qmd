@@ -4,7 +4,7 @@
 ```{r}
 devtools::install()
 
-library(odestepper)
+library(odelia)
 setwd(here::here("inst/examples/lorenz"))
 
 Rcpp::sourceCpp("src/main.cpp",

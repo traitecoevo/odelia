@@ -1,16 +1,16 @@
 // -*-c++-*-
-#ifndef ODESTEPPER_ODE_SOLVER_HPP_
-#define ODESTEPPER_ODE_SOLVER_HPP_
+#ifndef ODELIA_ODE_SOLVER_HPP_
+#define ODELIA_ODE_SOLVER_HPP_
 
-#include <odestepper/ode_interface.hpp>
-#include <odestepper/ode_control.hpp>
-#include <odestepper/ode_step.hpp>
+#include <odelia/ode_interface.hpp>
+#include <odelia/ode_control.hpp>
+#include <odelia/ode_step.hpp>
 
 #include <limits>
 #include <vector>
 #include <cstddef>
 
-namespace odestepper {
+namespace odelia {
 namespace ode {
 
 template <class System>

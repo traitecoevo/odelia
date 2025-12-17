@@ -1,9 +1,9 @@
 #ifndef LORENZ_SYSTEM_HPP_
 #define LORENZ_SYSTEM_HPP_
 
-#include <odestepper/ode_solver.hpp>
+#include <odelia/ode_solver.hpp>
 
-namespace odestepper {
+namespace odelia {
 namespace ode {
 
 class Lorenz {

@@ -1,7 +1,7 @@
-#include <odestepper/ode_solver.hpp>
+#include <odelia/ode_solver.hpp>
 #include "lorenz_system.hpp"
 
-namespace odestepper {
+namespace odelia {
 namespace ode {
 
 // This is a little wrapper class that is meant to simplify the

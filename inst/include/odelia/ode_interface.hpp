@@ -1,10 +1,10 @@
 // -*-c++-*-
-#ifndef ODESTEPPER_ODE_INTERFACE_HPP_
-#define ODESTEPPER_ODE_INTERFACE_HPP_
+#ifndef ODELIA_ODE_INTERFACE_HPP_
+#define ODELIA_ODE_INTERFACE_HPP_
 
-#include <odestepper/ode_util.hpp>
+#include <odelia/ode_util.hpp>
 
-namespace odestepper {
+namespace odelia {
 namespace ode {
 
 // These are utilities designed to make it more pleasant to work with

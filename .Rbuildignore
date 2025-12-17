@@ -4,13 +4,12 @@
 ^.*\.code-workspace$
 (^|/)\\.DS_Store$
 ^Makefile$
-^odestepper_.+\.tar\.gz$
+^odelia_.+\.tar\.gz$
 ^.*\.Rproj$
 ^\.Rproj\.user$
 ^.Rhistory$
 ^.RStudio$
 ^NEWS.md
-^odestepper.Rcheck$
+^odelia.Rcheck$
 ^check$
-^inst/RcppR6*$
 ^gh-pages$

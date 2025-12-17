@@ -1,12 +1,12 @@
 // -*-c++-*-
-#ifndef ODESTEPPER_ODE_CONTROL_HPP_
-#define ODESTEPPER_ODE_CONTROL_HPP_
+#ifndef ODELIA_ODE_CONTROL_HPP_
+#define ODELIA_ODE_CONTROL_HPP_
 
 #include <vector>
 #include <cstddef>
-#include <odestepper/ode_util.hpp>
+#include <odelia/ode_util.hpp>
 
-namespace odestepper {
+namespace odelia {
 namespace ode {
 
 struct OdeControl {

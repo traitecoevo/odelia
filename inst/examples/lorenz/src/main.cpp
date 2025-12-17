@@ -1,11 +1,11 @@
-// [[Rcpp::depends(Rcpp, odestepper)]]
+// [[Rcpp::depends(Rcpp, odelia)]]
 // [[Rcpp::plugins(cpp20)]]
 
 #include <Rcpp.h>
 #include "../include/lorenz_solver.hpp"
 
 using namespace Rcpp;
-using namespace odestepper;
+using namespace odelia;
 
 // [[Rcpp::export]]
 List lorenz_rhs(double t, NumericVector state, NumericVector pars)
@@ -217,7 +217,7 @@ SEXP OdeControl_new(double tol_abs,
                     double step_size_initial)
 {
   // allocate new control object
-  auto *ctrl = new odestepper::ode::OdeControl(
+  auto *ctrl = new odelia::ode::OdeControl(
       tol_abs,
       tol_rel,
       a_y,
@@ -227,6 +227,6 @@ SEXP OdeControl_new(double tol_abs,
       step_size_initial);
 
   // wrap in an external pointer, auto-delete on GC
-  Rcpp::XPtr<odestepper::ode::OdeControl> xp(ctrl, true);
+  Rcpp::XPtr<odelia::ode::OdeControl> xp(ctrl, true);
   return xp;
 }

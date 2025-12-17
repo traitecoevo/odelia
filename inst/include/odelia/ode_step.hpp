@@ -1,12 +1,12 @@
 // -*-c++-*-
-#ifndef ODESTEPPER_ODE_STEP_HPP_
-#define ODESTEPPER_ODE_STEP_HPP_
+#ifndef ODELIA_ODE_STEP_HPP_
+#define ODELIA_ODE_STEP_HPP_
 
 #include <vector>
 #include <cstddef>
-#include <odestepper/ode_interface.hpp>
+#include <odelia/ode_interface.hpp>
 
-namespace odestepper {
+namespace odelia {
 namespace ode {
 
 template <class System>

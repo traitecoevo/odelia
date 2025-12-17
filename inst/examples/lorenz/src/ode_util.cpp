@@ -1,7 +1,7 @@
-#include <odestepper/ode_util.hpp>
+#include <odelia/ode_util.hpp>
 #include <Rcpp.h>
 
-namespace odestepper
+namespace odelia
 {
   namespace util
   {
@@ -35,20 +35,20 @@ namespace odestepper
 }
 
 namespace Rcpp {
-template <> SEXP wrap(const odestepper::util::index& x) {
-  return Rcpp::wrap(odestepper::util::base_0_to_1<size_t, int>(x.x));
+template <> SEXP wrap(const odelia::util::index& x) {
+  return Rcpp::wrap(odelia::util::base_0_to_1<size_t, int>(x.x));
 }
-template <> odestepper::util::index as(SEXP x) {
+template <> odelia::util::index as(SEXP x) {
   const int ix(Rcpp::as<int>(x));
   if (ix <= 0) {
     Rcpp::stop("Invalid value for index (must be >= 1)");
   }
-  return odestepper::util::base_1_to_0<int, size_t>(ix);
+  return odelia::util::base_1_to_0<int, size_t>(ix);
 }
-template <> SEXP wrap(const std::vector<odestepper::util::index>& x) {
+template <> SEXP wrap(const std::vector<odelia::util::index>& x) {
   Rcpp::IntegerVector ret(x.size());
   for (size_t i = 0; i < x.size(); ++i) {
-    ret[static_cast<int>(i)] = odestepper::util::base_0_to_1<size_t, int>(x[i].x);
+    ret[static_cast<int>(i)] = odelia::util::base_0_to_1<size_t, int>(x[i].x);
   }
   return Rcpp::wrap(ret);
 }

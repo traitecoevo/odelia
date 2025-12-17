@@ -1,6 +1,6 @@
-Package: odestepper
+Package: odelia
 Type: Package
-Title: A Package for Modelling Forest Trait Ecology and Evolution
+Title: ODE solver using Rune-Kutta 4-5 adpative step, C++ header files
 Version: 0.0.0.9000
 Authors@R: c(
     person("Daniel", "Falster", , "daniel.falster@unsw.edu.au", c("aut", "cre"), 
@@ -9,11 +9,11 @@ Authors@R: c(
     person("Andrew", "O'Reilly-Nugent", , "", "aut")
     )
 Maintainer: Daniel Falster <daniel.falster@unsw.edu.au>
-Description: odestepper provides a ODE stepper in C++ using RK4-5.
+Description: odelia provides an ODE solver in C++ header files, using RK4-5. There's potenital to link to R via Rcpp. 
 Depends:
     R (>= 4.2.0)
 Encoding: UTF-8
 License: GPL-2
-URL: https://github.com/traitecoevo/odestepper
-BugReports: https://github.com/traitecoevo/odestepper/issues
+URL: https://github.com/traitecoevo/odelia
+BugReports: https://github.com/traitecoevo/odelia/issues
 RoxygenNote: 7.3.2
