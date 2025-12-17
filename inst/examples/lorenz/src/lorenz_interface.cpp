@@ -2,7 +2,7 @@
 // [[Rcpp::plugins(cpp20)]]
 
 #include <Rcpp.h>
-#include "../include/lorenz_solver.hpp"
+#include "lorenz_solver.hpp"
 
 using namespace Rcpp;
 using namespace odelia;
@@ -28,14 +28,14 @@ List lorenz_rhs(double t, NumericVector state, NumericVector pars)
 // [[Rcpp::export]]
 std::vector<double> get_number()
 {
-  ode::Lorenz sys{10.0, 28.0, 8.0 / 3.0};
+  ode::LorenzSystem sys{10.0, 28.0, 8.0 / 3.0};
 
   ode::OdeControl ctrl(1e-8, 1e-8, 1.0, 0.0,
                   1e-8, 10.0, 1e-6);
 
   std::cout <<sys.ode_size() << std::endl;
 
-  ode::Solver<ode::Lorenz> solver(sys, ctrl);
+  ode::Solver<ode::LorenzSystem> solver(sys, ctrl);
 
   std::cout << solver.get_time() << std::endl;
 
@@ -54,13 +54,13 @@ inline Rcpp::XPtr<ode::Runner> get_runner(SEXP xp)
   return Rcpp::XPtr<ode::Runner>(xp);
 }
 
-// 1. Constructor: build Runner from existing Lorenz + OdeControl  ------------
-// Here we assume you already have XPtr<Lorenz> and XPtr<ode::OdeControl> in R
+// 1. Constructor: build Runner from existing LorenzSystem + OdeControl  ------------
+// Here we assume you already have XPtr<LorenzSystem> and XPtr<ode::OdeControl> in R
 
 // [[Rcpp::export]]
-SEXP Runner_new(SEXP lorenz_xp, SEXP control_xp)
+SEXP Runner_new(SEXP LorenzSystem_xp, SEXP control_xp)
 {
-  Rcpp::XPtr<ode::Lorenz> obj(lorenz_xp);
+  Rcpp::XPtr<ode::LorenzSystem> obj(LorenzSystem_xp);
   Rcpp::XPtr<ode::OdeControl> ctrl(control_xp);
 
   Rcpp::XPtr<ode::Runner> ptr(new ode::Runner(*obj, *ctrl), true);
@@ -142,8 +142,8 @@ void Runner_step_to(SEXP runner_xp, double time)
 }
 
 // Convenience accessor
-inline Rcpp::XPtr<ode::Lorenz> get_lorenz(SEXP xp) {
-  return Rcpp::XPtr<ode::Lorenz>(xp);
+inline Rcpp::XPtr<ode::LorenzSystem> get_LorenzSystem(SEXP xp) {
+  return Rcpp::XPtr<ode::LorenzSystem>(xp);
 }
 
 //-----------------------------
@@ -151,15 +151,15 @@ inline Rcpp::XPtr<ode::Lorenz> get_lorenz(SEXP xp) {
 //-----------------------------
 
 // [[Rcpp::export]]
-SEXP Lorenz_new(double sigma, double R, double b) {
+SEXP LorenzSystem_new(double sigma, double R, double b) {
   // R will delete this when the external pointer is GC'd
-  Rcpp::XPtr<ode::Lorenz> ptr(new ode::Lorenz(sigma, R, b), true);
+  Rcpp::XPtr<ode::LorenzSystem> ptr(new ode::LorenzSystem(sigma, R, b), true);
   return ptr;
 }
 
 // [[Rcpp::export]]
-Rcpp::NumericVector Lorenz_pars(SEXP lorenz_xp) {
-  auto lor = get_lorenz(lorenz_xp);
+Rcpp::NumericVector LorenzSystem_pars(SEXP LorenzSystem_xp) {
+  auto lor = get_LorenzSystem(LorenzSystem_xp);
   std::vector<double> p = lor->pars();
   return Rcpp::wrap(p);
 }
@@ -171,12 +171,12 @@ Rcpp::NumericVector Lorenz_pars(SEXP lorenz_xp) {
 // Set internal state y0, y1, y2 and update rates.
 // y must be length 3.
 // [[Rcpp::export]]
-void Lorenz_set_state(SEXP lorenz_xp, Rcpp::NumericVector y) {
+void LorenzSystem_set_state(SEXP LorenzSystem_xp, Rcpp::NumericVector y) {
   if (y.size() != 3) {
-    Rcpp::stop("Lorenz_set_state: state vector must have length 3");
+    Rcpp::stop("LorenzSystem_set_state: state vector must have length 3");
   }
 
-  auto lor = get_lorenz(lorenz_xp);
+  auto lor = get_LorenzSystem(LorenzSystem_xp);
 
   std::vector<double> tmp(y.begin(), y.end());
   ode::const_iterator it = tmp.begin();
@@ -185,8 +185,8 @@ void Lorenz_set_state(SEXP lorenz_xp, Rcpp::NumericVector y) {
 
 // Get current state (y0, y1, y2) as numeric(3)
 // [[Rcpp::export]]
-Rcpp::NumericVector Lorenz_state(SEXP lorenz_xp) {
-  auto lor = get_lorenz(lorenz_xp);
+Rcpp::NumericVector LorenzSystem_state(SEXP LorenzSystem_xp) {
+  auto lor = get_LorenzSystem(LorenzSystem_xp);
 
   std::vector<double> tmp(3);
   ode::iterator it = tmp.begin();
@@ -197,8 +197,8 @@ Rcpp::NumericVector Lorenz_state(SEXP lorenz_xp) {
 
 // Get current rates (dy0dt, dy1dt, dy2dt) as numeric(3)
 // [[Rcpp::export]]
-Rcpp::NumericVector Lorenz_rates(SEXP lorenz_xp) {
-  auto lor = get_lorenz(lorenz_xp);
+Rcpp::NumericVector LorenzSystem_rates(SEXP LorenzSystem_xp) {
+  auto lor = get_LorenzSystem(LorenzSystem_xp);
 
   std::vector<double> tmp(3);
   ode::iterator it = tmp.begin();

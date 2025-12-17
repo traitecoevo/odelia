@@ -1,13 +1,26 @@
+---
+title: "Lorenz ODE example"
+format: html
+editor: source
+---
 
+This vignette provides an example of using odelia to implement an ODE solver simulating the classic [Lorenz system](https://en.wikipedia.org/wiki/Lorenz_system). 
 
+![](https://upload.wikimedia.org/wikipedia/commons/1/13/A_Trajectory_Through_Phase_Space_in_a_Lorenz_Attractor.gif)
+
+It's a relatively straightforward ODE system with only three equations, that is easily solved in a variety of ODE solvers. However, it provides an opportunity to demonstrate a system with non-trivial dyanmics, and the minimal setup for using odelia.
+
+E
 
 ```{r}
-devtools::install()
+fs::dir_tree(path = here::here("inst/examples/lorenz"))
+```
 
+```{r}
 library(odelia)
 setwd(here::here("inst/examples/lorenz"))
 
-Rcpp::sourceCpp("src/main.cpp",
+Rcpp::sourceCpp("src/lorenz_interface.cpp",
   verbose = TRUE, rebuild = TRUE
 )
 

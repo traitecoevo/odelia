@@ -3,9 +3,9 @@ Runner <- R6::R6Class(
   public = list(
     ptr = NULL,
 
-    # lorenz_xp and control_xp are external pointers (XPtr<Lorenz>, XPtr<OdeControl>)
-    initialize = function(lorenz_xp, control_xp) {
-      self$ptr <- Runner_new(lorenz_xp, control_xp)
+    # LorenzSystem_xp and control_xp are external pointers (XPtr<LorenzSystem>, XPtr<OdeControl>)
+    initialize = function(LorenzSystem_xp, control_xp) {
+      self$ptr <- Runner_new(LorenzSystem_xp, control_xp)
     },
     time = function() {
       Runner_time(self$ptr)
@@ -43,26 +43,26 @@ Runner <- R6::R6Class(
   )
 )
 
-Lorenz <- R6::R6Class(
-  "Lorenz",
+LorenzSystem <- R6::R6Class(
+  "LorenzSystem",
   public = list(
     ptr = NULL,
     initialize = function(sigma, R, b) {
-      # create the C++ Lorenz object
-      self$ptr <- Lorenz_new(sigma, R, b)
+      # create the C++ LorenzSystem object
+      self$ptr <- LorenzSystem_new(sigma, R, b)
     },
     pars = function() {
-      Lorenz_pars(self$ptr)
+      LorenzSystem_pars(self$ptr)
     },
     set_state = function(y) {
-      Lorenz_set_state(self$ptr, y)
+      LorenzSystem_set_state(self$ptr, y)
       invisible(self)
     },
     state = function() {
-      Lorenz_state(self$ptr)
+      LorenzSystem_state(self$ptr)
     },
     rates = function() {
-      Lorenz_rates(self$ptr)
+      LorenzSystem_rates(self$ptr)
     }
   )
 )

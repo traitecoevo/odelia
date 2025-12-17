@@ -9,46 +9,46 @@ namespace ode {
 class Runner {
 
   public:
-  Runner(Lorenz obj_, ode::OdeControl control) : obj(obj_), solver(obj, control) {}
+  Runner(LorenzSystem sys_, ode::OdeControl control) : sys(sys_), solver(sys, control) {}
   
   double time() const {return solver.get_time();}
   
   ode::state_type state() const {return solver.get_state();}
   
   void set_state(ode::state_type y, double time) {
-    util::check_length(y.size(), obj.ode_size());
-    ode::internal::set_ode_state(obj, y, time);
-    solver.reset(obj);
-    solver.set_state_from_system(obj);
+    util::check_length(y.size(), sys.ode_size());
+    ode::internal::set_ode_state(sys, y, time);
+    solver.reset(sys);
+    solver.set_state_from_system(sys);
   }
   
   void set_state_from_system() {
-    solver.set_state_from_system(obj);
+    solver.set_state_from_system(sys);
   }
 
   std::vector<double> times() const {
     return solver.get_times();
   }
   
-  Lorenz object() const {return obj;}
+  LorenzSystem system() const {return sys;}
 
   void advance_adaptive(double time) { 
-    solver.advance_adaptive(obj, time); 
+    solver.advance_adaptive(sys, time); 
   }
   
   void advance_fixed(std::vector<double> times) {
-    solver.advance_fixed(obj, times);
+    solver.advance_fixed(sys, times);
   }
   void step() {
-    solver.step(obj);
+    solver.step(sys);
   }
   
   void step_to(double time) {
-    solver.step_to(obj, time);
+    solver.step_to(sys, time);
   }
 
-  Lorenz obj;
-  ode::Solver<Lorenz> solver;
+  LorenzSystem sys;
+  ode::Solver<LorenzSystem> solver;
 };
 
 }

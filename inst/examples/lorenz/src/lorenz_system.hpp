@@ -3,12 +3,14 @@
 
 #include <odelia/ode_solver.hpp>
 
+// define your system using the same namespace as the package 
+// makes everything easier to find
 namespace odelia {
 namespace ode {
 
-class Lorenz {
+class LorenzSystem {
 public:
-  Lorenz(double sigma_, double R_, double b_)
+  LorenzSystem(double sigma_, double R_, double b_)
     : sigma(sigma_), R(R_), b(b_),
       y0(1.0), y1(1.0), y2(1.0),
       dy0dt(0.0), dy1dt(0.0), dy2dt(0.0) {
@@ -16,6 +18,7 @@ public:
 
   // ODE interface.
   size_t ode_size() const {return ode_dimension;}
+
   ode::const_iterator set_ode_state(ode::const_iterator it) {
     y0 = *it++;
     y1 = *it++;
@@ -50,6 +53,7 @@ public:
 
 private:
   static const int ode_dimension = 3;
+  
   double sigma, R, b;
   double y0, y1, y2;
   double dy0dt, dy1dt, dy2dt;
