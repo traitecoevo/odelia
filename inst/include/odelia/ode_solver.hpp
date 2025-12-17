@@ -52,7 +52,6 @@ private:
   state_type dydt_in;  // Vector of dydt at beginning of step
   state_type dydt_out; // Vector of dydt during step
 
-  // NOTE: Ideas around this may change.
   bool dydt_in_is_clean;
 };
 

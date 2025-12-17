@@ -2,8 +2,6 @@ Runner <- R6::R6Class(
   "Runner",
   public = list(
     ptr = NULL,
-
-    # LorenzSystem_xp and control_xp are external pointers (XPtr<LorenzSystem>, XPtr<OdeControl>)
     initialize = function(LorenzSystem_xp, control_xp) {
       self$ptr <- Runner_new(LorenzSystem_xp, control_xp)
     },
@@ -17,15 +15,11 @@ Runner <- R6::R6Class(
       Runner_set_state(self$ptr, y, time)
       invisible(self)
     },
-    set_state_from_system = function() {
-      Runner_set_state_from_system(self$ptr)
-      invisible(self)
-    },
     times = function() {
       Runner_times(self$ptr)
     },
-    advance_adaptive = function(time) {
-      Runner_advance_adaptive(self$ptr, time)
+    advance_adaptive = function(times) {
+      Runner_advance_adaptive(self$ptr, times)
       invisible(self)
     },
     advance_fixed = function(times) {
@@ -36,9 +30,26 @@ Runner <- R6::R6Class(
       Runner_step(self$ptr)
       invisible(self)
     },
-    step_to = function(time) {
-      Runner_step_to(self$ptr, time)
+    reset = function() {
+      Runner_reset(self$ptr)
       invisible(self)
+    },
+    collect = function(value) {
+    if (missing(value)) {
+      Runner_get_collect(self$ptr)
+    } else {
+      Runner_set_collect(self$ptr, value)
+    }
+    },
+    history_size = function() {
+      Runner_get_history_size(self$ptr)
+    },
+    history_element = function(i) {
+      # 1-based index from R, convert to 0-based size_t if you prefer
+      Runner_get_history_element(self$ptr, as.integer(i - 1L))
+    },
+    history = function() {
+      Runner_get_history(self$ptr)
     }
   )
 )

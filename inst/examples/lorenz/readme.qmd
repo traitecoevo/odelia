@@ -30,6 +30,51 @@ system.time(x <- get_number())
 length(x)
 ```
 
+
+Run just Lorenz
+
+System
+```{r}
+source("R/lorenz_interface.R")
+lz <- LorenzSystem$new(sigma = 10, R = 28, b = 8 / 3)
+
+lz$pars() # c(10, 28, 8/3)
+lz$set_state(c(1, 1, 1)) # sets y0,y1,y2 and updates rates
+lz$state() # current state
+lz$rates() # current dy/dt
+
+```
+
+Solver
+
+```{r}
+ctrl <- OdeControl_new(
+  tol_abs = 1e-8,
+  tol_rel = 1e-8,
+  a_y = 1.0,
+  a_dydt = 1.0,
+  step_size_min = 1e-8,
+  step_size_max = 1,
+  step_size_initial = 1e-3
+)
+
+runner <- Runner$new(lz$ptr, ctrl)
+runner$advance_adaptive(c(0, 10))
+runner$times() |> length()
+runner$state()
+
+runner$reset()
+runner <- Runner$new(lz$ptr, ctrl)
+runner$advance_fixed(seq(0, 20, by = 0.1))
+runner$times() |> length()
+runner$state()
+runner$collect()
+runner$history()[[1]]
+runner$history_element(10)
+```
+
+
+
 Compare speed to desolve (with Rcpp)
 
 ```{r}
@@ -78,42 +123,4 @@ plot(sol_desolve2[i, "x"], sol_desolve2[i, "z"],
   type = "l",
   xlab = "x", ylab = "z", main = "Lorenz attractor (deSolve, RK45)"
 )
-```
-
-Run just Lorenz
-
-System
-```{r}
-source("R/lorenz_interface.R")
-lz <- LorenzSystem$new(sigma = 10, R = 28, b = 8 / 3)
-
-lz$pars() # c(10, 28, 8/3)
-lz$set_state(c(1, 1, 1)) # sets y0,y1,y2 and updates rates
-lz$state() # current state
-lz$rates() # current dy/dt
-
-```
-
-Solver
-
-```{r}
-ctrl <- OdeControl_new(
-  tol_abs = 1e-8,
-  tol_rel = 1e-8,
-  a_y = 1.0,
-  a_dydt = 1.0,
-  step_size_min = 1e-8,
-  step_size_max = 0.1,
-  step_size_initial = 1e-3
-)
-
-runner <- Runner$new(lz$ptr, ctrl)
-
-runner$advance_adaptive(10)
-runner$time()
-runner$state()
-
-runner$advance_fixed(seq(10, 20, by = 0.1))
-runner$times()
-runner$state()
 ```

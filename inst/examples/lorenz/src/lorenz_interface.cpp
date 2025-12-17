@@ -18,13 +18,10 @@ std::vector<double> get_number()
   std::cout <<sys.ode_size() << std::endl;
 
   ode::Solver<ode::LorenzSystem> solver(sys, ctrl);
-
   std::cout << solver.get_time() << std::endl;
 
   solver.advance_adaptive(sys, 10000);
   std::vector<double> times = solver.get_times();
-
-  std::cout << solver.get_time() << " " << times.size() << std::endl;
 
   return times;
 }
@@ -48,6 +45,13 @@ SEXP Runner_new(SEXP LorenzSystem_xp, SEXP control_xp)
 
   Rcpp::XPtr<ode::Runner> ptr(new ode::Runner(*sys, *ctrl), true);
   return ptr;
+}
+
+// [[Rcpp::export]]
+void Runner_reset(SEXP runner_xp)
+{
+  auto r = get_runner(runner_xp);
+  r->reset();
 }
 
 // Simple accessors
@@ -85,18 +89,13 @@ void Runner_set_state(SEXP runner_xp,
   r->set_state(yy, time);
 }
 
-// [[Rcpp::export]]
-void Runner_set_state_from_system(SEXP runner_xp)
-{
-  auto r = get_runner(runner_xp);
-  r->set_state_from_system();
-}
 
 // [[Rcpp::export]]
-void Runner_advance_adaptive(SEXP runner_xp, double time)
+void Runner_advance_adaptive(SEXP runner_xp, Rcpp::NumericVector times)
 {
   auto r = get_runner(runner_xp);
-  r->advance_adaptive(time);
+  std::vector<double> ts(times.begin(), times.end());
+  r->advance_adaptive(ts);
 }
 
 // [[Rcpp::export]]
@@ -115,13 +114,64 @@ void Runner_step(SEXP runner_xp)
   r->step();
 }
 
+//-------------------------
+// collect flag
+//-------------------------
+
 // [[Rcpp::export]]
-void Runner_step_to(SEXP runner_xp, double time)
+bool Runner_get_collect(SEXP runner_xp)
 {
   auto r = get_runner(runner_xp);
-  r->step_to(time);
+  return r->get_collect();
 }
 
+// [[Rcpp::export]]
+void Runner_set_collect(SEXP runner_xp, bool x)
+{
+  auto r = get_runner(runner_xp);
+  r->set_collect(x);
+}
+
+//-------------------------
+// history access
+//-------------------------
+
+// size of history
+// [[Rcpp::export]]
+std::size_t Runner_get_history_size(SEXP runner_xp)
+{
+  auto r = get_runner(runner_xp);
+  return r->get_history_size();
+}
+
+// single element as external pointer to a *copy*
+// [[Rcpp::export]]
+SEXP Runner_get_history_element(SEXP runner_xp, std::size_t i)
+{
+  auto r = get_runner(runner_xp);
+  ode::LorenzSystem elem = r->get_history_element(i); // value copy
+  Rcpp::XPtr<ode::LorenzSystem> xp(new ode::LorenzSystem(elem), true);
+  return xp;
+}
+
+// full history as a list of external pointers
+// [[Rcpp::export]]
+Rcpp::List Runner_get_history(SEXP runner_xp)
+{
+  auto r = get_runner(runner_xp);
+  std::vector<ode::LorenzSystem> hist = r->get_history();
+
+  R_xlen_t n = static_cast<R_xlen_t>(hist.size());
+  Rcpp::List out(n);
+
+  for (R_xlen_t i = 0; i < n; ++i)
+  {
+    Rcpp::XPtr<ode::LorenzSystem> xp(new ode::LorenzSystem(hist[i]), true);
+    out[i] = xp;
+  }
+
+  return out;
+}
 
 //-------------------------------------------------------------------------
 // Rcpp interface for LorenzSystem

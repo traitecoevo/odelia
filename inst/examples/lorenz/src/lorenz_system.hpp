@@ -23,9 +23,11 @@ public:
     y0 = *it++;
     y1 = *it++;
     y2 = *it++;
+    
     dy0dt = sigma * (y1 - y0);
     dy1dt = R * y0 - y1 - y0 * y2;
     dy2dt = -b * y2 + y0 * y1;
+    
     return it;
   }
 
@@ -51,14 +53,15 @@ public:
     return ret;
   }
 
-private:
-  static const int ode_dimension = 3;
-  
-  double sigma, R, b;
-  double y0, y1, y2;
-  double dy0dt, dy1dt, dy2dt;
-};
+  void reset() {}
 
+  private:
+    static const int ode_dimension = 3;
+
+    double sigma, R, b;
+    double y0, y1, y2;
+    double dy0dt, dy1dt, dy2dt;
+  };
 }
 }
 #endif
