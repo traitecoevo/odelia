@@ -8,24 +8,6 @@ using namespace Rcpp;
 using namespace odelia;
 
 // [[Rcpp::export]]
-List lorenz_rhs(double t, NumericVector state, NumericVector pars)
-{
-  double x = state["x"];
-  double y = state["y"];
-  double z = state["z"];
-
-  double sigma = pars["sigma"];
-  double rho = pars["rho"];
-  double beta = pars["beta"];
-
-  double dx = sigma * (y - x);
-  double dy = x * (rho - z) - y;
-  double dz = x * y - beta * z;
-
-  return List::create(NumericVector::create(dx, dy, dz));
-}
-
-// [[Rcpp::export]]
 std::vector<double> get_number()
 {
   ode::LorenzSystem sys{10.0, 28.0, 8.0 / 3.0};
@@ -47,28 +29,28 @@ std::vector<double> get_number()
   return times;
 }
 
-// Helper to get the XPtr<Runner> ---------------------------------------------
+//-------------------------------------------------------------------------
+// Rcpp interface for the ODE Runner 
 
-inline Rcpp::XPtr<ode::Runner> get_runner(SEXP xp)
-{
+// Helper to get the XPtr<Runner>
+inline Rcpp::XPtr<ode::Runner> get_runner(SEXP xp) {
   return Rcpp::XPtr<ode::Runner>(xp);
 }
 
-// 1. Constructor: build Runner from existing LorenzSystem + OdeControl  ------------
-// Here we assume you already have XPtr<LorenzSystem> and XPtr<ode::OdeControl> in R
+// Constructor: build Runner from existing LorenzSystem + OdeControl 
+// Assume you already have XPtr<LorenzSystem> and XPtr<ode::OdeControl> in R
 
 // [[Rcpp::export]]
 SEXP Runner_new(SEXP LorenzSystem_xp, SEXP control_xp)
 {
-  Rcpp::XPtr<ode::LorenzSystem> obj(LorenzSystem_xp);
+  Rcpp::XPtr<ode::LorenzSystem> sys(LorenzSystem_xp);
   Rcpp::XPtr<ode::OdeControl> ctrl(control_xp);
 
-  Rcpp::XPtr<ode::Runner> ptr(new ode::Runner(*obj, *ctrl), true);
+  Rcpp::XPtr<ode::Runner> ptr(new ode::Runner(*sys, *ctrl), true);
   return ptr;
 }
 
-// 2. Simple accessors --------------------------------------------------------
-
+// Simple accessors
 // [[Rcpp::export]]
 double Runner_time(SEXP runner_xp)
 {
@@ -92,8 +74,7 @@ Rcpp::NumericVector Runner_times(SEXP runner_xp)
   return Rcpp::wrap(ts);
 }
 
-// 3. Mutators / evolution ----------------------------------------------------
-
+// 3. Mutators / evolution
 // [[Rcpp::export]]
 void Runner_set_state(SEXP runner_xp,
                       Rcpp::NumericVector y,
@@ -141,15 +122,16 @@ void Runner_step_to(SEXP runner_xp, double time)
   r->step_to(time);
 }
 
+
+//-------------------------------------------------------------------------
+// Rcpp interface for LorenzSystem
+
 // Convenience accessor
 inline Rcpp::XPtr<ode::LorenzSystem> get_LorenzSystem(SEXP xp) {
   return Rcpp::XPtr<ode::LorenzSystem>(xp);
 }
 
-//-----------------------------
-// Constructors / basic access
-//-----------------------------
-
+// Constructors  & basic access
 // [[Rcpp::export]]
 SEXP LorenzSystem_new(double sigma, double R, double b) {
   // R will delete this when the external pointer is GC'd
@@ -164,12 +146,9 @@ Rcpp::NumericVector LorenzSystem_pars(SEXP LorenzSystem_xp) {
   return Rcpp::wrap(p);
 }
 
-//-----------------------------
 // State interface
-//-----------------------------
 
 // Set internal state y0, y1, y2 and update rates.
-// y must be length 3.
 // [[Rcpp::export]]
 void LorenzSystem_set_state(SEXP LorenzSystem_xp, Rcpp::NumericVector y) {
   if (y.size() != 3) {
@@ -207,6 +186,9 @@ Rcpp::NumericVector LorenzSystem_rates(SEXP LorenzSystem_xp) {
   return Rcpp::wrap(tmp);
 }
 
+/*----------------------------------------------------------*/
+// Rcpp interface for the ODE control object
+
 // [[Rcpp::export]]
 SEXP OdeControl_new(double tol_abs,
                     double tol_rel,
@@ -229,4 +211,26 @@ SEXP OdeControl_new(double tol_abs,
   // wrap in an external pointer, auto-delete on GC
   Rcpp::XPtr<odelia::ode::OdeControl> xp(ctrl, true);
   return xp;
+}
+
+//-------------------------------------------------------------------------
+// Define single function that gives rates of change for the Lorenz system 
+// that could be passed into deSolve, executed through C++ for speed.
+
+// [[Rcpp::export]]
+List lorenz_rhs(double t, NumericVector state, NumericVector pars)
+{
+  double x = state["x"];
+  double y = state["y"];
+  double z = state["z"];
+
+  double sigma = pars["sigma"];
+  double rho = pars["rho"];
+  double beta = pars["beta"];
+
+  double dx = sigma * (y - x);
+  double dy = x * (rho - z) - y;
+  double dz = x * y - beta * z;
+
+  return List::create(NumericVector::create(dx, dy, dz));
 }

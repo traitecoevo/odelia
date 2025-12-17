@@ -84,7 +84,8 @@ Run just Lorenz
 
 System
 ```{r}
-lz <- Lorenz$new(sigma = 10, R = 28, b = 8 / 3)
+source("R/lorenz_interface.R")
+lz <- LorenzSystem$new(sigma = 10, R = 28, b = 8 / 3)
 
 lz$pars() # c(10, 28, 8/3)
 lz$set_state(c(1, 1, 1)) # sets y0,y1,y2 and updates rates
@@ -96,11 +97,6 @@ lz$rates() # current dy/dt
 Solver
 
 ```{r}
-# Suppose you have something like:
-# lorenz_xp   <- Lorenz_new(y0 = c(1, 0, 0), sigma = 10, R = 28, b = 8/3)
-# control_xp  <- OdeControl_new(dt = 0.01, tmax = 50, atol = 1e-8, rtol = 1e-8)
-
-
 ctrl <- OdeControl_new(
   tol_abs = 1e-8,
   tol_rel = 1e-8,
@@ -113,7 +109,6 @@ ctrl <- OdeControl_new(
 
 runner <- Runner$new(lz$ptr, ctrl)
 
-runner$set_state_from_system()
 runner$advance_adaptive(10)
 runner$time()
 runner$state()
