@@ -10,7 +10,10 @@ This vignette provides an example of using odelia to implement an ODE solver sim
 
 It's a relatively straightforward ODE system with only three equations, that is easily solved in a variety of ODE solvers. However, it provides an opportunity to demonstrate a system with non-trivial dyanmics, and the minimal setup for using odelia.
 
-E
+```
+make -C ../../../  install
+Rscript -e "Rcpp::sourceCpp('src/lorenz_interface.cpp', verbose = TRUE, rebuild = TRUE)"
+```
 
 ```{r}
 fs::dir_tree(path = here::here("inst/examples/lorenz"))
@@ -24,10 +27,6 @@ Rcpp::sourceCpp("src/lorenz_interface.cpp",
   verbose = TRUE, rebuild = TRUE
 )
 
-# check works
-system.time(x <- get_number())
-
-length(x)
 ```
 
 
@@ -43,11 +42,8 @@ lz$set_state(c(1, 1, 1)) # sets y0,y1,y2 and updates rates
 lz$state() # current state
 lz$rates() # current dy/dt
 
-```
+# Solver
 
-Solver
-
-```{r}
 ctrl <- OdeControl_new(
   tol_abs = 1e-8,
   tol_rel = 1e-8,
@@ -58,13 +54,13 @@ ctrl <- OdeControl_new(
   step_size_initial = 1e-3
 )
 
-runner <- Runner$new(lz$ptr, ctrl)
+runner <- Lorenz_Solver$new(lz$ptr, ctrl)
 runner$advance_adaptive(c(0, 10))
 runner$times() |> length()
 runner$state()
 
 runner$reset()
-runner <- Runner$new(lz$ptr, ctrl)
+runner <- Lorenz_Solver$new(lz$ptr, ctrl)
 runner$advance_fixed(seq(0, 20, by = 0.1))
 runner$times() |> length()
 runner$state()
