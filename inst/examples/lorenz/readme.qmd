@@ -1,0 +1,111 @@
+---
+title: "Lorenz ODE example"
+format: html
+editor: source
+---
+
+This vignette provides an example of using odelia to implement an ODE solver simulating the classic [Lorenz system](https://en.wikipedia.org/wiki/Lorenz_system). 
+
+![](https://upload.wikimedia.org/wikipedia/commons/1/13/A_Trajectory_Through_Phase_Space_in_a_Lorenz_Attractor.gif)
+
+It's a relatively straightforward ODE system with only three equations, that is easily solved in a variety of ODE solvers. However, it provides an opportunity to demonstrate a system with non-trivial dyanmics, and the minimal setup for using odelia.
+
+```
+make -C ../../../  install
+Rscript -e "Rcpp::sourceCpp('src/lorenz_interface.cpp', verbose = TRUE, rebuild = TRUE)"
+```
+
+```{r}
+fs::dir_tree(path = here::here("inst/examples/lorenz"))
+```
+
+```{r}
+library(odelia)
+library(dplyr)
+library(ggplot2)
+
+setwd(here::here("inst/examples/lorenz"))
+source("R/lorenz_interface.R")
+
+Rcpp::sourceCpp("src/lorenz_interface.cpp",
+  verbose = TRUE, rebuild = TRUE
+)
+lz <- LorenzSystem$new(sigma = 10, R = 28, b = 8 / 3)
+
+lz$pars() # c(10, 28, 8/3)
+lz$set_state(c(1, 1, 1)) # sets y0,y1,y2 and updates rates
+lz$state() # current state
+lz$rates() # current dy/dt
+
+# Solver
+ctrl <- OdeControl_new()
+
+runner <- Lorenz_Solver$new(lz$ptr, ctrl)
+runner$advance_adaptive(c(0, 10000))
+runner$history_step(1)
+runner$history_step(10) # should fail
+
+# Collect at more times
+times <- runner$times()
+runner <- Lorenz_Solver$new(lz$ptr, ctrl)
+runner$advance_adaptive(times)
+
+out <- runner$history()
+
+i <- 1:10000
+ggplot(out[i,], aes(x = x, y = z)) +
+  geom_path() +
+  labs(title = "Lorenz attractor (deSolve, RK45)")
+```
+
+
+
+Compare speed to desolve (with Rcpp)
+
+```{r}
+library(deSolve)
+
+lorenz_rhs_r <- function(t, state, pars) {
+  with(as.list(c(state, pars)), {
+    dx <- sigma * (y - x)
+    dy <- x * (rho - z) - y
+    dz <- x * y - beta * z
+    list(c(dx, dy, dz))
+  })
+}
+
+# solve Lorenz system with deSolve + RK45 via R side function
+desolve_time1 <- system.time({
+  sol_desolve1 <- ode(
+    y = c(x = 1, y = 1, z = 1),
+    times = times,
+    func = lorenz_rhs_r,
+    parms = c(sigma = 10, rho = 28, beta = 8 / 3),
+    method = "ode45"
+  )
+})
+
+# solve Lorenz system with deSolve + RK45 via Rcpp
+desolve_time2 <- system.time({
+  sol_desolve2 <- ode(
+    y = c(x = 1, y = 1, z = 1),
+    times = times,
+    func = lorenz_rhs,
+    parms = c(sigma = 10, rho = 28, beta = 8 / 3),
+    method = "ode45"
+  )
+})
+
+desolve_time1
+desolve_time2
+
+nrow(out) == nrow(sol_desolve2)
+nrow(sol_desolve1) == nrow(sol_desolve2)
+
+# quick visual check
+sol_desolve2[1:10000, ] |>
+  as.data.frame() |>
+  ggplot(aes(x = x, y = z)) +
+  geom_path() +
+  labs(title = "Lorenz attractor (deSolve, RK45)")
+```
