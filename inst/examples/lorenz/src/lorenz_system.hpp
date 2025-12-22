@@ -45,10 +45,13 @@ public:
     return it;
   }
 
-  std::vector<double> record_step(double time) const {
+  std::vector<double> record_step() const {
     
     std::vector<double> ret;
     
+    //todo: add time
+    double time = 0 ; // placeholder for time
+
     ret.push_back(time);
     ret.push_back(y0);
     ret.push_back(y1);

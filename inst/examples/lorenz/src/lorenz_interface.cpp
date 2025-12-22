@@ -145,18 +145,17 @@ Rcpp::DataFrame Solver_get_history_step(SEXP solver_xp, std::size_t i)
   }
 
   SystemType elem = r->get_history_step(i);
-  std::vector<double> out = elem.record_step(r->time());
+  std::vector<double> out = elem.record_step();
   
   CharacterVector names = get_column_names();
 
-  return Rcpp::DataFrame::create(
-      Rcpp::Named(names[0]) = out[0],
-      Rcpp::Named(names[1]) = out[1],
-      Rcpp::Named(names[2]) = out[2],
-      Rcpp::Named(names[3]) = out[3],
-      Rcpp::Named(names[4]) = out[4],
-      Rcpp::Named(names[5]) = out[5],
-      Rcpp::Named(names[6]) = out[6]);
+  Rcpp::List df_list(names.size());
+  for (size_t j = 0; j < names.size(); ++j) {
+    df_list[j] = Rcpp::wrap(out[j]);
+  }
+  df_list.attr("names") = names;
+  
+  return Rcpp::DataFrame(df_list);
 }
 
 // full history as a list of external pointers
@@ -276,23 +275,10 @@ Rcpp::NumericVector System_rates(SEXP system_xp) {
 // Rcpp interface for the ODE control object
 
 // [[Rcpp::export]]
-SEXP OdeControl_new(double tol_abs,
-                    double tol_rel,
-                    double a_y,
-                    double a_dydt,
-                    double step_size_min,
-                    double step_size_max,
-                    double step_size_initial)
+SEXP OdeControl_new()
 {
   // allocate new control object
-  auto *ctrl = new odelia::ode::OdeControl(
-      tol_abs,
-      tol_rel,
-      a_y,
-      a_dydt,
-      step_size_min,
-      step_size_max,
-      step_size_initial);
+  auto *ctrl = new odelia::ode::OdeControl();
 
   // wrap in an external pointer, auto-delete on GC
   Rcpp::XPtr<odelia::ode::OdeControl> xp(ctrl, true);

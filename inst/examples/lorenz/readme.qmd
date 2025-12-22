@@ -38,15 +38,7 @@ lz$state() # current state
 lz$rates() # current dy/dt
 
 # Solver
-ctrl <- OdeControl_new(
-  tol_abs = 1e-8,
-  tol_rel = 1e-8,
-  a_y = 1.0,
-  a_dydt = 1.0,
-  step_size_min = 1e-8,
-  step_size_max = 1,
-  step_size_initial = 1e-3
-)
+ctrl <- OdeControl_new()
 
 runner <- Lorenz_Solver$new(lz$ptr, ctrl)
 runner$advance_adaptive(c(0, 10000))
