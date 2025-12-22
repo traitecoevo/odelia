@@ -18,7 +18,7 @@ inline Rcpp::XPtr<SolverType> get_solver(SEXP xp) {
 }
 
 // Constructor: build Solver from existing System + OdeControl
-// Assume you already have XPtr<SystemType> and XPtr<ode::OdeControl> in R
+// Assume you already have these defined and pass in as external pointers
 
 // [[Rcpp::export]]
 SEXP Solver_new(SEXP system_xp, SEXP control_xp)
@@ -37,7 +37,6 @@ void Solver_reset(SEXP solver_xp)
   r->reset();
 }
 
-// Simple accessors
 // [[Rcpp::export]]
 double Solver_time(SEXP solver_xp)
 {
@@ -49,7 +48,7 @@ double Solver_time(SEXP solver_xp)
 Rcpp::NumericVector Solver_state(SEXP solver_xp)
 {
   auto r = get_solver(solver_xp);
-  auto y = r->state(); // ode::state_type, typically std::vector<double>
+  auto y = r->state();
   return Rcpp::wrap(y);
 }
 
@@ -71,7 +70,6 @@ void Solver_set_state(SEXP solver_xp,
   std::vector<double> yy(y.begin(), y.end());
   r->set_state(yy, time);
 }
-
 
 // [[Rcpp::export]]
 void Solver_advance_adaptive(SEXP solver_xp, Rcpp::NumericVector times)
@@ -127,14 +125,38 @@ std::size_t Solver_get_history_size(SEXP solver_xp)
   return r->get_history_size();
 }
 
-// single element as external pointer to a *copy*
+CharacterVector get_column_names() {
+  CharacterVector names(7);
+  names = {"time", "x", "y", "z", "dxdt", "dydt", "dzdt"};
+  return names;
+}
+
+// single step
 // [[Rcpp::export]]
-SEXP Solver_get_history_element(SEXP solver_xp, std::size_t i)
+Rcpp::DataFrame Solver_get_history_step(SEXP solver_xp, std::size_t i)
 {
   auto r = get_solver(solver_xp);
-  SystemType elem = r->get_history_element(i); // value copy
-  Rcpp::XPtr<SystemType> xp(new SystemType(elem), true);
-  return xp;
+  int nrows = r->get_history_size();
+  if (i >= nrows)
+  {
+    Rcpp::stop("Index out of bounds. History size is " +
+               std::to_string(nrows) + ", requested index " +
+               std::to_string(i));
+  }
+
+  SystemType elem = r->get_history_step(i);
+  std::vector<double> out = elem.record_step(r->time());
+  
+  CharacterVector names = get_column_names();
+
+  return Rcpp::DataFrame::create(
+      Rcpp::Named(names[0]) = out[0],
+      Rcpp::Named(names[1]) = out[1],
+      Rcpp::Named(names[2]) = out[2],
+      Rcpp::Named(names[3]) = out[3],
+      Rcpp::Named(names[4]) = out[4],
+      Rcpp::Named(names[5]) = out[5],
+      Rcpp::Named(names[6]) = out[6]);
 }
 
 // full history as a list of external pointers
@@ -142,24 +164,51 @@ SEXP Solver_get_history_element(SEXP solver_xp, std::size_t i)
 Rcpp::List Solver_get_history(SEXP solver_xp)
 {
   auto r = get_solver(solver_xp);
-  std::vector<SystemType> hist = r->get_history();
-  R_xlen_t n = static_cast<R_xlen_t>(hist.size());
-  Rcpp::List out(n);
+  int nrows = r->get_history_size();
 
-  for (R_xlen_t i = 0; i < n; ++i)
-  {
-    Rcpp::XPtr<SystemType> xp(new SystemType(hist[i]), true);
-    out[i] = xp;
+  CharacterVector names = get_column_names();
+  int ncols = names.size();
+
+  //Prepare column storage and reserve rows if you can estimate nrows
+  std::vector<std::vector<double>> cols(ncols);
+  for (size_t j = 0; j < ncols; ++j) {
+    cols[j].reserve(nrows);
   }
 
-  return out;
+  // Produce rows and push into columns
+  for (size_t i = 0; i < nrows; ++i) {
+    SystemType elem = r->get_history_step(i);
+    std::vector<double> row = elem.record_step();
+
+    for (size_t j = 0; j < ncols; ++j) {
+      cols[j].push_back(row[j]);
+    }
+  }
+
+  // Convert each std::vector<double> -> Rcpp::NumericVector
+  // Construct an R list with named columns, then DataFrame::create from it
+  Rcpp::List out(ncols);
+  
+  for (size_t j = 0; j < ncols; ++j) {
+    // Efficient conversion: construct NumericVector from iterators (copies once)
+    NumericVector nv(cols[j].begin(), cols[j].end());
+    out[j] = nv;
+  }
+  
+  // Set column names
+  out.attr("names") = get_column_names();
+
+  // 4) Return a DataFrame 
+  // NB (DataFrame::create duplicates columns again if you pass names differently; constructing directly from a named List is more efficient)
+  
+  return DataFrame(out);
 }
 
 //-------------------------------------------------------------------------
 // Rcpp interface for System
 
 // Convenience accessor
-inline Rcpp::XPtr<SystemType> get_System(SEXP xp) {
+inline Rcpp::XPtr<SystemType> get_system(SEXP xp) {
   return Rcpp::XPtr<SystemType>(xp);
 }
 
@@ -173,45 +222,50 @@ SEXP System_new(double sigma, double R, double b) {
 
 // [[Rcpp::export]]
 Rcpp::NumericVector System_pars(SEXP system_xp) {
-  auto lor = get_System(system_xp);
+  auto lor = get_system(system_xp);
   std::vector<double> p = lor->pars();
   return Rcpp::wrap(p);
 }
 
 // State interface
 
-// Set internal state y0, y1, y2 and update rates.
+// Set internal state and update rates.
 // [[Rcpp::export]]
 void System_set_state(SEXP system_xp, Rcpp::NumericVector y) {
-  if (y.size() != 3) {
-    Rcpp::stop("System_set_state: state vector must have length 3");
-  }
+  
+  auto lor = get_system(system_xp);
 
-  auto lor = get_System(system_xp);
+  size_t ode_size = lor->ode_size();
+  if (y.size() != ode_size)
+  {
+    Rcpp::stop("System_set_state: state vector must have length " + std::to_string(ode_size));
+  }
 
   std::vector<double> tmp(y.begin(), y.end());
   ode::const_iterator it = tmp.begin();
   lor->set_ode_state(it);
 }
 
-// Get current state (y0, y1, y2) as numeric(3)
+// Get current state
 // [[Rcpp::export]]
 Rcpp::NumericVector System_state(SEXP system_xp) {
-  auto lor = get_System(system_xp);
+  auto lor = get_system(system_xp);
 
-  std::vector<double> tmp(3);
+  size_t ode_size = lor->ode_size();
+  std::vector<double> tmp(ode_size);
   ode::iterator it = tmp.begin();
   lor->ode_state(it);
 
   return Rcpp::wrap(tmp);
 }
 
-// Get current rates (dy0dt, dy1dt, dy2dt) as numeric(3)
 // [[Rcpp::export]]
 Rcpp::NumericVector System_rates(SEXP system_xp) {
-  auto lor = get_System(system_xp);
+  auto lor = get_system(system_xp);
 
-  std::vector<double> tmp(3);
+  size_t ode_size = lor->ode_size();
+  std::vector<double> tmp(ode_size);
+
   ode::iterator it = tmp.begin();
   lor->ode_rates(it);
 

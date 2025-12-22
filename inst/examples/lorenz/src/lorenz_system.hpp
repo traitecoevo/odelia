@@ -44,7 +44,22 @@ public:
     *it++ = dy2dt;
     return it;
   }
+
+  std::vector<double> record_step(double time) const {
+    
+    std::vector<double> ret;
+    
+    ret.push_back(time);
+    ret.push_back(y0);
+    ret.push_back(y1);
+    ret.push_back(y2);
+    ret.push_back(dy0dt);
+    ret.push_back(dy1dt);
+    ret.push_back(dy2dt);
   
+    return ret;
+  }
+
   std::vector<double> pars() const {
     std::vector<double> ret;
     ret.push_back(sigma);

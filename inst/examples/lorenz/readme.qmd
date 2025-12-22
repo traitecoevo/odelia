@@ -21,20 +21,15 @@ fs::dir_tree(path = here::here("inst/examples/lorenz"))
 
 ```{r}
 library(odelia)
+library(dplyr)
+library(ggplot2)
+
 setwd(here::here("inst/examples/lorenz"))
+source("R/lorenz_interface.R")
 
 Rcpp::sourceCpp("src/lorenz_interface.cpp",
   verbose = TRUE, rebuild = TRUE
 )
-
-```
-
-
-Run just Lorenz
-
-System
-```{r}
-source("R/lorenz_interface.R")
 lz <- LorenzSystem$new(sigma = 10, R = 28, b = 8 / 3)
 
 lz$pars() # c(10, 28, 8/3)
@@ -43,7 +38,6 @@ lz$state() # current state
 lz$rates() # current dy/dt
 
 # Solver
-
 ctrl <- OdeControl_new(
   tol_abs = 1e-8,
   tol_rel = 1e-8,
@@ -55,18 +49,21 @@ ctrl <- OdeControl_new(
 )
 
 runner <- Lorenz_Solver$new(lz$ptr, ctrl)
-runner$advance_adaptive(c(0, 10))
-runner$times() |> length()
-runner$state()
+runner$advance_adaptive(c(0, 10000))
+runner$history_step(1)
+runner$history_step(10) # should fail
 
-runner$reset()
+# Collect at more times
+times <- runner$times()
 runner <- Lorenz_Solver$new(lz$ptr, ctrl)
-runner$advance_fixed(seq(0, 20, by = 0.1))
-runner$times() |> length()
-runner$state()
-runner$collect()
-runner$history()[[1]]
-runner$history_element(10)
+runner$advance_adaptive(times)
+
+out <- runner$history()
+
+i <- 1:10000
+ggplot(out[i,], aes(x = x, y = z)) +
+  geom_path() +
+  labs(title = "Lorenz attractor (deSolve, RK45)")
 ```
 
 
@@ -85,11 +82,11 @@ lorenz_rhs_r <- function(t, state, pars) {
   })
 }
 
-# solve Lorenz system with deSolve + RK45 via Rcpp
+# solve Lorenz system with deSolve + RK45 via R side function
 desolve_time1 <- system.time({
   sol_desolve1 <- ode(
     y = c(x = 1, y = 1, z = 1),
-    times = x,
+    times = times,
     func = lorenz_rhs_r,
     parms = c(sigma = 10, rho = 28, beta = 8 / 3),
     method = "ode45"
@@ -100,7 +97,7 @@ desolve_time1 <- system.time({
 desolve_time2 <- system.time({
   sol_desolve2 <- ode(
     y = c(x = 1, y = 1, z = 1),
-    times = x,
+    times = times,
     func = lorenz_rhs,
     parms = c(sigma = 10, rho = 28, beta = 8 / 3),
     method = "ode45"
@@ -110,13 +107,13 @@ desolve_time2 <- system.time({
 desolve_time1
 desolve_time2
 
-nrow(sol_desolve1)
-nrow(sol_desolve2)
+nrow(out) == nrow(sol_desolve2)
+nrow(sol_desolve1) == nrow(sol_desolve2)
 
 # quick visual check
-i <- 1:10000
-plot(sol_desolve2[i, "x"], sol_desolve2[i, "z"],
-  type = "l",
-  xlab = "x", ylab = "z", main = "Lorenz attractor (deSolve, RK45)"
-)
+sol_desolve2[1:10000, ] |>
+  as.data.frame() |>
+  ggplot(aes(x = x, y = z)) +
+  geom_path() +
+  labs(title = "Lorenz attractor (deSolve, RK45)")
 ```

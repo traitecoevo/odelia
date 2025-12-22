@@ -122,11 +122,11 @@ public:
 
   void set_collect(bool x) { collect = x; }
 
+  std::size_t get_history_size() const { return history.size(); }
+
   std::vector<System> get_history() const { return history; }
 
-  System get_history_element(std::size_t i) const { return history.at(i); }
-
-  std::size_t get_history_size() const { return history.size(); }
+  System get_history_step(std::size_t i) const { return history.at(i); }
 
   // Should we record history at every step?
   // TODO: should this be part of ode_solver?

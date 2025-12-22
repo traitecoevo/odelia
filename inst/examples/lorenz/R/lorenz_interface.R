@@ -44,12 +44,12 @@ Lorenz_Solver <- R6::R6Class(
     history_size = function() {
       Solver_get_history_size(self$ptr)
     },
-    history_element = function(i) {
-      # 1-based index from R, convert to 0-based size_t if you prefer
-      Solver_get_history_element(self$ptr, as.integer(i - 1L))
+    history_step = function(i) {
+      Solver_get_history_step(self$ptr, i)
+
     },
     history = function() {
-      Solver_get_history(self$ptr)
+      Solver_get_history(self$ptr)|> dplyr::bind_rows()
     }
   )
 )
