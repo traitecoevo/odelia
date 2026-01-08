@@ -1,5 +1,6 @@
 #include <odelia/ode_solver.hpp>
 #include "leaf_thermal_pars.hpp"
+#include "../../drivers/drivers.hpp"
 
 #include <vector>
 #include <cmath>
@@ -108,6 +109,8 @@ class LeafThermalSystem {
     double get_T_air() const { return T_air; }
 
     LeafThermalPars pars;
+
+    drivers::Drivers drivers;
 
   private:
     static const int ode_dimension = 1;
