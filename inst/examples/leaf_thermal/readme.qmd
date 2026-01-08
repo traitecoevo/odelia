@@ -1,0 +1,44 @@
+---
+title: "LEAF model"
+format: html
+editor: source
+---
+
+```{r}
+library(odelia)
+library(tidyverse)
+setwd(here::here("inst/examples/leaf_thermal"))
+
+Rcpp::sourceCpp("src/leaf_thermal_interface.cpp",
+  verbose = TRUE, rebuild = TRUE
+)
+source("R/leaf_thermal_interface.R")
+
+pars <- leaf_thermal_pars()
+
+lz <- LeafThermalSystem$new(pars)
+
+lz$pars()
+lz$set_state(c(25))
+lz$state() # current state
+lz$rates() # current dy/dt
+
+ctrl <- OdeControl_default()
+
+runner <- LeafThermalSolver$new(lz$ptr, ctrl)
+times <- seq(0, 5 * 24, by = 0.1)
+runner$advance_adaptive(times)
+out <- runner$history() |>
+  mutate(time = times, strategy = "baseline")
+
+vars <- c("T_air", "T_LC")
+
+out |>
+  pivot_longer(-c(strategy, time)) |>
+  filter(name %in% vars) |>
+  mutate(name = factor(name, levels = vars)) |>
+  ggplot(aes(time, value, colour = strategy)) +
+  geom_line() +
+  theme_bw() +
+  facet_wrap(~name, scales = "free")
+```
