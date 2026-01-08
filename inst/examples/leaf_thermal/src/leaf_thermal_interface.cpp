@@ -248,17 +248,9 @@ inline LeafThermalPars leaf_pars_from_list(const List &L)
 }
 
 // [[Rcpp::export]]
-Rcpp::List leaf_thermal_pars()
+Rcpp::List LeafThermalSystemPars()
 {
   LeafThermalPars p; // uses C++ defaults
-  return leaf_pars_to_list(p);
-}
-
-// [[Rcpp::export]]
-Rcpp::List leaf_thermal_pars_complete(Rcpp::List pars)
-{
-  // Fill missing entries with defaults, return completed list
-  LeafThermalPars p = leaf_pars_from_list(pars);
   return leaf_pars_to_list(p);
 }
 
@@ -291,7 +283,7 @@ Rcpp::NumericVector LeafThermalSystem_pars(SEXP LeafThermalSystem_xp) {
 
 // Set internal state and update rates.
 // [[Rcpp::export]]
-void LeafThermalSystem_set_state(SEXP LeafThermalSystem_xp, Rcpp::NumericVector y) {
+void LeafThermalSystem_set_state(SEXP LeafThermalSystem_xp, Rcpp::NumericVector y, double time) {
   if (y.size() != 1) {
     Rcpp::stop("LeafThermalSystem_set_state: state vector must have length 1");
   }
@@ -300,7 +292,7 @@ void LeafThermalSystem_set_state(SEXP LeafThermalSystem_xp, Rcpp::NumericVector 
 
   std::vector<double> tmp(y.begin(), y.end());
   ode::const_iterator it = tmp.begin();
-  lor->set_ode_state(it);
+  lor->set_ode_state(it, time);
 }
 
 // Get current state (y0, y1, y2) as numeric(3)
@@ -310,6 +302,7 @@ Rcpp::NumericVector LeafThermalSystem_state(SEXP LeafThermalSystem_xp) {
 
   std::vector<double> tmp(1);
   ode::iterator it = tmp.begin();
+  
   lor->ode_state(it);
 
   return Rcpp::wrap(tmp);

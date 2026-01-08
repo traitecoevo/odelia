@@ -10,16 +10,17 @@ library(tidyverse)
 setwd(here::here("inst/examples/leaf_thermal"))
 
 Rcpp::sourceCpp("src/leaf_thermal_interface.cpp",
-  verbose = TRUE, rebuild = TRUE
-)
+  verbose = TRUE, rebuild = TRUE)
+
 source("R/leaf_thermal_interface.R")
 
-pars <- leaf_thermal_pars()
+# Define parameters
+pars <- LeafThermalSystemPars()
 
 lz <- LeafThermalSystem$new(pars)
 
 lz$pars()
-lz$set_state(c(25))
+lz$set_state(c(25), 0)
 lz$state() # current state
 lz$rates() # current dy/dt
 
@@ -28,8 +29,12 @@ ctrl <- OdeControl_default()
 runner <- LeafThermalSolver$new(lz$ptr, ctrl)
 times <- seq(0, 5 * 24, by = 0.1)
 runner$advance_adaptive(times)
+
+# Collect output
 out <- runner$history() |>
   mutate(time = times, strategy = "baseline")
+
+# Make a plot
 
 vars <- c("T_air", "T_LC")
 

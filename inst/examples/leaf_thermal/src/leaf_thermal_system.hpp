@@ -26,12 +26,13 @@ class LeafThermalSystem {
 
     size_t ode_size() const { return ode_dimension; }
 
-    void set_time(double t) { time = t; }
+    double ode_time() const { return time;}
 
-    ode::const_iterator set_ode_state(ode::const_iterator it)
+    ode::const_iterator set_ode_state(ode::const_iterator it, double time_)
     {
       // Unpack state
       T_LC = *it++;
+      time = time_;
 
       // Compute rates
       compute_ode_rates();

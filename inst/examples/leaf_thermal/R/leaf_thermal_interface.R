@@ -64,8 +64,8 @@ LeafThermalSystem <- R6::R6Class(
     pars = function() {
       LeafThermalSystem_pars(self$ptr)
     },
-    set_state = function(y) {
-      LeafThermalSystem_set_state(self$ptr, y)
+    set_state = function(y, time) {
+      LeafThermalSystem_set_state(self$ptr, y, time)
       invisible(self)
     },
     state = function() {
