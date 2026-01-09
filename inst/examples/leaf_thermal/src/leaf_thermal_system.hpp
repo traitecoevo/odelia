@@ -1,7 +1,7 @@
 #include <odelia/ode_solver.hpp>
-#include "leaf_thermal_pars.hpp"
-#include "../../drivers/drivers.hpp"
+#include <odelia/drivers.hpp>
 
+#include "leaf_thermal_pars.hpp"
 #include <vector>
 #include <cmath>
 #include <algorithm>
@@ -49,8 +49,6 @@ class LeafThermalSystem {
     void compute_ode_rates()
     {
       const double pi = 3.14159265358979323846;
-
-      std::cout << " " << time << " ";
 
       // Air temperature sinusoid
       double Tmean = 32.0; // °C

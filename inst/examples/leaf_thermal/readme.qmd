@@ -56,9 +56,8 @@ out |>
   pivot_longer(-c(strategy, time)) |>
   filter(name %in% vars) |>
   mutate(name = factor(name, levels = vars)) |>
-  ggplot(aes(time, value, colour = strategy)) +
+  ggplot(aes(time, value, colour = name)) +
   geom_line() +
-  theme_bw() +
-  facet_wrap(~name, scales = "free")
+  theme_bw() 
 ```
 

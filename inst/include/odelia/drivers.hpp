@@ -1,8 +1,7 @@
 #ifndef ODELIA_DRIVERS_H
 #define ODELIA_DRIVERS_H
 
-// #include <plant/util.h>
-#include "interpolator.hpp"
+#include <odelia/interpolator.hpp>
 
 namespace odelia {
 namespace drivers {
