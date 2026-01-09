@@ -20,7 +20,7 @@ Tmean <- 32.0
 Tamp <- 6.0
 tpeak <- 15.0
 time <- seq(0, 5 * 24, by = 0.1)
-t_air <- pars$Tmean + pars$Tamp * sin(2.0 * pi * (time - pars$tpeak) / 24.0)
+t_air <- Tmean + Tamp * sin(2.0 * pi * (time - tpeak) / 24.0)
 
 drivers <- Drivers$new()
 drivers$set_variable("temperature", time, t_air)
