@@ -7,6 +7,7 @@ editor: source
 ```{r}
 library(odelia)
 library(tidyverse)
+library(testthat)
 setwd(here::here("inst/examples/leaf_thermal"))
 
 Rcpp::sourceCpp("src/leaf_thermal_interface.cpp",
@@ -16,34 +17,36 @@ Rcpp::sourceCpp("src/leaf_thermal_interface.cpp",
 source("R/leaf_thermal_interface.R")
 
 # External drivers for air temperature (sinusoid)
-Tmean <- 32.0
-Tamp <- 6.0
-tpeak <- 15.0
-time <- seq(0, 5 * 24, by = 0.1)
-t_air <- Tmean + Tamp * sin(2.0 * pi * (time - tpeak) / 24.0)
+p <- list(Tmean = 32.0, Tamp = 6.0, tpeak = 15.0)
+time_driver <- seq(0, 5 * 24, by = 0.1)
+t_air <- p$Tmean + p$Tamp * sin(2.0 * pi * (time_driver - p$tpeak) / 24.0)
 
 drivers <- Drivers$new()
-drivers$set_variable("temperature", time, t_air)
+drivers$set_variable("temperature", time_driver, t_air)
 expect_equal(drivers$evaluate("temperature", 1), 35)
 expect_error(drivers$evaluate("temp", 1))
-
-# TODO: Next, pass driver data into ode_system
-# replacing internal calculation
 
 # Define parameters
 pars <- LeafThermalSystemPars()
 
-lz <- LeafThermalSystem$new(pars)
+# Create Leaf Thermal System
+lz <- LeafThermalSystem$new(pars, drivers)
+
+expect_error(z <- LeafThermalSystem$new(pars, Drivers$new()))
 
 lz$pars() # TODO: ideally named list
-lz$set_state(c(25), 0, driver_vec) # TODO: should take values of drivers too? Otherwise rates shouldn't work
+lz$set_state(c(25), 1)
+expect_equal(lz$get_current_drivers(), drivers$evaluate("temperature", 1))
+lz$set_state(c(25), 0)
+expect_equal(lz$get_current_drivers(), drivers$evaluate("temperature", 0))
+lz$initialize_drivers(drivers)
 lz$state() # current state
 lz$rates() # current dy/dt
 
 # Setup runner
 ctrl <- OdeControl_default()
 
-runner <- LeafThermalSolver$new(lz$ptr, ctrl) 
+runner <- LeafThermalSolver$new(lz$ptr, ctrl)
 times <- seq(0, 5 * 24, by = 0.1)
 runner$advance_adaptive(times) # todo: pass in drivers here??
 
@@ -61,5 +64,70 @@ out |>
   ggplot(aes(time, value, colour = name)) +
   geom_line() +
   theme_bw() 
+```
+
+## Multiple strategies
+
+Run and compare multiple strategies (e.g., different maximum transpiration conductance)
+
+```{r}
+pars_baseline <- LeafThermalSystemPars()
+pars_increased_conductance <- LeafThermalSystemPars()
+pars_increased_conductance$g_tr_max <- 2 * pars_baseline$g_tr_max
+
+strategies <- list(baseline = pars_baseline, increased_conductance = pars_increased_conductance)
+
+results <- 
+  lapply(names(strategies), function(strategy_name) {
+  pars <- strategies[[strategy_name]]
+  lz <- LeafThermalSystem$new(pars, drivers)
+  ctrl <- OdeControl_default()
+  runner <- LeafThermalSolver$new(lz$ptr, ctrl)
+  times <- seq(0, 5 * 24, by = 0.1)
+  runner$advance_adaptive(times)
+  out <- runner$history() |>
+    mutate(time = times, strategy = strategy_name)
+  return(out)
+}) |> bind_rows()
+
+# Make a plot comparing strategies
+vars <- c("T_air", "T_LC")
+results |>
+  pivot_longer(-c(strategy, time)) |>
+  filter(name %in% vars) |>
+  mutate(name = factor(name, levels = vars)) |>
+  ggplot(aes(time, value, colour = name)) +
+  geom_line() +
+  theme_bw() +
+  facet_wrap(~strategy, scales = "free_y")
+```
+
+## Different drivers
+
+Run an additional simulation with different driver (e.g., lower mean temperature and smaller amplitude)
+```{r}
+# Cretae new air temperature driver
+p <- list(Tmean = 28.0, Tamp = 2.0, tpeak = 15.0)
+t_air <- p$Tmean + p$Tamp * sin(2.0 * pi * (time_driver - p$tpeak) / 24.0)
+drivers2 <- Drivers$new()
+drivers2$set_variable("temperature", time_driver, t_air)
+
+lz2 <- LeafThermalSystem$new(pars, drivers2)
+runner2 <- LeafThermalSolver$new(lz2$ptr, ctrl)
+runner2$advance_adaptive(times) 
+out2 <- runner2$history() |>
+  mutate(time = times, strategy = "different drivers")
+
+results2 <- bind_rows(out, out2)
+# Make a plot comparing drivers
+vars <- c("T_air", "T_LC")
+results2 |>
+  pivot_longer(-c(strategy, time)) |>
+  filter(name %in% vars) |>
+  mutate(name = factor(name, levels = vars)) |>
+  ggplot(aes(time, value, colour = name)) +
+  geom_line() +
+  theme_bw() +
+  facet_wrap(~strategy)
 ```
 

@@ -109,7 +109,17 @@ public:
   void clear() {
     drivers.clear();
   }
-  
+
+  // Get pointer to Function for repeated use (returns nullptr if not found)
+  const Function *get_function_ptr(const std::string &driver_name) const
+  {
+    auto it = drivers.find(driver_name);
+    if (it != drivers.end())
+    {
+      return &(it->second);
+    }
+    return nullptr;
+  }
 
 private:
   std::unordered_map <std::string, drivers::Function> drivers;

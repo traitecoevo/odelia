@@ -57,12 +57,16 @@ LeafThermalSystem <- R6::R6Class(
   "LeafThermalSystem",
   public = list(
     ptr = NULL,
-    initialize = function(pars) {
+    initialize = function(pars, drivers) {
       # create the C++ LeafThermalSystem object
-      self$ptr <- LeafThermalSystem_new(pars)
+      self$ptr <- LeafThermalSystem_new(pars, drivers$ptr)
     },
     pars = function() {
       LeafThermalSystem_pars(self$ptr)
+    },
+    initialize_drivers = function(drivers) {
+      LeafThermalSystem_initialize_drivers(self$ptr, drivers$ptr)
+      invisible(self)
     },
     set_state = function(y, time) {
       LeafThermalSystem_set_state(self$ptr, y, time)
@@ -73,6 +77,9 @@ LeafThermalSystem <- R6::R6Class(
     },
     rates = function() {
       LeafThermalSystem_rates(self$ptr)
+    },
+    get_current_drivers = function() {
+      LeafThermalSystem_get_current_drivers(self$ptr)
     }
   )
 )

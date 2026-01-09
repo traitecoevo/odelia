@@ -248,13 +248,18 @@ inline Rcpp::XPtr<ode::LeafThermalSystem> get_LeafThermalSystem(SEXP xp) {
   return Rcpp::XPtr<ode::LeafThermalSystem>(xp);
 }
 
+inline Rcpp::XPtr<drivers::Drivers> get_Drivers(SEXP xp) {
+  return Rcpp::XPtr<drivers::Drivers>(xp);
+}
+
 // Constructors  & basic access
 // [[Rcpp::export]]
-SEXP LeafThermalSystem_new(Rcpp::List pars_list) {
+SEXP LeafThermalSystem_new(Rcpp::List pars_list, SEXP drivers_xp) {
 
   LeafThermalPars pars = leaf_pars_from_list(pars_list);
+  auto drivers = get_Drivers(drivers_xp);
   // R will delete this when the external pointer is GC'd
-  Rcpp::XPtr<ode::LeafThermalSystem> ptr(new ode::LeafThermalSystem(pars), true);
+  Rcpp::XPtr<ode::LeafThermalSystem> ptr(new ode::LeafThermalSystem(pars, *drivers), true);
   return ptr;
 }
 
@@ -266,7 +271,15 @@ Rcpp::NumericVector LeafThermalSystem_pars(SEXP LeafThermalSystem_xp) {
   return Rcpp::wrap(p);
 }
 
+// Set drivers
+// [[Rcpp::export]]
+void LeafThermalSystem_initialize_drivers(SEXP LeafThermalSystem_xp, SEXP drivers_xp) {
 
+  auto drv = get_Drivers(drivers_xp);
+  auto lor = get_LeafThermalSystem(LeafThermalSystem_xp);
+  
+  lor->initialize_drivers(*drv);
+}
 
 // State interface
 
@@ -301,11 +314,20 @@ Rcpp::NumericVector LeafThermalSystem_state(SEXP LeafThermalSystem_xp) {
 Rcpp::NumericVector LeafThermalSystem_rates(SEXP LeafThermalSystem_xp) {
   auto lor = get_LeafThermalSystem(LeafThermalSystem_xp);
 
+  // vectors to hold rates
   std::vector<double> tmp(1);
+  // fill rates using iterator
   ode::iterator it = tmp.begin();
   lor->ode_rates(it);
 
+  // package and return
   return Rcpp::wrap(tmp);
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericVector LeafThermalSystem_get_current_drivers(SEXP LeafThermalSystem_xp) {
+  auto lor = get_LeafThermalSystem(LeafThermalSystem_xp);
+  return Rcpp::wrap(lor->get_current_drivers());
 }
 
 /*----------------------------------------------------------*/
@@ -325,11 +347,7 @@ SEXP OdeControl_default()
 //-------------------------------------------------------------------------
 // Rcpp interface for Drivers class
 
-// Convenience accessor
-inline Rcpp::XPtr<drivers::Drivers> get_Drivers(SEXP xp)
-{
-  return Rcpp::XPtr<drivers::Drivers>(xp);
-}
+// get_Drivers already defined above
 
 // Constructor
 // [[Rcpp::export]]
