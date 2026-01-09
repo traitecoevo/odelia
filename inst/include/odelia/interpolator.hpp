@@ -3,15 +3,15 @@
 #define ODELIA_INTERPOLATOR_HPP
 
 #include <vector>
-#include "spline.hpp"
+#include <odelia/spline.hpp>
 #include <odelia/ode_util.hpp>
 
 namespace odelia {
-namespace drivers {
+namespace interpolator {
 
 class Interpolator {
 public:
-  // Build a interpolator out of the vectors 'x' and 'y'.
+  // Build an interpolator out of the vectors 'x' and 'y'.
   void init(const std::vector<double> &x_,
             const std::vector<double> &y_)
   {

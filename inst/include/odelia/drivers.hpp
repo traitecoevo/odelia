@@ -54,7 +54,7 @@ public:
   }
 
 private:
-  Interpolator variable;
+  interpolator::Interpolator variable;
   double constant;
   bool is_variable;
 };
