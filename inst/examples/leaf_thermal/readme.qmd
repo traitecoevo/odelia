@@ -27,13 +27,16 @@ drivers$set_variable("temperature", time, t_air)
 expect_equal(drivers$evaluate("temperature", 1), 35)
 expect_error(drivers$evaluate("temp", 1))
 
+# TODO: Next, pass driver data into ode_system
+# replacing internal calculation
+
 # Define parameters
 pars <- LeafThermalSystemPars()
 
 lz <- LeafThermalSystem$new(pars)
 
-lz$pars() # Todo: ideally named list
-lz$set_state(c(25), 0) # Todo: should take values of drivers too? Otherwise rates shouldn't work
+lz$pars() # TODO: ideally named list
+lz$set_state(c(25), 0, driver_vec) # TODO: should take values of drivers too? Otherwise rates shouldn't work
 lz$state() # current state
 lz$rates() # current dy/dt
 
@@ -49,7 +52,6 @@ out <- runner$history() |>
   mutate(time = times, strategy = "baseline")
 
 # Make a plot
-
 vars <- c("T_air", "T_LC")
 
 out |>
