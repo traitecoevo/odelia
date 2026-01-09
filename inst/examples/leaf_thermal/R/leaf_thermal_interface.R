@@ -77,3 +77,39 @@ LeafThermalSystem <- R6::R6Class(
   )
 )
 
+Drivers <- R6::R6Class(
+  "Drivers",
+  public = list(
+    ptr = NULL,
+    initialize = function() {
+      # create the C++ Drivers object
+      self$ptr <- Drivers_new()
+    },
+    set_constant = function(driver_name, k) {
+      Drivers_set_constant(self$ptr, driver_name, k)
+      invisible(self)
+    },
+    set_variable = function(driver_name, x, y) {
+      Drivers_set_variable(self$ptr, driver_name, x, y)
+      invisible(self)
+    },
+    set_extrapolate = function(driver_name, extrapolate) {
+      Drivers_set_extrapolate(self$ptr, driver_name, extrapolate)
+      invisible(self)
+    },
+    evaluate = function(driver_name, x) {
+      Drivers_evaluate(self$ptr, driver_name, x)
+    },
+    evaluate_range = function(driver_name, x) {
+      Drivers_evaluate_range(self$ptr, driver_name, x)
+    },
+    get_names = function() {
+      Drivers_get_names(self$ptr)
+    },
+    clear = function() {
+      Drivers_clear(self$ptr)
+      invisible(self)
+    }
+  )
+)
+

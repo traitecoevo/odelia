@@ -3,7 +3,7 @@ context("Extrinsic drivers")
 
 test_that("Drivers can be instantiated", {
   
-  expect_silent(drv <- Drivers())
+  expect_silent(drv <- Drivers$new())
 
   expect_contains(names(drv), c('clone', 'evaluate', 'evaluate_range', 'get_names', 'initialize', 'set_constant', 'set_extrapolate', 'set_variable'))
   

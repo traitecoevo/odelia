@@ -2,7 +2,6 @@
 // [[Rcpp::plugins(cpp20)]]
 
 #include <Rcpp.h>
-#include <odelia/ode_solver.hpp>
 #include "leaf_thermal_system.hpp"
 
 using namespace Rcpp;
@@ -214,9 +213,6 @@ Rcpp::List Solver_get_history(SEXP solver_xp)
 inline List leaf_pars_to_list(const LeafThermalPars &p)
 {
   return List::create(
-      _["Tmean"] = p.Tmean,
-      _["Tamp"] = p.Tamp,
-      _["tpeak"] = p.tpeak,
       _["k_H"] = p.k_H,
       _["g_tr_max"] = p.g_tr_max,
       _["m_tr"] = p.m_tr,
@@ -227,13 +223,6 @@ inline List leaf_pars_to_list(const LeafThermalPars &p)
 inline LeafThermalPars leaf_pars_from_list(const List &L)
 {
   LeafThermalPars p; // starts with C++ defaults
-
-  if (L.containsElementNamed("Tmean"))
-    p.Tmean = as<double>(L["Tmean"]);
-  if (L.containsElementNamed("Tamp"))
-    p.Tamp = as<double>(L["Tamp"]);
-  if (L.containsElementNamed("tpeak"))
-    p.tpeak = as<double>(L["tpeak"]);
 
   if (L.containsElementNamed("k_H"))
     p.k_H = as<double>(L["k_H"]);
@@ -331,4 +320,85 @@ SEXP OdeControl_default()
   // wrap in an external pointer, auto-delete on GC
   Rcpp::XPtr<odelia::ode::OdeControl> xp(ctrl, true);
   return xp;
+}
+
+//-------------------------------------------------------------------------
+// Rcpp interface for Drivers class
+
+// Convenience accessor
+inline Rcpp::XPtr<drivers::Drivers> get_Drivers(SEXP xp)
+{
+  return Rcpp::XPtr<drivers::Drivers>(xp);
+}
+
+// Constructor
+// [[Rcpp::export]]
+SEXP Drivers_new()
+{
+  // R will delete this when the external pointer is GC'd
+  Rcpp::XPtr<drivers::Drivers> ptr(new drivers::Drivers(), true);
+  return ptr;
+}
+
+// Set a constant driver
+// [[Rcpp::export]]
+void Drivers_set_constant(SEXP drivers_xp, std::string driver_name, double k)
+{
+  auto drv = get_Drivers(drivers_xp);
+  drv->set_constant(driver_name, k);
+}
+
+// Set a variable driver with x, y control points
+// [[Rcpp::export]]
+void Drivers_set_variable(SEXP drivers_xp, std::string driver_name,
+                          Rcpp::NumericVector x, Rcpp::NumericVector y)
+{
+  auto drv = get_Drivers(drivers_xp);
+  std::vector<double> x_vec(x.begin(), x.end());
+  std::vector<double> y_vec(y.begin(), y.end());
+  drv->set_variable(driver_name, x_vec, y_vec);
+}
+
+// Set extrapolation behavior for a driver
+// [[Rcpp::export]]
+void Drivers_set_extrapolate(SEXP drivers_xp, std::string driver_name, bool extrapolate)
+{
+  auto drv = get_Drivers(drivers_xp);
+  drv->set_extrapolate(driver_name, extrapolate);
+}
+
+// Evaluate a driver at a single point
+// [[Rcpp::export]]
+double Drivers_evaluate(SEXP drivers_xp, std::string driver_name, double x)
+{
+  auto drv = get_Drivers(drivers_xp);
+  return drv->evaluate(driver_name, x);
+}
+
+// Evaluate a driver at multiple points
+// [[Rcpp::export]]
+Rcpp::NumericVector Drivers_evaluate_range(SEXP drivers_xp, std::string driver_name,
+                                           Rcpp::NumericVector x)
+{
+  auto drv = get_Drivers(drivers_xp);
+  std::vector<double> x_vec(x.begin(), x.end());
+  std::vector<double> result = drv->evaluate_range(driver_name, x_vec);
+  return Rcpp::wrap(result);
+}
+
+// Get names of all active drivers
+// [[Rcpp::export]]
+Rcpp::CharacterVector Drivers_get_names(SEXP drivers_xp)
+{
+  auto drv = get_Drivers(drivers_xp);
+  std::vector<std::string> names = drv->get_names();
+  return Rcpp::wrap(names);
+}
+
+// Clear all drivers
+// [[Rcpp::export]]
+void Drivers_clear(SEXP drivers_xp)
+{
+  auto drv = get_Drivers(drivers_xp);
+  drv->clear();
 }

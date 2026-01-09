@@ -4,7 +4,7 @@
 
 #include <vector>
 #include "spline.hpp"
-#include <RcppCommon.h> // SEXP
+#include <odelia/ode_util.hpp>
 
 namespace odelia {
 namespace drivers {

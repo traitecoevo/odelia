@@ -52,9 +52,14 @@ class LeafThermalSystem {
 
       std::cout << " " << time << " ";
 
+      // Air temperature sinusoid
+      double Tmean = 32.0; // °C
+      double Tamp = 6.0;   // °C amplitude
+      double tpeak = 15.0; // hour of daily peak
+
       // 1. Air temperature forcing
-      T_air = pars.Tmean + pars.Tamp *
-                                std::sin(2.0 * pi * (time - pars.tpeak) / 24.0);
+      T_air = Tmean + Tamp *
+                                std::sin(2.0 * pi * (time - tpeak) / 24.0);
       // 2. Transpiration rate S_tr (logistic function)
       S_tr = logistic_raw(T_LC - pars.T_tr_mid, -pars.m_tr);
       dT_LC = pars.k_H * (T_air - T_LC) - pars.g_tr_max * S_tr;
