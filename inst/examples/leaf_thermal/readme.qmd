@@ -1,0 +1,188 @@
+---
+title: "Leaf thermal model example"
+format: html
+editor: source
+---
+
+# Introduction
+
+This example demonstrates how to set up and run a simple leaf thermal model using the `odelia` package. The model simulates leaf temperature dynamics in response to changing air temperature over time, with transpiration acting to cool the leaf.
+
+This model system has only has single ODE and uses an external driver for air temperature. While simple, it provides a useful example of how to set up a model with drivers, and how to run multiple simulations with different parameterizations and/or drivers for comparison.
+
+Key files:
+
+- `readme.qmd`: This file, providing an overview and example code
+- `src/leaf_thermal_system.hpp`: C++ implementation of the leaf thermal model
+  - this file contains the core code for the model dynamics
+- `src/leaf_thermal_pars.hpp`: C++ struct storing model parameters
+- `src/leaf_thermal_interface.cpp`: C++ interface code to expose the model to R via Rcpp
+- `R/leaf_thermal_interface.R`: Creates R6 classes to wrap the C++ model and solver
+
+# Load libraries and compile C++ code
+
+```{r}
+library(odelia)
+library(tidyverse)
+setwd(here::here("inst/examples/leaf_thermal"))
+
+# Compile C++ code: use rebuild = TRUE to force recompilation, verbose=TRUE to see compiler output
+Rcpp::sourceCpp("src/leaf_thermal_interface.cpp",
+  verbose = FALSE, rebuild = FALSE
+)
+# Load R interface
+source("R/leaf_thermal_interface.R")
+```
+
+# Set up and run the model
+
+To run the model we need to:
+
+1. Define external drivers (air temperature forcing)
+2. Create a `LeafThermalSystem` object with parameters and drivers
+3. Create an ODE solver object to solve the system over time  
+
+Define External drivers for air temperature
+
+- this example uses a sinusoidal function to simulate daily temperature variation. But any time series or function could be used. 
+- the Drivers object 
+  - can hold multiple driver variables if needed.
+  - fits a smooth interpolation function (cubic spline) to the provided time series data
+  - can use any time steps, as long as they cover the full simulation period and have same units
+- On each time step in sumulation, the system queries the driver object for the current air temperature.
+
+```{r}
+# Create some data to drive model: sinusoidal daily cycle of air temperature over 5 days
+p <- list(Tmean = 32.0, Tamp = 6.0, tpeak = 15.0)
+time_driver <- seq(0, 5 * 24, by = 0.1)
+t_air <- p$Tmean + p$Tamp * sin(2.0 * pi * (time_driver - p$tpeak) / 24.0)
+
+# Create Drivers object and set air temperature variable
+drivers <- Drivers$new()
+drivers$set_variable("temperature", time_driver, t_air)
+```
+
+Now create the LeafThermalSystem object with parameters and drivers, and set up the ODE solver to run the simulation.
+
+```{r}
+# Define parameters
+pars <- LeafThermalSystemPars()
+
+# Create Leaf Thermal System
+lz <- LeafThermalSystem$new(pars, drivers)
+
+lz$pars()
+# Set state (initial leaf temperature and time)
+lz$set_state(c(25), 0)
+
+# Check current state and rates
+lz$state()
+lz$rates()
+
+# Update drivers (if desired) - not needed here as drivers are already set
+lz$initialize_drivers(drivers)
+
+# Create ODE solver
+ctrl <- OdeControl$new()
+runner <- LeafThermalSolver$new(lz$ptr, ctrl$ptr)
+
+# Solve the system over time
+# times we want output at
+times <- seq(0, 5 * 24, by = 0.1)
+
+# advance the solver
+runner$advance_adaptive(times)
+
+# Collect output
+out <- runner$history() |>
+  mutate(time = times, strategy = "baseline")
+
+# Make a plot
+vars <- c("T_air", "T_LC")
+
+out |>
+  pivot_longer(-c(strategy, time)) |>
+  filter(name %in% vars) |>
+  mutate(name = factor(name, levels = vars)) |>
+  ggplot(aes(time, value, colour = name)) +
+  geom_line() +
+  theme_bw() 
+```
+
+## Multiple strategies
+
+Now let's use the same setup to run and compare multiple strategies, defined by different maximum transpiration rates and therefore leaf cooling
+
+```{r}
+pars_baseline <- LeafThermalSystemPars()
+
+pars_increased_conductance <- LeafThermalSystemPars()
+pars_increased_conductance$g_tr_max <- 2 * pars_baseline$g_tr_max
+
+# Store strategies in a list
+strategies <- list(baseline = pars_baseline, increased_conductance = pars_increased_conductance)
+
+# Function to run simulation for a given strategy
+simulate_strategy <- function(strategy_name) {
+  pars <- strategies[[strategy_name]]
+  lz <- LeafThermalSystem$new(pars, drivers)
+  lz$set_state(c(25), 0)
+  runner <- LeafThermalSolver$new(lz$ptr, ctrl$ptr)
+  runner$advance_adaptive(times)
+
+  runner$history() |>
+    mutate(time = times, strategy = strategy_name)
+}
+
+# Run simulations for all strategies
+t_end <- 5 * 24
+ctrl <- OdeControl$new()
+times <- seq(0, t_end, by = 0.5)
+
+results <- names(strategies) |>
+  lapply(simulate_strategy) |>
+  bind_rows()
+
+# Make a plot comparing strategies
+vars <- c("T_air", "T_LC")
+results |>
+  pivot_longer(-c(strategy, time)) |>
+  filter(name %in% vars) |>
+  mutate(name = factor(name, levels = vars)) |>
+  ggplot(aes(time, value, colour = name)) +
+  geom_line() +
+  theme_bw() +
+  facet_wrap(~strategy, scales = "free_y")
+```
+
+## Different drivers
+
+Run an additional simulation with different driver (e.g., lower mean temperature and smaller amplitude)
+```{r}
+# Cretae new air temperature driver
+p <- list(Tmean = 28.0, Tamp = 2.0, tpeak = 15.0)
+t_air <- p$Tmean + p$Tamp * sin(2.0 * pi * (time_driver - p$tpeak) / 24.0)
+drivers2 <- Drivers$new()
+drivers2$set_variable("temperature", time_driver, t_air)
+
+# Run simulation with new drivers
+lz2 <- LeafThermalSystem$new(pars, drivers2)
+runner2 <- LeafThermalSolver$new(lz2$ptr, ctrl$ptr)
+runner2$advance_adaptive(times) 
+out2 <- runner2$history() |>
+  mutate(time = times, strategy = "different drivers")
+
+out_both <- bind_rows(out, out2)
+
+# Make a plot comparing drivers
+vars <- c("T_air", "T_LC")
+out_both |>
+  pivot_longer(-c(strategy, time)) |>
+  filter(name %in% vars) |>
+  mutate(name = factor(name, levels = vars)) |>
+  ggplot(aes(time, value, colour = name)) +
+  geom_line() +
+  theme_bw() +
+  facet_wrap(~strategy)
+```
+
