@@ -8,16 +8,9 @@ This vignette provides an example of using odelia to implement an ODE solver sim
 
 ![](https://upload.wikimedia.org/wikipedia/commons/1/13/A_Trajectory_Through_Phase_Space_in_a_Lorenz_Attractor.gif)
 
-It's a relatively straightforward ODE system with only three equations, that is easily solved in a variety of ODE solvers. However, it provides an opportunity to demonstrate a system with non-trivial dyanmics, and the minimal setup for using odelia.
+It's a relatively straightforward ODE system with only three equations, that is easily solved in a variety of ODE solvers. However, it provides an opportunity to demonstrate a system with non-trivial dyanmics, and the minimal setup for using odelia, and the speed advantage of solving entirely in C++.
 
-```
-make -C ../../../  install
-Rscript -e "Rcpp::sourceCpp('src/lorenz_interface.cpp', verbose = TRUE, rebuild = TRUE)"
-```
-
-```{r}
-fs::dir_tree(path = here::here("inst/examples/lorenz"))
-```
+## Load libraries and compile C++ code
 
 ```{r}
 library(odelia)
@@ -30,41 +23,87 @@ source("R/lorenz_interface.R")
 Rcpp::sourceCpp("src/lorenz_interface.cpp",
   verbose = TRUE, rebuild = TRUE
 )
+```
+
+## Set up and run the model
+```{r}
+# Create Lorenz system object
 lz <- LorenzSystem$new(sigma = 10, R = 28, b = 8 / 3)
 
-lz$pars() # c(10, 28, 8/3)
-lz$set_state(c(1, 1, 1)) # sets y0,y1,y2 and updates rates
-lz$state() # current state
-lz$rates() # current dy/dt
+# check stored parameters
+lz$pars()
 
-# Solver
+# Set initial state (no time here, as Lorenz system is autonomous)
+lz$set_state(c(1, 1, 1))
+
+# Check current state and rates
+lz$state()
+lz$rates()
+
+# Set up ODE solver
 ctrl <- OdeControl_new()
 
-runner <- Lorenz_Solver$new(lz$ptr, ctrl)
+# Advance with adaptive time stepping to time 10000
+runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
 runner$advance_adaptive(c(0, 10000))
-runner$history_step(1)
-runner$history_step(10) # should fail
+runner$history()
 
-# Collect at more times
-times <- runner$times()
-runner <- Lorenz_Solver$new(lz$ptr, ctrl)
+# Advance with adaptive time stepping over a sequence of times
+times <- seq(0, 1000, by = 0.01)
+runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
 runner$advance_adaptive(times)
 
+# Extract output and plot
 out <- runner$history()
 
-i <- 1:10000
-ggplot(out[i,], aes(x = x, y = z)) +
+ggplot(out, aes(x = x, y = z)) +
   geom_path() +
-  labs(title = "Lorenz attractor (deSolve, RK45)")
+  theme_classic() +
+  labs(title = "Lorenz attractor (via odelia)")
+```
+
+## Compare speed to deSolve
+
+We can compare the speed of solving the Lorenz system in C++ with `odelia` to using the `deSolve` package in R. We'll run all 3 using the same RK45 method, the same number of internal steps, but using 3 different implementations:
+
+1. Via `odelia` package (as above)
+2. Via `deSolve` package calling an R function that implements the Lorenz RHS
+3. Via `deSolve` package calling the C++ function to the Lorenz RHS
+
+First run with odelia and record time taken to both run and collect output.
+
+```{r}
+lz <- LorenzSystem$new(sigma = 10, R = 28, b = 8 / 3)
+lz$set_state(c(1, 1, 1))
+ctrl <- OdeControl_new()
+runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
+
+times <- seq(0, 1000, by = 0.01)
+
+runtime_odelia <- system.time({
+  runner$advance_adaptive(times)
+  out_odelia <- runner$history()
+})
+```
+
+As odelia uses an adaptive step size, there may be more internal steps than output rows, as output is only stored at requested times. to make them comparable, we'll use the same internal times used by odelia for the `deSolve` runs.
+
+```{r}
+# get internal times used by odelia, ie times at which rates were evaluated using the adaptive solver
+internal_times_odelia <- runner$times()
+
+# compare length of recored output to number of internal steps
+length(internal_times_odelia)
+nrow(out_odelia)
 ```
 
 
-
-Compare speed to desolve (with Rcpp)
+Second run using `deSolve` and rates function defined in R
 
 ```{r}
 library(deSolve)
 
+# R side function giving rates for Lorenz system
 lorenz_rhs_r <- function(t, state, pars) {
   with(as.list(c(state, pars)), {
     dx <- sigma * (y - x)
@@ -74,38 +113,42 @@ lorenz_rhs_r <- function(t, state, pars) {
   })
 }
 
-# solve Lorenz system with deSolve + RK45 via R side function
-desolve_time1 <- system.time({
-  sol_desolve1 <- ode(
+runtime_desolve_r <- system.time({
+  out_desolve_r <- ode(
     y = c(x = 1, y = 1, z = 1),
-    times = times,
+    times = internal_times_odelia,
     func = lorenz_rhs_r,
     parms = c(sigma = 10, rho = 28, beta = 8 / 3),
     method = "ode45"
   )
 })
+```
 
-# solve Lorenz system with deSolve + RK45 via Rcpp
-desolve_time2 <- system.time({
-  sol_desolve2 <- ode(
+Third run using `deSolve` and rates function defined in C++ 
+```{r}
+runtime_desolve_cpp <- system.time({
+  out_desolve_cpp <- ode(
     y = c(x = 1, y = 1, z = 1),
-    times = times,
+    times = internal_times_odelia,
     func = lorenz_rhs,
     parms = c(sigma = 10, rho = 28, beta = 8 / 3),
     method = "ode45"
   )
 })
-
-desolve_time1
-desolve_time2
-
-nrow(out) == nrow(sol_desolve2)
-nrow(sol_desolve1) == nrow(sol_desolve2)
-
-# quick visual check
-sol_desolve2[1:10000, ] |>
-  as.data.frame() |>
-  ggplot(aes(x = x, y = z)) +
-  geom_path() +
-  labs(title = "Lorenz attractor (deSolve, RK45)")
 ```
+
+Now compare runtimes
+```{r}
+runtime_odelia
+runtime_desolve_r
+runtime_desolve_cpp
+
+c(runtime_odelia[1], runtime_desolve_r[1], runtime_desolve_cpp[1]) / runtime_odelia[1]
+```
+
+So the odelia C++ implementation is about 
+
+- 30x faster than the C++ function solved via `deSolve`, and 
+- 90x faster than the R function solvedvia `deSolve`. 
+
+This shows the advantage of using compiled code for ODE systems, and also the efficiency of the odelia framework for setting up and solving ODE systems in C++.

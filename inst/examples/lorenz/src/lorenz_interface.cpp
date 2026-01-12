@@ -1,6 +1,25 @@
 // [[Rcpp::depends(Rcpp, odelia)]]
 // [[Rcpp::plugins(cpp20)]]
 
+/* This file defines uses Rcpp to create an interface for the lorenz model, including
+
+- model system: LorenzSystem
+- ODE solver: ode::Solver<LorenzSystem>
+
+Most are straightforward general wrappers around the underlying C++ methods and not specific to the lorenz model.
+
+Throughout the functions below, we
+
+- use functions names like Class_method to indicate method 'method' for class 'Class'. You should refer to these functions for details on underlying C++ methods.
+- use Rcpp::XPtr to manage pointers to C++ objects created in R and passed back to C++.
+- convert between Rcpp types (NumericVector, List, DataFrame) and C++ types (std::vector, structs) as needed.
+- provide error checking for input sizes and validity where appropriate.
+- return results in R-friendly formats.
+- all functions are exported to R using the [[Rcpp::export]] attribute.
+
+These functions are intended only as interface and are called via a corresponding R interface,to provide a user-friendly R interface. See `R/leaf_thermal_interface.R` for details.
+*/
+
 #include <Rcpp.h>
 #include <odelia/ode_solver.hpp>
 #include "lorenz_system.hpp"
@@ -8,21 +27,24 @@
 using namespace Rcpp;
 using namespace odelia;
 
-// Rcpp interface for the ODE Solver
-typedef odelia::ode::LorenzSystem SystemType;
+// Define types for convenience
+typedef LorenzSystem SystemType;
 typedef ode::Solver<SystemType> SolverType;
 
-// Helper to get the XPtr<Solver>
+// Helpers to convert pointers from SEXP to XPtr
 inline Rcpp::XPtr<SolverType> get_solver(SEXP xp) {
   return Rcpp::XPtr<SolverType>(xp);
 }
 
-// Constructor: build Solver from existing System + OdeControl
-// Assume you already have these defined and pass in as external pointers
+inline Rcpp::XPtr<SystemType> get_system(SEXP xp) {
+  return Rcpp::XPtr<SystemType>(xp);
+}
+
+//-------------------------------------------------------------------------
+// Rcpp interface for ode::Solver<LorenzSystem>
 
 // [[Rcpp::export]]
-SEXP Solver_new(SEXP system_xp, SEXP control_xp)
-{
+SEXP Solver_new(SEXP system_xp, SEXP control_xp) {
   Rcpp::XPtr<SystemType> sys(system_xp);
   Rcpp::XPtr<ode::OdeControl> ctrl(control_xp);
 
@@ -31,49 +53,42 @@ SEXP Solver_new(SEXP system_xp, SEXP control_xp)
 }
 
 // [[Rcpp::export]]
-void Solver_reset(SEXP solver_xp)
-{
+void Solver_reset(SEXP solver_xp) {
   auto r = get_solver(solver_xp);
   r->reset();
 }
 
 // [[Rcpp::export]]
-double Solver_time(SEXP solver_xp)
-{
+double Solver_time(SEXP solver_xp) {
   auto r = get_solver(solver_xp);
   return r->time();
 }
 
 // [[Rcpp::export]]
-Rcpp::NumericVector Solver_state(SEXP solver_xp)
-{
+Rcpp::NumericVector Solver_state(SEXP solver_xp) {
   auto r = get_solver(solver_xp);
   auto y = r->state();
   return Rcpp::wrap(y);
 }
 
 // [[Rcpp::export]]
-Rcpp::NumericVector Solver_times(SEXP solver_xp)
-{
+Rcpp::NumericVector Solver_times(SEXP solver_xp) {
   auto r = get_solver(solver_xp);
   auto ts = r->times(); // std::vector<double>
   return Rcpp::wrap(ts);
 }
 
-// 3. Mutators / evolution
 // [[Rcpp::export]]
 void Solver_set_state(SEXP solver_xp,
                       Rcpp::NumericVector y,
-                      double time)
-{
+                      double time) {
   auto r = get_solver(solver_xp);
   std::vector<double> yy(y.begin(), y.end());
   r->set_state(yy, time);
 }
 
 // [[Rcpp::export]]
-void Solver_advance_adaptive(SEXP solver_xp, Rcpp::NumericVector times)
-{
+void Solver_advance_adaptive(SEXP solver_xp, Rcpp::NumericVector times) {
   auto r = get_solver(solver_xp);
   std::vector<double> ts(times.begin(), times.end());
   r->advance_adaptive(ts);
@@ -81,60 +96,46 @@ void Solver_advance_adaptive(SEXP solver_xp, Rcpp::NumericVector times)
 
 // [[Rcpp::export]]
 void Solver_advance_fixed(SEXP solver_xp,
-                          Rcpp::NumericVector times)
-{
+                          Rcpp::NumericVector times) {
   auto r = get_solver(solver_xp);
   std::vector<double> ts(times.begin(), times.end());
   r->advance_fixed(ts);
 }
 
 // [[Rcpp::export]]
-void Solver_step(SEXP solver_xp)
-{
+void Solver_step(SEXP solver_xp) {
   auto r = get_solver(solver_xp);
   r->step();
 }
 
-//-------------------------
-// collect flag
-//-------------------------
-
 // [[Rcpp::export]]
-bool Solver_get_collect(SEXP solver_xp)
-{
+bool Solver_get_collect(SEXP solver_xp) {
   auto r = get_solver(solver_xp);
   return r->get_collect();
 }
 
 // [[Rcpp::export]]
-void Solver_set_collect(SEXP solver_xp, bool x)
-{
+void Solver_set_collect(SEXP solver_xp, bool x) {
   auto r = get_solver(solver_xp);
   r->set_collect(x);
 }
 
-//-------------------------
-// history access
-//-------------------------
-
-// size of history
 // [[Rcpp::export]]
-std::size_t Solver_get_history_size(SEXP solver_xp)
-{
+std::size_t Solver_get_history_size(SEXP solver_xp) {
   auto r = get_solver(solver_xp);
   return r->get_history_size();
 }
 
+// Helper to get column names
 CharacterVector get_column_names() {
   CharacterVector names(7);
   names = {"time", "x", "y", "z", "dxdt", "dydt", "dzdt"};
   return names;
 }
 
-// single step
+// Return history for a single step as a dataframe
 // [[Rcpp::export]]
-Rcpp::DataFrame Solver_get_history_step(SEXP solver_xp, std::size_t i)
-{
+Rcpp::DataFrame Solver_get_history_step(SEXP solver_xp, std::size_t i) {
   auto r = get_solver(solver_xp);
   int nrows = r->get_history_size();
   if (i >= nrows)
@@ -158,10 +159,9 @@ Rcpp::DataFrame Solver_get_history_step(SEXP solver_xp, std::size_t i)
   return Rcpp::DataFrame(df_list);
 }
 
-// full history as a list of external pointers
+// Return full history as a dataframe
 // [[Rcpp::export]]
-Rcpp::List Solver_get_history(SEXP solver_xp)
-{
+Rcpp::List Solver_get_history(SEXP solver_xp) {
   auto r = get_solver(solver_xp);
   int nrows = r->get_history_size();
 
@@ -197,7 +197,7 @@ Rcpp::List Solver_get_history(SEXP solver_xp)
   // Set column names
   out.attr("names") = get_column_names();
 
-  // 4) Return a DataFrame 
+  // Return a DataFrame 
   // NB (DataFrame::create duplicates columns again if you pass names differently; constructing directly from a named List is more efficient)
   
   return DataFrame(out);
@@ -205,11 +205,6 @@ Rcpp::List Solver_get_history(SEXP solver_xp)
 
 //-------------------------------------------------------------------------
 // Rcpp interface for System
-
-// Convenience accessor
-inline Rcpp::XPtr<SystemType> get_system(SEXP xp) {
-  return Rcpp::XPtr<SystemType>(xp);
-}
 
 // Constructors  & basic access
 // [[Rcpp::export]]
@@ -226,11 +221,8 @@ Rcpp::NumericVector System_pars(SEXP system_xp) {
   return Rcpp::wrap(p);
 }
 
-// State interface
-
-// Set internal state and update rates.
 // [[Rcpp::export]]
-void System_set_state(SEXP system_xp, Rcpp::NumericVector y) {
+void System_set_state(SEXP system_xp, Rcpp::NumericVector y, double time) {
   
   auto lor = get_system(system_xp);
 
@@ -242,10 +234,9 @@ void System_set_state(SEXP system_xp, Rcpp::NumericVector y) {
 
   std::vector<double> tmp(y.begin(), y.end());
   ode::const_iterator it = tmp.begin();
-  lor->set_ode_state(it);
+  lor->set_ode_state(it, time);
 }
 
-// Get current state
 // [[Rcpp::export]]
 Rcpp::NumericVector System_state(SEXP system_xp) {
   auto lor = get_system(system_xp);
@@ -271,12 +262,11 @@ Rcpp::NumericVector System_rates(SEXP system_xp) {
   return Rcpp::wrap(tmp);
 }
 
-/*----------------------------------------------------------*/
+//----------------------------------------------------------
 // Rcpp interface for the ODE control object
 
 // [[Rcpp::export]]
-SEXP OdeControl_new()
-{
+SEXP OdeControl_new() {
   // allocate new control object
   auto *ctrl = new odelia::ode::OdeControl();
 
@@ -286,12 +276,11 @@ SEXP OdeControl_new()
 }
 
 //-------------------------------------------------------------------------
-// Define single function that gives rates of change for the  system 
+// For comparison: Define single function that gives rates of change for the  system 
 // that could be passed into deSolve, executed through C++ for speed.
 
 // [[Rcpp::export]]
-List lorenz_rhs(double t, NumericVector state, NumericVector pars)
-{
+List lorenz_rhs(double t, NumericVector state, NumericVector pars) {
   double x = state["x"];
   double y = state["y"];
   double z = state["z"];

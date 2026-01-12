@@ -49,7 +49,7 @@ Lorenz_Solver <- R6::R6Class(
 
     },
     history = function() {
-      Solver_get_history(self$ptr)|> dplyr::bind_rows()
+      Solver_get_history(self$ptr) |> dplyr::bind_rows() |> dplyr::as_tibble() |> tibble::remove_rownames()
     }
   )
 )
@@ -65,8 +65,8 @@ LorenzSystem <- R6::R6Class(
     pars = function() {
       System_pars(self$ptr)
     },
-    set_state = function(y) {
-      System_set_state(self$ptr, y)
+    set_state = function(y, time = 0.0) {
+      System_set_state(self$ptr, y, time)
       invisible(self)
     },
     state = function() {
