@@ -1,6 +1,3 @@
-// [[Rcpp::depends(Rcpp, odelia)]]
-// [[Rcpp::plugins(cpp20)]]
-
 /* This file defines uses Rcpp to create an interface for the lorenz model, including
 
 - model system: LorenzSystem
@@ -22,7 +19,7 @@ These functions are intended only as interface and are called via a correspondin
 
 #include <Rcpp.h>
 #include <odelia/ode_solver.hpp>
-#include "lorenz_system.hpp"
+#include <odelia/examples/lorenz_system.hpp>
 
 using namespace Rcpp;
 using namespace odelia;
