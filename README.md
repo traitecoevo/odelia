@@ -1,12 +1,12 @@
-# odelia: An ODE solver using Runge-Kutta 4-5 adaptive step, C++ header files
+# odelia: ODE solver using Runge-Kutta 4-5 adaptive step, C++ header files
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/traitecoevo/odelia/workflows/R-CMD-check/badge.svg)](https://github.com/traitecoevo/odelia/master)
 <!-- badges: end -->
 
-The odelia package for R is an ODE solver in C++ header files, using RK4-5. There's potenital to link to R via Rcpp. Code was first developed by  Rich FitzJohn as part of the [plant package](https://github.com/traitecoevo/plant/). I'm spinning that code out into a package, as I want to use it elsewhere. 
+The odelia package for R is an ODE solver in C++ header files, using RK4-5. There's potential to link to R via Rcpp. Code was first developed by Rich FitzJohn as part of the [plant package](https://github.com/traitecoevo/plant/). I'm spinning that code out into a package, as I want to use it elsewhere.
 
-Vocabulary-
+## Vocabulary
 - system
 - stepper
 - solver
@@ -19,3 +19,12 @@ This package is released under the [GNU Affero General Public License v3 (AGPL-3
 ## Contributing
 
 Contributions are welcome. By submitting a pull request or code to this repository, you agree to the terms of the [Contributor License Agreement](CLA.md).
+
+### ODE System Structure
+
+An ODE system in odelia consists of:
+
+- **System header** (`inst/include/odelia/examples/*.hpp`) — C++ class defining the ODE. Must implement `ode_size()`, `set_ode_state()`, `ode_state()`, and `ode_rates()`. Template on scalar type for AD support.
+- **Rcpp interface** (`src/*_interface.cpp`) — `[[Rcpp::export]]` functions exposing the system to R.
+- **R wrapper** (`R/*-interface.R`, optional) — R6 classes providing a friendlier API around the external pointers.
+- **Demo script** (`examples/*/demo.R`) — Runnable demonstration.
