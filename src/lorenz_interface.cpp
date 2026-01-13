@@ -19,7 +19,7 @@ These functions are intended only as interface and are called via a correspondin
 
 #include <Rcpp.h>
 #include <odelia/ode_solver.hpp>
-#include <odelia/examples/lorenz_system.hpp>
+#include <examples/lorenz_system.hpp>
 
 using namespace Rcpp;
 using namespace odelia;

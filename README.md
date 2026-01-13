@@ -31,13 +31,16 @@ make
 devtools::load_all()
 ```
 
-`make` regenerates Rcpp exports and compiles C++. `load_all()` loads the compiled code into R. This sequence is needed because `load_all()` doesn't regenerate exports from `[[Rcpp::export]]` annotations.
+`make` regenerates Rcpp exports and compiles C++. `load_all()` compiles code and loads it into R, but doesn't regenerate functions with `[[Rcpp::export]]` annotations - always run `make` if you're editing Rcpp interfaces.
 
 ### ODE System Structure
 
 An ODE system in odelia consists of:
 
-- **System header** (`inst/include/odelia/examples/*.hpp`) — C++ class defining the ODE. Must implement `ode_size()`, `set_ode_state()`, `ode_state()`, and `ode_rates()`. Template on scalar type for AD support.
-- **Rcpp interface** (`src/*_interface.cpp`) — `[[Rcpp::export]]` functions exposing the system to R.
-- **R wrapper** (`R/*-interface.R`, optional) — R6 classes providing a friendlier API around the external pointers.
-- **Demo script** (`examples/*/demo.R`) — Runnable demonstration.
+- **A system header** (`inst/include/odelia/examples/*.hpp`) — C++ class defining the ODE. Must implement `ode_size()`, `set_ode_state()`, `ode_state()`, and `ode_rates()`. Template on scalar type for AD support.
+
+- **An Rcpp interface** (`src/*_interface.cpp`) — `[[Rcpp::export]]` functions exposing the system to R.
+
+- **An R wrapper** (`R/*-interface.R`, optional) — R6 classes providing a friendlier API around the external pointers.
+
+- **A demo script** (`examples/*/demo.R`) — Runnable demonstration.
