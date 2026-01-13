@@ -24,7 +24,10 @@ Contributions are welcome. By submitting a pull request or code to this reposito
 
 An ODE system in odelia consists of:
 
-- **System header** (`inst/include/odelia/examples/*.hpp`) — C++ class defining the ODE. Must implement `ode_size()`, `set_ode_state()`, `ode_state()`, and `ode_rates()`. Template on scalar type for AD support.
-- **Rcpp interface** (`src/*_interface.cpp`) — `[[Rcpp::export]]` functions exposing the system to R.
-- **R wrapper** (`R/*-interface.R`, optional) — R6 classes providing a friendlier API around the external pointers.
-- **Demo script** (`examples/*/demo.R`) — Runnable demonstration.
+- **A system header** (`inst/include/odelia/examples/*.hpp`) — C++ class defining the ODE. Must implement `ode_size()`, `set_ode_state()`, `ode_state()`, and `ode_rates()`. Template on scalar type for AD support.
+
+- **An Rcpp interface** (`src/*_interface.cpp`) — `[[Rcpp::export]]` functions exposing the system to R.
+
+- **An R wrapper** (`R/*-interface.R`, optional) — R6 classes providing a friendlier API around the external pointers.
+
+- **A demo script** (`examples/*/demo.R`) — Runnable demonstration.

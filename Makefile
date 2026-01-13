@@ -1,9 +1,16 @@
 PACKAGE := $(shell grep '^Package:' DESCRIPTION | sed -E 's/^Package:[[:space:]]+//')
 RSCRIPT = Rscript --no-init-file
 
-all: roxygen compile
+all: Rcpp compile
 
-# generates documentation
+# compiles C++
+compile:
+	Rscript -e "devtools::load_all()"
+
+# generates Rcpp exports
+Rcpp:
+	Rscript -e "Rcpp::compileAttributes()"
+	
 roxygen:
 	@mkdir -p man
 	Rscript -e "library(methods); devtools::document()"
