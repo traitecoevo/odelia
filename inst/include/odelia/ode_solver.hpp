@@ -40,10 +40,13 @@ public:
   // collectors
   double time() const { return solver.get_time(); }
 
-  ode::state_type state() const { return solver.get_state(); }
+  typename system_traits<System>::state_type state() const { return solver.get_state(); }
   std::vector<double> times() const { return solver.get_times(); }
 
   System get_system() const { return system; }
+  System& get_system_ref() { return system; }
+  const System& get_system_ref() const { return system; }
+
 
   void set_state(ode::state_type y, double time)
   {
@@ -128,6 +131,19 @@ public:
 
   System get_history_step(std::size_t i) const { return history.at(i); }
 
+  // Fit configuration methods
+  void set_target(const std::vector<double>& times, 
+                 const std::vector<std::vector<double>>& targets,
+                 const std::vector<size_t>& obs_indices) {
+    fit_times_ = times;
+    targets_ = targets;
+    obs_indices_ = obs_indices;
+  }
+  
+  const std::vector<double>& fit_times() const { return fit_times_; }
+  const std::vector<std::vector<double>>& targets() const { return targets_; }
+  const std::vector<size_t>& obs_indices() const { return obs_indices_; }
+
   // Should we record history at every step?
   // TODO: should this be part of ode_solver?
   std::vector<System> history;
@@ -136,6 +152,11 @@ private:
   bool collect;
   System system;
   SolverInternal<System> solver;
+  
+  // Fit configuration for AD gradient computation
+  std::vector<double> fit_times_;
+  std::vector<size_t> obs_indices_;
+  std::vector<std::vector<double>> targets_;
 
 };
 }

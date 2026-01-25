@@ -7,6 +7,31 @@
 namespace odelia {
 namespace ode {
 
+// 
+// System Traits: Extract scalar type from ODE systems
+// 
+// 
+// Primary template - default for non-templated systems (backward compatibility)
+template<typename System, typename = void>
+struct system_traits {
+    using value_type = double;
+    using state_type = std::vector<value_type>;
+};
+
+// Specialization for systems that define value_type (templated systems)
+// Uses SFINAE to detect if System::value_type exists
+template<typename System>
+struct system_traits<System, 
+    typename std::enable_if<
+        !std::is_same<typename System::value_type, void>::value
+    >::type> {
+    using value_type = typename System::value_type;
+    using state_type = std::vector<value_type>;
+};
+
+// 
+// Legacy typedefs (kept for backward compatibility with existing code)
+//
 // These are utilities designed to make it more pleasant to work with
 // ode objects.  The first in-place functions work with the
 // boost::odeint interface, and the types are just to reduce typing.
@@ -111,29 +136,28 @@ ode_time(const T& /* obj */) {
 }
 
 namespace internal {
-template <typename T>
+template <typename T, typename StateType>
 typename std::enable_if<needs_time<T>::value, void>::type
-set_ode_state(T& obj, const state_type& y, double time) {
+set_ode_state(T& obj, const StateType& y, double time) {
   obj.set_ode_state(y.begin(), time);
 }
 
-template <typename T>
+template <typename T, typename StateType>
 typename std::enable_if<!needs_time<T>::value, void>::type
-set_ode_state(T& obj, const state_type& y, double /* time */) {
+set_ode_state(T& obj, const StateType& y, double /* time */) {
   obj.set_ode_state(y.begin());
 }
 
-// mutants only
-template <typename T>
+template <typename T, typename StateType>
 typename std::enable_if<has_cache<T>::value, void>::type
-set_ode_state(T& obj, const state_type& y, int index) {
+set_ode_state(T& obj, const StateType& y, int index) {
   obj.set_ode_state(y.begin(), index);
 }
 }
 
 // primarily for Ode_R - maybe remove
-template <typename T>
-void derivs(T& obj, const state_type& y, state_type& dydt,
+template <typename T, typename StateType>
+void derivs(T& obj, const StateType& y, StateType& dydt,
             const double time) {
 
   internal::set_ode_state(obj, y, time);
@@ -141,9 +165,9 @@ void derivs(T& obj, const state_type& y, state_type& dydt,
 }
 
 // for ODE stepping
-template <typename T>
+template <typename T, typename StateType>
 typename std::enable_if<!has_cache<T>::value, void>::type
-derivs(T& obj, const state_type& y, state_type& dydt,
+derivs(T& obj, const StateType& y, StateType& dydt,
             const double time, const int /* index */) {
 
   internal::set_ode_state(obj, y, time);
@@ -151,9 +175,9 @@ derivs(T& obj, const state_type& y, state_type& dydt,
 }
 
 // for mutants or ODE stepping
-template <typename T>
+template <typename T, typename StateType>
 typename std::enable_if<has_cache<T>::value, void>::type
-derivs(T& obj, const state_type& y, state_type& dydt,
+derivs(T& obj, const StateType& y, StateType& dydt,
             const double time, const int index) {
 
     if(obj.use_cached_environment) {

@@ -21,19 +21,32 @@ These functions are intended only as interface and are called via a correspondin
 */
 
 #include <Rcpp.h>
+#include <XAD/XAD.hpp>
 #include <odelia/ode_solver.hpp>
+#include <odelia/ode_fit.hpp>
+#include <odelia/solver_wrapper.hpp>
 #include "lorenz_system.hpp"
 
 using namespace Rcpp;
 using namespace odelia;
 
+// Specialization to mark AD solvers as active
+namespace odelia {
+namespace ode {
+template <>
+bool SolverWrapper<LorenzSystem<xad::adj<double>::active_type>>::is_active() const {
+    return true;
+}
+}
+}
+
 // Define types for convenience
-typedef LorenzSystem SystemType;
-typedef ode::Solver<SystemType> SolverType;
+typedef LorenzSystem<double> SystemType;
+typedef ode::SolverBase SolverBaseType;
 
 // Helpers to convert pointers from SEXP to XPtr
-inline Rcpp::XPtr<SolverType> get_solver(SEXP xp) {
-  return Rcpp::XPtr<SolverType>(xp);
+inline Rcpp::XPtr<SolverBaseType> get_solver_base(SEXP xp) {
+  return Rcpp::XPtr<SolverBaseType>(xp);
 }
 
 inline Rcpp::XPtr<SystemType> get_system(SEXP xp) {
@@ -44,36 +57,53 @@ inline Rcpp::XPtr<SystemType> get_system(SEXP xp) {
 // Rcpp interface for ode::Solver<LorenzSystem>
 
 // [[Rcpp::export]]
-SEXP Solver_new(SEXP system_xp, SEXP control_xp) {
+SEXP Solver_new(SEXP system_xp, SEXP control_xp, bool active = false) {
   Rcpp::XPtr<SystemType> sys(system_xp);
   Rcpp::XPtr<ode::OdeControl> ctrl(control_xp);
-
-  Rcpp::XPtr<SolverType> ptr(new SolverType(*sys, *ctrl), true);
-  return ptr;
+  
+  if (active) {
+    // Create AD-enabled solver
+    using ad = xad::adj<double>;
+    using ADType = ad::active_type;
+    
+    auto params = sys->pars();
+    auto* sys_active = new LorenzSystem<ADType>(params[0], params[1], params[2]);
+    auto* wrapper = new ode::SolverWrapper<LorenzSystem<ADType>>(sys_active, *ctrl);
+    
+    Rcpp::XPtr<SolverBaseType> ptr(wrapper, true);
+    return ptr;
+  } else {
+    // Create regular double solver
+    auto* sys_copy = new SystemType(*sys);
+    auto* wrapper = new ode::SolverWrapper<SystemType>(sys_copy, *ctrl);
+    
+    Rcpp::XPtr<SolverBaseType> ptr(wrapper, true);
+    return ptr;
+  }
 }
 
 // [[Rcpp::export]]
 void Solver_reset(SEXP solver_xp) {
-  auto r = get_solver(solver_xp);
+  auto r = get_solver_base(solver_xp);
   r->reset();
 }
 
 // [[Rcpp::export]]
 double Solver_time(SEXP solver_xp) {
-  auto r = get_solver(solver_xp);
+  auto r = get_solver_base(solver_xp);
   return r->time();
 }
 
 // [[Rcpp::export]]
 Rcpp::NumericVector Solver_state(SEXP solver_xp) {
-  auto r = get_solver(solver_xp);
+  auto r = get_solver_base(solver_xp);
   auto y = r->state();
   return Rcpp::wrap(y);
 }
 
 // [[Rcpp::export]]
 Rcpp::NumericVector Solver_times(SEXP solver_xp) {
-  auto r = get_solver(solver_xp);
+  auto r = get_solver_base(solver_xp);
   auto ts = r->times(); // std::vector<double>
   return Rcpp::wrap(ts);
 }
@@ -82,14 +112,14 @@ Rcpp::NumericVector Solver_times(SEXP solver_xp) {
 void Solver_set_state(SEXP solver_xp,
                       Rcpp::NumericVector y,
                       double time) {
-  auto r = get_solver(solver_xp);
+  auto r = get_solver_base(solver_xp);
   std::vector<double> yy(y.begin(), y.end());
   r->set_state(yy, time);
 }
 
 // [[Rcpp::export]]
 void Solver_advance_adaptive(SEXP solver_xp, Rcpp::NumericVector times) {
-  auto r = get_solver(solver_xp);
+  auto r = get_solver_base(solver_xp);
   std::vector<double> ts(times.begin(), times.end());
   r->advance_adaptive(ts);
 }
@@ -97,32 +127,32 @@ void Solver_advance_adaptive(SEXP solver_xp, Rcpp::NumericVector times) {
 // [[Rcpp::export]]
 void Solver_advance_fixed(SEXP solver_xp,
                           Rcpp::NumericVector times) {
-  auto r = get_solver(solver_xp);
+  auto r = get_solver_base(solver_xp);
   std::vector<double> ts(times.begin(), times.end());
   r->advance_fixed(ts);
 }
 
 // [[Rcpp::export]]
 void Solver_step(SEXP solver_xp) {
-  auto r = get_solver(solver_xp);
+  auto r = get_solver_base(solver_xp);
   r->step();
 }
 
 // [[Rcpp::export]]
 bool Solver_get_collect(SEXP solver_xp) {
-  auto r = get_solver(solver_xp);
+  auto r = get_solver_base(solver_xp);
   return r->get_collect();
 }
 
 // [[Rcpp::export]]
 void Solver_set_collect(SEXP solver_xp, bool x) {
-  auto r = get_solver(solver_xp);
+  auto r = get_solver_base(solver_xp);
   r->set_collect(x);
 }
 
 // [[Rcpp::export]]
 std::size_t Solver_get_history_size(SEXP solver_xp) {
-  auto r = get_solver(solver_xp);
+  auto r = get_solver_base(solver_xp);
   return r->get_history_size();
 }
 
@@ -136,7 +166,7 @@ CharacterVector get_column_names() {
 // Return history for a single step as a dataframe
 // [[Rcpp::export]]
 Rcpp::DataFrame Solver_get_history_step(SEXP solver_xp, std::size_t i) {
-  auto r = get_solver(solver_xp);
+  auto r = get_solver_base(solver_xp);
   int nrows = r->get_history_size();
   if (i >= nrows)
   {
@@ -145,8 +175,7 @@ Rcpp::DataFrame Solver_get_history_step(SEXP solver_xp, std::size_t i) {
                std::to_string(i));
   }
 
-  SystemType elem = r->get_history_step(i);
-  std::vector<double> out = elem.record_step();
+  std::vector<double> out = r->get_history_step(i);
   
   CharacterVector names = get_column_names();
 
@@ -162,7 +191,7 @@ Rcpp::DataFrame Solver_get_history_step(SEXP solver_xp, std::size_t i) {
 // Return full history as a dataframe
 // [[Rcpp::export]]
 Rcpp::List Solver_get_history(SEXP solver_xp) {
-  auto r = get_solver(solver_xp);
+  auto r = get_solver_base(solver_xp);
   int nrows = r->get_history_size();
 
   CharacterVector names = get_column_names();
@@ -176,8 +205,7 @@ Rcpp::List Solver_get_history(SEXP solver_xp) {
 
   // Produce rows and push into columns
   for (size_t i = 0; i < nrows; ++i) {
-    SystemType elem = r->get_history_step(i);
-    std::vector<double> row = elem.record_step();
+    std::vector<double> row = r->get_history_step(i);
 
     for (size_t j = 0; j < ncols; ++j) {
       cols[j].push_back(row[j]);
@@ -294,4 +322,141 @@ List lorenz_rhs(double t, NumericVector state, NumericVector pars) {
   double dz = x * y - beta * z;
 
   return List::create(NumericVector::create(dx, dy, dz));
+}
+//-------------------------------------------------------------------------
+// [[Rcpp::export]]
+void Solver_set_target(SEXP solver_xp, 
+                      Rcpp::NumericVector times,
+                      Rcpp::NumericMatrix target,
+                      Rcpp::IntegerVector obs_indices) {
+    auto solver = get_solver_base(solver_xp);
+    
+    // Convert times
+    std::vector<double> times_vec(times.begin(), times.end());
+    
+    // Convert matrix to vector of vectors
+    int nrows = target.nrow();
+    int ncols = target.ncol();
+    std::vector<std::vector<double>> targets_vec(nrows);
+    for (int i = 0; i < nrows; ++i) {
+        targets_vec[i].resize(ncols);
+        for (int j = 0; j < ncols; ++j) {
+            targets_vec[i][j] = target(i, j);
+        }
+    }
+    
+    // Convert to 0-based indices
+    std::vector<size_t> obs_idx_vec(obs_indices.size());
+    for (size_t i = 0; i < obs_indices.size(); ++i) {
+        obs_idx_vec[i] = obs_indices[i] - 1; // R is 1-indexed
+    }
+    
+    // Store in solver
+    solver->set_target(times_vec, targets_vec, obs_idx_vec);
+}
+
+// [[Rcpp::export]]
+Rcpp::List Solver_fit_ic(SEXP solver_xp, Rcpp::NumericVector ic) {
+    using ad = xad::adj<double>;
+    using ADType = ad::active_type;
+    
+    // Get solver base
+    auto solver = get_solver_base(solver_xp);
+    if (solver->fit_times().empty()) {
+        Rcpp::stop("Must call set_target() before fit_ic()");
+    }
+    
+    std::vector<double> ic_vec(ic.begin(), ic.end());
+    
+    // Check if this is an active (AD) solver
+    if (solver->is_active()) {
+        // Cast to AD solver wrapper
+        auto* ad_wrapper = dynamic_cast<ode::SolverWrapper<LorenzSystem<ADType>>*>(solver.get());
+        if (!ad_wrapper) {
+            Rcpp::stop("Failed to cast to AD solver");
+        }
+        
+        // Use the EXISTING AD solver (no new system creation!)
+        auto* ad_solver = ad_wrapper->get_solver();
+        
+        // Create control (TODO: should also be stored)
+        ode::OdeControl ctrl;
+        
+        // Compute gradient using the existing AD system
+        auto& ad_system_ref = ad_solver->get_system_ref();
+
+        auto result = ode::compute_gradient_ic(
+            ad_system_ref,
+            ic_vec,
+            solver->fit_times(),
+            solver->targets(),
+            solver->obs_indices(),
+            ctrl
+        );
+        
+        return Rcpp::List::create(
+            Rcpp::Named("loss") = result.loss,
+            Rcpp::Named("gradient") = Rcpp::wrap(result.gradient)
+        );
+    } else {
+        // Regular solver - create AD system on-demand
+        auto sys_params = solver->get_system_pars();
+        
+        LorenzSystem<ADType> ad_system{
+            ADType(sys_params[0]),
+            ADType(sys_params[1]),
+            ADType(sys_params[2])
+        };
+        
+        ode::OdeControl ctrl;
+        
+        auto result = ode::compute_gradient_ic(
+            ad_system,
+            ic_vec,
+            solver->fit_times(),
+            solver->targets(),
+            solver->obs_indices(),
+            ctrl
+        );
+        
+        return Rcpp::List::create(
+            Rcpp::Named("loss") = result.loss,
+            Rcpp::Named("gradient") = Rcpp::wrap(result.gradient)
+        );
+    }
+}
+
+// [[Rcpp::export]]
+Rcpp::List Solver_fit_params(SEXP solver_xp, 
+                             Rcpp::NumericVector params,
+                             Rcpp::NumericVector ic) {
+    using ad = xad::adj<double>;
+    using ADType = ad::active_type;
+    
+    // Get solver and its stored configuration
+    auto solver = get_solver_base(solver_xp);
+    if (solver->fit_times().empty()) {
+        Rcpp::stop("Must call set_target() before fit_params()");
+    }
+    
+    // Create control
+    ode::OdeControl ctrl;
+    
+    // Compute gradient w.r.t. parameters
+    std::vector<double> params_vec(params.begin(), params.end());
+    std::vector<double> ic_vec(ic.begin(), ic.end());
+    
+    auto result = ode::compute_gradient_params<LorenzSystem<ADType>>(
+        params_vec,
+        ic_vec,
+        solver->fit_times(),  
+        solver->targets(),    
+        solver->obs_indices(), 
+        ctrl
+    );
+    
+    return Rcpp::List::create(
+        Rcpp::Named("loss") = result.loss,
+        Rcpp::Named("gradient") = Rcpp::wrap(result.gradient)
+    );
 }
