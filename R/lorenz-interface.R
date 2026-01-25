@@ -2,8 +2,8 @@ Lorenz_Solver <- R6::R6Class(
   "Lorenz_Solver",
   public = list(
     ptr = NULL,
-    initialize = function(System_xp, control_xp) {
-      self$ptr <- Solver_new(System_xp, control_xp)
+    initialize = function(System_xp, control_xp, active = FALSE) {
+      self$ptr <- Solver_new(System_xp, control_xp, active)
     },
     time = function() {
       Solver_time(self$ptr)
@@ -50,6 +50,16 @@ Lorenz_Solver <- R6::R6Class(
     },
     history = function() {
       Solver_get_history(self$ptr) |> dplyr::bind_rows() |> dplyr::as_tibble() |> tibble::remove_rownames()
+    },
+    set_target = function(times, target, obs_indices) {
+      Solver_set_target(self$ptr, times, target, obs_indices)
+      invisible(self)
+    },
+    fit_ic = function(ic) {
+      Solver_fit_ic(self$ptr, ic)
+    },
+    fit_params = function(params, ic) {
+      Solver_fit_params(self$ptr, params, ic)
     }
   )
 )
@@ -77,4 +87,8 @@ LorenzSystem <- R6::R6Class(
     }
   )
 )
+#' @export
+LorenzSystem
 
+#' @export
+Lorenz_Solver

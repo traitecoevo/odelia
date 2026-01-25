@@ -12,6 +12,10 @@ namespace ode {
 template <class System>
 class Step {
 public:
+  // Extract scalar type from System using traits
+  using value_type = typename system_traits<System>::value_type;
+  using state_type = typename system_traits<System>::state_type;
+  
   void resize(size_t size_);
   size_t order() const;
   void step(System& system,
@@ -21,7 +25,8 @@ public:
 	    const state_type &dydt_in,
 	    state_type &dydt_out);
       
-  void derivs(System& system, const state_type& y, state_type& dydt, double t, int index) {
+  template <typename StateType>
+  void derivs(System& system, const StateType& y, StateType& dydt, double t, int index) {
     return ode::derivs(system, y, dydt, t, index);
   }
 
@@ -138,7 +143,7 @@ void Step<System>::step(System& system,
 
   for (size_t i = 0; i < size; ++i) {
     // GSL does this in two steps, but not sure why.
-    const double d_i = c1 * k1[i] + c3 * k3[i] + c4 * k4[i] + c6 * k6[i];
+    const value_type d_i = c1 * k1[i] + c3 * k3[i] + c4 * k4[i] + c6 * k6[i];
     y[i] += h * d_i;
   }
 
