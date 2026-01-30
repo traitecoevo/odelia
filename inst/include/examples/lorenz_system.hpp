@@ -41,6 +41,15 @@ public:
     return it;
   }
 
+  // Set parameters (allows changing sigma, R, b during optimization)
+  template <typename Iterator>
+  Iterator set_params(Iterator it) {
+    sigma = *it++;
+    R = *it++;
+    b = *it++;
+    return it;
+  }
+
   template <typename Iterator>
   Iterator ode_state(Iterator it) const {
     *it++ = y0;
@@ -57,37 +66,26 @@ public:
     return it;
   }
 
-  // Helper to extract double value from any scalar type
-  static double to_double(const T& x) {
-    // For double: return as-is
-    // For XAD: extract value
-    if constexpr (std::is_same<T, double>::value) {
-      return x;
-    } else {
-      return xad::value(x);
-    }
-  }
-
   std::vector<double> record_step() const {
     std::vector<double> ret;
     ret.reserve(7);
     
     ret.push_back(time);
-    ret.push_back(to_double(y0));
-    ret.push_back(to_double(y1));
-    ret.push_back(to_double(y2));
-    ret.push_back(to_double(dy0dt));
-    ret.push_back(to_double(dy1dt));
-    ret.push_back(to_double(dy2dt));
-  
+    ret.push_back(xad::value(y0));
+    ret.push_back(xad::value(y1));
+    ret.push_back(xad::value(y2));
+    ret.push_back(xad::value(dy0dt));
+    ret.push_back(xad::value(dy1dt));
+    ret.push_back(xad::value(dy2dt));
+    
     return ret;
   }
 
   std::vector<double> pars() const {
     std::vector<double> ret;
-    ret.push_back(to_double(sigma));
-    ret.push_back(to_double(R));
-    ret.push_back(to_double(b));
+    ret.push_back(xad::value(sigma));
+    ret.push_back(xad::value(R));
+    ret.push_back(xad::value(b));
     return ret;
   }
 
