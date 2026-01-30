@@ -13,8 +13,8 @@ template <class System>
 class Step {
 public:
   // Extract scalar type from System using traits
-  using value_type = typename system_traits<System>::value_type;
-  using state_type = typename system_traits<System>::state_type;
+  using value_type = typename System::value_type;
+  using state_type = std::vector<value_type>;
   
   void resize(size_t size_);
   size_t order() const;
@@ -25,8 +25,7 @@ public:
 	    const state_type &dydt_in,
 	    state_type &dydt_out);
       
-  template <typename StateType>
-  void derivs(System& system, const StateType& y, StateType& dydt, double t, int index) {
+  void derivs(System& system, const state_type& y, state_type& dydt, double t, int index) {
     return ode::derivs(system, y, dydt, t, index);
   }
 

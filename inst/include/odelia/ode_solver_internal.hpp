@@ -17,8 +17,8 @@ template <class System>
 class SolverInternal {
 public:
   // Extract scalar type from System using traits
-  using value_type = typename system_traits<System>::value_type;
-  using state_type = typename system_traits<System>::state_type;
+  using value_type = typename System::value_type;  
+  using state_type = std::vector<value_type>;  
   
   SolverInternal(const System &system, OdeControl control_);
   void reset(const System& system);
