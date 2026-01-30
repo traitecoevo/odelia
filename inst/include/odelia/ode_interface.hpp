@@ -7,40 +7,15 @@
 namespace odelia {
 namespace ode {
 
-// 
-// System Traits: Extract scalar type from ODE systems
-// 
-// 
-// Primary template - default for non-templated systems (backward compatibility)
-template<typename System, typename = void>
-struct system_traits {
-    using value_type = double;
-    using state_type = std::vector<value_type>;
-};
-
-// Specialization for systems that define value_type (templated systems)
-// Uses SFINAE to detect if System::value_type exists
+// Type alias for state vectors based on System's value_type
 template<typename System>
-struct system_traits<System, 
-    typename std::enable_if<
-        !std::is_same<typename System::value_type, void>::value
-    >::type> {
-    using value_type = typename System::value_type;
-    using state_type = std::vector<value_type>;
-};
+using state_type = std::vector<typename System::value_type>;
 
-// 
-// Legacy typedefs (kept for backward compatibility with existing code)
-//
-// These are utilities designed to make it more pleasant to work with
-// ode objects.  The first in-place functions work with the
-// boost::odeint interface, and the types are just to reduce typing.
-typedef std::vector<double>        state_type;
-typedef state_type::const_iterator const_iterator;
-typedef state_type::iterator       iterator;
+// Legacy typedefs for R interface (always double)
+typedef std::vector<double>::const_iterator const_iterator;
+typedef std::vector<double>::iterator       iterator;
 
-// By default, we assume that systems are time homogeneous; systems
-// that provide an `ode_time` function will be treated differently.
+// By default, we assume that systems are time homogeneous
 template <typename T>
 class needs_time {
   typedef char true_type;
@@ -51,7 +26,6 @@ public:
   enum { value = sizeof(test<T>(0)) == sizeof(true_type) };
 };
 
-// Have a special case where we want to store and reuse Patch state at each RK45 step
 template <typename System>
 class has_cache {
   typedef char true_type;
@@ -181,7 +155,7 @@ derivs(T& obj, const StateType& y, StateType& dydt,
             const double time, const int index) {
 
     if(obj.use_cached_environment) {
-      internal::set_ode_state(obj, y, index); // only works for patches
+      internal::set_ode_state(obj, y, index);
     } else {
       internal::set_ode_state(obj, y, time);
     }
@@ -189,24 +163,24 @@ derivs(T& obj, const StateType& y, StateType& dydt,
   obj.ode_rates(dydt.begin());
 }
 
+// R interface functions - always use std::vector<double>
 template <typename T>
-state_type r_derivs(T& obj, const state_type& y, const double time) {
-  state_type dydt(obj.ode_size());
+std::vector<double> r_derivs(T& obj, const std::vector<double>& y, const double time) {
+  std::vector<double> dydt(obj.ode_size());
   derivs(obj, y, dydt, time);
   return dydt;
 }
 
-// These out-of-place versions are useful for interfacing with R.
 template <typename T>
 typename std::enable_if<needs_time<T>::value, void>::type
-r_set_ode_state(T& obj, const state_type& y, double time) {
+r_set_ode_state(T& obj, const std::vector<double>& y, double time) {
   util::check_length(y.size(), obj.ode_size());
   obj.set_ode_state(y.begin(), time);
 }
 
 template <typename T>
 typename std::enable_if<!needs_time<T>::value, void>::type
-r_set_ode_state(T& obj, const state_type& y) {
+r_set_ode_state(T& obj, const std::vector<double>& y) {
   util::check_length(y.size(), obj.ode_size());
   obj.set_ode_state(y.begin());
 }
@@ -224,22 +198,22 @@ r_ode_time(const T& /* obj */) {
 }
 
 template <typename T>
-state_type r_ode_state(const T& obj) {
-  state_type values(obj.ode_size());
+std::vector<double> r_ode_state(const T& obj) {
+  std::vector<double> values(obj.ode_size());
   obj.ode_state(values.begin());
   return values;
 }
 
 template <typename T>
-state_type r_ode_rates(const T& obj) {
-  state_type dydt(obj.ode_size());
+std::vector<double> r_ode_rates(const T& obj) {
+  std::vector<double> dydt(obj.ode_size());
   obj.ode_rates(dydt.begin());
   return dydt;
 }
 
 template <typename T>
-state_type r_ode_aux(const T& obj) {
-  state_type dydt(obj.aux_size());
+std::vector<double> r_ode_aux(const T& obj) {
+  std::vector<double> dydt(obj.aux_size());
   obj.ode_aux(dydt.begin());
   return dydt;
 }
