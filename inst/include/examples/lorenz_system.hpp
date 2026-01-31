@@ -10,7 +10,7 @@ using namespace odelia;
 template <typename T = double>
 class LorenzSystem {
 public:
-  using value_type = T;  // Expose scalar type for traits
+  using value_type = T; 
   
   LorenzSystem(T sigma_, T R_, T b_)
     : sigma(sigma_), R(R_), b(b_),
@@ -24,7 +24,6 @@ public:
 
   double ode_time() const { return time; }
 
-  // Iterator methods remain templated on iterator type
   template <typename Iterator>
   Iterator set_ode_state(Iterator it, double time_) {
     time = time_;
@@ -33,21 +32,51 @@ public:
     y1 = *it++;
     y2 = *it++;
     
-    // Lorenz equations - work with T automatically
-    dy0dt = sigma * (y1 - y0);
-    dy1dt = R * y0 - y1 - y0 * y2;
-    dy2dt = -b * y2 + y0 * y1;
-    
+    compute_rates();
     return it;
   }
 
-  // Set parameters (allows changing sigma, R, b during optimization)
+  // Registers inputs, returns pointers for AD gradient computation
+  template <typename Tape, typename Iterator>
+  std::vector<T*> set_ode_state(Tape& tape, Iterator it, double time_) {
+    time = time_;
+    
+    y0 = *it++;
+    y1 = *it++;
+    y2 = *it++;
+    
+    compute_rates();
+    
+    tape.registerInput(y0);
+    tape.registerInput(y1);
+    tape.registerInput(y2);
+    return {&y0, &y1, &y2};
+  }
+
+  void compute_rates() {
+    dy0dt = sigma * (y1 - y0);
+    dy1dt = R * y0 - y1 - y0 * y2;
+    dy2dt = -b * y2 + y0 * y1;
+  }
+
   template <typename Iterator>
   Iterator set_params(Iterator it) {
     sigma = *it++;
     R = *it++;
     b = *it++;
     return it;
+  }
+
+  // Registers inputs, returns pointers for AD gradient computation
+  template <typename Tape, typename Iterator>
+  std::vector<T*> set_params(Tape& tape, Iterator it) {
+    sigma = *it++;
+    R = *it++;
+    b = *it++;
+    tape.registerInput(sigma);
+    tape.registerInput(R);
+    tape.registerInput(b);
+    return {&sigma, &R, &b};
   }
 
   template <typename Iterator>
@@ -94,10 +123,10 @@ public:
 private:
   static const int ode_dimension = 3;
 
-  double time;  // Time always stays double
-  T sigma, R, b;  // Parameters can be AD types
-  T y0, y1, y2;  // State can be AD types
-  T dy0dt, dy1dt, dy2dt;  // Rates can be AD types
+  double time; 
+  T sigma, R, b; 
+  T y0, y1, y2; 
+  T dy0dt, dy1dt, dy2dt; 
 };
 
 #endif
