@@ -14,15 +14,18 @@ public:
   
   LorenzSystem(T sigma_, T R_, T b_)
     : sigma(sigma_), R(R_), b(b_),
-      y0(1.0), y1(1.0), y2(1.0),
-      dy0dt(0.0), dy1dt(0.0), dy2dt(0.0),
-      time(0.0) {
+      y0_init(1.0), y1_init(1.0), y2_init(1.0),
+      t0(0.0),
+      dy0dt(0.0), dy1dt(0.0), dy2dt(0.0) {
+    reset();  // initialises state & time
   }
 
   // ODE interface
   size_t ode_size() const { return ode_dimension; }
 
   double ode_time() const { return time; }
+
+  double ode_t0() const { return t0; }
 
   template <typename Iterator>
   Iterator set_ode_state(Iterator it, double time_) {
@@ -36,27 +39,34 @@ public:
     return it;
   }
 
-  // Registers inputs, returns pointers for AD gradient computation
-  template <typename Tape, typename Iterator>
-  std::vector<T*> set_ode_state(Tape& tape, Iterator it, double time_) {
-    time = time_;
-    
-    y0 = *it++;
-    y1 = *it++;
-    y2 = *it++;
-    
-    compute_rates();
-    
-    tape.registerInput(y0);
-    tape.registerInput(y1);
-    tape.registerInput(y2);
-    return {&y0, &y1, &y2};
-  }
-
   void compute_rates() {
     dy0dt = sigma * (y1 - y0);
     dy1dt = R * y0 - y1 - y0 * y2;
     dy2dt = -b * y2 + y0 * y1;
+  }
+
+  template <typename Iterator>
+  Iterator set_initial_state(Iterator it, double t0_ = 0.0) {
+    t0 = t0_;
+    y0_init = *it++;
+    y1_init = *it++;
+    y2_init = *it++;
+    return it;
+  }
+
+  // Registers initial state on tape for AD gradient computation
+  template <typename Tape, typename Iterator>
+  std::vector<T*> set_initial_state(Tape& tape, Iterator it, double t0_) {
+    t0 = t0_;
+    y0_init = *it++;
+    y1_init = *it++;
+    y2_init = *it++;
+    
+    tape.registerInput(y0_init);
+    tape.registerInput(y1_init);
+    tape.registerInput(y2_init);
+    
+    return {&y0_init, &y1_init, &y2_init};
   }
 
   template <typename Iterator>
@@ -84,6 +94,14 @@ public:
     *it++ = y0;
     *it++ = y1;
     *it++ = y2;
+    return it;
+  }
+
+  template <typename Iterator>
+  Iterator ode_initial_state(Iterator it) const {
+    *it++ = y0_init;
+    *it++ = y1_init;
+    *it++ = y2_init;
     return it;
   }
 
@@ -118,15 +136,25 @@ public:
     return ret;
   }
 
-  void reset() {}
+  void reset() {
+    y0 = y0_init;
+    y1 = y1_init;
+    y2 = y2_init;
+    time = t0;
+    compute_rates();
+  }
 
 private:
   static const int ode_dimension = 3;
 
-  double time; 
+  T y0_init, y1_init, y2_init;
+  double t0; 
+
   T sigma, R, b; 
   T y0, y1, y2; 
-  T dy0dt, dy1dt, dy2dt; 
+  T dy0dt, dy1dt, dy2dt;
+
+  double time;   
 };
 
 #endif

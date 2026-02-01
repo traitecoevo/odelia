@@ -54,12 +54,10 @@ std::pair<double, std::vector<double>> compute_gradient(
     
     // Set initial conditions and register
     if (ic) {
-        auto refs = system.set_ode_state(tape, ic->begin(), solver.fit_times()[0]);
+        auto refs = system.set_initial_state(tape, ic->begin(), solver.fit_times()[0]);
         inputs.insert(inputs.end(), refs.begin(), refs.end());
-    } else {
-        system.compute_rates();
-    }
     
+    }
     solver.reset();
     
     tape.newRecording();
