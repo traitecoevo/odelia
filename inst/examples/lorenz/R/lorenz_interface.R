@@ -102,6 +102,12 @@ LorenzSystem <- R6::R6Class(
       System_pars(self$ptr)
     },
     
+    set_params = function(params) {
+      System_set_params(self$ptr, params)
+      invisible(self)
+    }
+    
+    ,
     set_state = function(y, time = 0.0) {
       System_set_state(self$ptr, y, time)
       invisible(self)
@@ -113,6 +119,17 @@ LorenzSystem <- R6::R6Class(
     
     rates = function() {
       System_rates(self$ptr)
+    }
+    ,
+    
+    set_initial_state = function(y, t0 = 0.0) {
+      System_set_initial_state(self$ptr, y, t0)
+      invisible(self)
+    },
+
+    reset = function() {
+      System_reset(self$ptr)
+      invisible(self)
     }
   )
 )
