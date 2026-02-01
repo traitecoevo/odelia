@@ -1,5 +1,6 @@
+// [[Rcpp::depends(odelia)]]
 #include <Rcpp.h>
-#include <odelia/examples/parabola_system.hpp>
+#include "parabola_system.hpp"
 
 // [[Rcpp::export]]
 Rcpp::List parabola_eval(Rcpp::NumericVector params) {

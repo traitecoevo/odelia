@@ -5,7 +5,19 @@
 
 library(tidyverse)
 
-devtools::load_all(".", quiet = TRUE)
+# devtools::load_all(".", quiet = TRUE)
+library(odelia)
+
+# Link against the installed odelia library
+so_name <- paste0("odelia", .Platform$dynlib.ext)
+lib_path <- system.file("libs", package = "odelia")
+lib_file <- list.files(lib_path, pattern = so_name, recursive = TRUE, full.names = TRUE)[1]
+# lib_dir <- dirname(lib_file)
+
+# Use full path to .so because it might not be named libodelia.so
+Sys.setenv(PKG_LIBS = paste0(lib_file, " -Wl,-rpath,", dirname(lib_file)))
+
+Rcpp::sourceCpp("inst/examples/parabola/src/parabola_interface.cpp", verbose = TRUE)
 
 cat("XAD Automatic Differentiation Demo\n\n")
 
@@ -60,7 +72,7 @@ p <- ggplot() +
     theme_minimal(base_size = 12) +
     theme(plot.title = element_text(face = "bold"), legend.position = "right")
 
-output_file <- "examples/parabola/gradient_ascent.png"
+output_file <- "inst/examples/parabola/gradient_ascent.png"
 ggsave(output_file, p, width = 8, height = 6, dpi = 150)
 
 cat("\n✓ Plot saved to:", output_file, "\n")
