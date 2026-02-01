@@ -50,16 +50,15 @@ SEXP Solver_new(SEXP system_xp, SEXP control_xp, bool active = false) {
   Rcpp::XPtr<ode::OdeControl> ctrl(control_xp);
   
   if (active) {
-    // Create AD solver with state copied from passive system
+    // Initialise new AD compatible system
     auto params = sys->pars();
     
-    // Extract state from passive system
-    std::vector<double> state(sys->ode_size());
-    sys->ode_state(state.begin());
-    auto time = sys->ode_time();
+    std::vector<double> initial_state(sys->ode_size());
+    sys->ode_initial_state(initial_state.begin());
+    auto t0 = sys->ode_t0();
     
     auto* sys_active = new ActiveSystemType(params[0], params[1], params[2]);
-    sys_active->set_ode_state(state.begin(), time);
+    sys_active->set_initial_state(initial_state.begin(), t0);
     
     auto* solver = new ode::Solver<ActiveSystemType>(*sys_active, *ctrl);
     
@@ -268,6 +267,14 @@ Rcpp::NumericVector System_pars(SEXP system_xp) {
 }
 
 // [[Rcpp::export]]
+void System_set_params(SEXP system_xp, Rcpp::NumericVector params) {
+  auto lor = get_system(system_xp);
+  std::vector<double> tmp(params.begin(), params.end());
+  lor->set_params(tmp.begin());
+  lor->compute_rates();
+}
+
+// [[Rcpp::export]]
 void System_set_state(SEXP system_xp, Rcpp::NumericVector y, double time) {
   auto lor = get_system(system_xp);
   if (y.size() != lor->ode_size()) {
@@ -283,6 +290,23 @@ Rcpp::NumericVector System_state(SEXP system_xp) {
   std::vector<double> tmp(lor->ode_size());
   lor->ode_state(tmp.begin());
   return Rcpp::wrap(tmp);
+}
+
+// [[Rcpp::export]]
+void System_set_initial_state(SEXP system_xp, Rcpp::NumericVector y, double t0 = 0.0) {
+  auto lor = get_system(system_xp);
+  if (y.size() != lor->ode_size()) {
+    Rcpp::stop("State vector size mismatch");
+  }
+  std::vector<double> tmp(y.begin(), y.end());
+  lor->set_initial_state(tmp.begin(), t0);
+}
+
+
+// [[Rcpp::export]]
+void System_reset(SEXP system_xp) {
+  auto lor = get_system(system_xp);
+  lor->reset();
 }
 
 // [[Rcpp::export]]

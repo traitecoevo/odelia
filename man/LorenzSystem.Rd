@@ -11,9 +11,12 @@ R6 wrapper for Lorenz system
 \itemize{
 \item \href{#method-LorenzSystem-new}{\code{LorenzSystem$new()}}
 \item \href{#method-LorenzSystem-pars}{\code{LorenzSystem$pars()}}
+\item \href{#method-LorenzSystem-set_params}{\code{LorenzSystem$set_params()}}
 \item \href{#method-LorenzSystem-set_state}{\code{LorenzSystem$set_state()}}
 \item \href{#method-LorenzSystem-state}{\code{LorenzSystem$state()}}
 \item \href{#method-LorenzSystem-rates}{\code{LorenzSystem$rates()}}
+\item \href{#method-LorenzSystem-set_initial_state}{\code{LorenzSystem$set_initial_state()}}
+\item \href{#method-LorenzSystem-reset}{\code{LorenzSystem$reset()}}
 \item \href{#method-LorenzSystem-clone}{\code{LorenzSystem$clone()}}
 }
 }
@@ -32,6 +35,15 @@ R6 wrapper for Lorenz system
 \subsection{Method \code{pars()}}{
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{LorenzSystem$pars()}\if{html}{\out{</div>}}
+}
+
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-LorenzSystem-set_params"></a>}}
+\if{latex}{\out{\hypertarget{method-LorenzSystem-set_params}{}}}
+\subsection{Method \code{set_params()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{LorenzSystem$set_params(params)}\if{html}{\out{</div>}}
 }
 
 }
@@ -59,6 +71,24 @@ R6 wrapper for Lorenz system
 \subsection{Method \code{rates()}}{
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{LorenzSystem$rates()}\if{html}{\out{</div>}}
+}
+
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-LorenzSystem-set_initial_state"></a>}}
+\if{latex}{\out{\hypertarget{method-LorenzSystem-set_initial_state}{}}}
+\subsection{Method \code{set_initial_state()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{LorenzSystem$set_initial_state(y, t0 = 0)}\if{html}{\out{</div>}}
+}
+
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-LorenzSystem-reset"></a>}}
+\if{latex}{\out{\hypertarget{method-LorenzSystem-reset}{}}}
+\subsection{Method \code{reset()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{LorenzSystem$reset()}\if{html}{\out{</div>}}
 }
 
 }
