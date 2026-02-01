@@ -5,7 +5,7 @@ all: Rcpp compile
 
 # compiles C++
 compile:
-	Rscript -e "devtools::load_all()"
+	Rscript -e 'pkgbuild::compile_dll(compile_attributes = FALSE, debug=FALSE)'
 
 # generates Rcpp exports
 Rcpp:
