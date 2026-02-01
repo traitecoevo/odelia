@@ -19,3 +19,4 @@ Meta
 # Rcpp auto-generated
 src/RcppExports.cpp
 R/RcppExports.R
+*.tar.gz
