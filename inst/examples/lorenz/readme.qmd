@@ -20,6 +20,12 @@ library(ggplot2)
 setwd(here::here("inst/examples/lorenz"))
 source("R/lorenz_interface.R")
 
+# Link against odelia package
+so_name <- paste0("odelia", .Platform$dynlib.ext)
+lib_path <- system.file("libs", package = "odelia")
+lib_file <- list.files(lib_path, pattern = so_name, recursive = TRUE, full.names = TRUE)[1]
+Sys.setenv(PKG_LIBS = paste0(lib_file, " -Wl,-rpath,", dirname(lib_file)))
+
 Rcpp::sourceCpp("src/lorenz_interface.cpp",
   verbose = TRUE, rebuild = TRUE
 )

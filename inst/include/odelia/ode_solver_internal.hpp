@@ -16,6 +16,10 @@ namespace ode {
 template <class System>
 class SolverInternal {
 public:
+  // Extract scalar type from System using traits
+  using value_type = typename System::value_type;  
+  using state_type = std::vector<value_type>;  
+  
   SolverInternal(const System &system, OdeControl control_);
   void reset(const System& system);
   void set_state_from_system(const System& system);
