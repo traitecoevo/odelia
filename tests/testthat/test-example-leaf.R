@@ -32,7 +32,7 @@ testthat::test_that("leaf thermal example runs", {
     lz <- LeafThermalSystem$new(pars, drivers)
     lz$set_state(c(25), 0)   
     ctrl <- OdeControl$new()
-    runner <- LeafThermalSolver$new(lz$ptr, ctrl$ptr)
+    runner <- LeafThermalSolver$new(lz$ptr, ctrl$ptr, drivers$ptr)
     times <- seq(0, 48, by = 0.5)
     runner$advance_adaptive(times)
     out <- runner$history() |>

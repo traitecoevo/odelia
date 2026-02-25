@@ -23,6 +23,7 @@ These functions are intended only as interface and are called via a correspondin
 #include <odelia/ode_solver.hpp>
 #include <odelia/ode_fit.hpp>
 #include <examples/lorenz_system.hpp>
+#include <odelia/drivers.hpp>
 
 using namespace Rcpp;
 using namespace odelia;
@@ -465,4 +466,65 @@ Rcpp::List test_param_types(SEXP system_xp) {
     Rcpp::Named("gradient_test") = gradient,
     Rcpp::Named("gradient_should_be") = 2.0
   );
+}
+
+// Rcpp interface for Drivers class
+
+inline Rcpp::XPtr<drivers::Drivers> get_Drivers(SEXP xp) {
+  return Rcpp::XPtr<drivers::Drivers>(xp);
+}
+
+// [[Rcpp::export]]
+SEXP Drivers_new() {
+  Rcpp::XPtr<drivers::Drivers> ptr(new drivers::Drivers(), true);
+  return ptr;
+}
+
+// [[Rcpp::export]]
+void Drivers_set_constant(SEXP drivers_xp, std::string driver_name, double k) {
+  auto drv = get_Drivers(drivers_xp);
+  drv->set_constant(driver_name, k);
+}
+
+// [[Rcpp::export]]
+void Drivers_set_variable(SEXP drivers_xp, std::string driver_name,
+                          Rcpp::NumericVector x, Rcpp::NumericVector y) {
+  auto drv = get_Drivers(drivers_xp);
+  std::vector<double> x_vec(x.begin(), x.end());
+  std::vector<double> y_vec(y.begin(), y.end());
+  drv->set_variable(driver_name, x_vec, y_vec);
+}
+
+// [[Rcpp::export]]
+void Drivers_set_extrapolate(SEXP drivers_xp, std::string driver_name, bool extrapolate) {
+  auto drv = get_Drivers(drivers_xp);
+  drv->set_extrapolate(driver_name, extrapolate);
+}
+
+// [[Rcpp::export]]
+double Drivers_evaluate(SEXP drivers_xp, std::string driver_name, double x) {
+  auto drv = get_Drivers(drivers_xp);
+  return drv->evaluate(driver_name, x);
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericVector Drivers_evaluate_range(SEXP drivers_xp, std::string driver_name,
+                                           Rcpp::NumericVector x) {
+  auto drv = get_Drivers(drivers_xp);
+  std::vector<double> x_vec(x.begin(), x.end());
+  std::vector<double> result = drv->evaluate_range(driver_name, x_vec);
+  return Rcpp::wrap(result);
+}
+
+// [[Rcpp::export]]
+Rcpp::CharacterVector Drivers_get_names(SEXP drivers_xp) {
+  auto drv = get_Drivers(drivers_xp);
+  std::vector<std::string> names = drv->get_names();
+  return Rcpp::wrap(names);
+}
+
+// [[Rcpp::export]]
+void Drivers_clear(SEXP drivers_xp) {
+  auto drv = get_Drivers(drivers_xp);
+  drv->clear();
 }
