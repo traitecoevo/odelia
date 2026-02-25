@@ -131,14 +131,14 @@ public:
 
   // Fit configuration methods
   void set_target(const std::vector<double>& times, 
-                 const std::vector<std::vector<double>>& targets,
-                 const std::vector<size_t>& obs_indices) {
-    fit_times_ = times;
-    targets_ = targets;
-    obs_indices_ = obs_indices;
-  }
+                  const std::vector<std::vector<double>>& targets,
+                  const std::vector<size_t>& obs_indices) {
+      fit_times_ = times;
+      targets_ = targets;
+      obs_indices_ = obs_indices;
+    }
   // Advance solver and return states only at observation times
-  std::vector<std::vector<typename System::value_type>> advance_target() {
+std::vector<std::vector<typename System::value_type>> advance_target() {
     // Check that target has been set
     if (fit_times_.empty()) {
       util::stop("Must call set_target() before advance_target()");
@@ -162,9 +162,9 @@ public:
       obs_idx++;
     }
     
-    // Step through times
-    for (size_t i = 1; i < fit_times_.size(); ++i) {
-      solver.step_to(system, fit_times_[i]);
+      // Step through times
+      for (size_t i = 1; i < fit_times_.size(); ++i) {
+        solver.step_to(system, fit_times_[i]);
       
       // Check if this time index is an observation point
       while (obs_idx < obs_indices_.size() && obs_indices_[obs_idx] == i) {
@@ -181,9 +181,9 @@ public:
 
   // Should we record history at every step?
   // TODO: should this be part of ode_solver?
-  std::vector<System> history;
+std::vector<System> history;
 
-private:
+private:  
   bool collect;
   System system;
   SolverInternal<System> solver;

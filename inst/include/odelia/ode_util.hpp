@@ -24,11 +24,11 @@ inline std::vector<index> index_vector(const std::vector<size_t> x) {
   return ret;
 }
 
-bool is_finite(double x) {
+inline bool is_finite(double x) {
   return R_FINITE(x);
 }
 
-void check_length(size_t received, size_t expected)
+inline void check_length(size_t received, size_t expected)
 {
   if (expected != received)
   {
@@ -116,9 +116,9 @@ bool is_decreasing(ForwardIterator first, ForwardIterator last) {
   return true;
 }
 
-void stop(const std::string &msg) { Rcpp::stop(msg); }
+inline void stop(const std::string &msg) { Rcpp::stop(msg); }
 
-void warning(const std::string &msg) { Rcpp::warning(msg); }
+inline void warning(const std::string &msg) { Rcpp::warning(msg); }
 
 template<typename T>
 std::string to_string(T x) {
