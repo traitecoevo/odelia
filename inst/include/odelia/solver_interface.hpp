@@ -1,104 +1,19 @@
-/* Generic ODE interface for odelia package
+/* Generic Solver interface templates for odelia package
  * 
- * This file provides generic functions that can be used with any ODE system.
- * It includes:
- * - Drivers: External forcing data (constant or time-varying)
- * - OdeControl: Solver settings and tolerances
- * - Generic Solver functions: Templated implementations that work with any System type
+ * This header provides templated implementations of generic Solver functions
+ * that work with any System type. System-specific interfaces include this
+ * header and instantiate the templates with their specific types.
  * 
- * These functions are system-agnostic and can be used by any model
- * (Lorenz, Leaf Thermal, ATLAS, etc.)
- * 
- * System-specific interfaces (lorenz_interface.cpp, leaf_thermal_interface.cpp)
- * call these templated functions with their specific System types.
+ * These templates are defined inline in the header to avoid linking issues.
  */
+
+#ifndef ODELIA_SOLVER_INTERFACE_HPP_
+#define ODELIA_SOLVER_INTERFACE_HPP_
 
 #include <Rcpp.h>
 #include <XAD/XAD.hpp>
-#include <odelia/drivers.hpp>
-#include <odelia/ode_control.hpp>
 #include <odelia/ode_solver.hpp>
 #include <odelia/ode_fit.hpp>
-
-using namespace Rcpp;
-using namespace odelia;
-
-//-------------------------------------------------------------------------
-// OdeControl interface
-
-// [[Rcpp::export]]
-SEXP OdeControl_new() {
-  return Rcpp::XPtr<ode::OdeControl>(new ode::OdeControl(), true);
-}
-
-//-------------------------------------------------------------------------
-// Drivers interface
-
-// Helper to get Drivers pointer
-inline Rcpp::XPtr<drivers::Drivers> get_Drivers(SEXP xp) {
-  return Rcpp::XPtr<drivers::Drivers>(xp);
-}
-
-// [[Rcpp::export]]
-SEXP Drivers_new() {
-  Rcpp::XPtr<drivers::Drivers> ptr(new drivers::Drivers(), true);
-  return ptr;
-}
-
-// [[Rcpp::export]]
-void Drivers_set_constant(SEXP drivers_xp, std::string driver_name, double k) {
-  auto drv = get_Drivers(drivers_xp);
-  drv->set_constant(driver_name, k);
-}
-
-// [[Rcpp::export]]
-void Drivers_set_variable(SEXP drivers_xp, std::string driver_name,
-                          Rcpp::NumericVector x, Rcpp::NumericVector y) {
-  auto drv = get_Drivers(drivers_xp);
-  std::vector<double> x_vec(x.begin(), x.end());
-  std::vector<double> y_vec(y.begin(), y.end());
-  drv->set_variable(driver_name, x_vec, y_vec);
-}
-
-// [[Rcpp::export]]
-void Drivers_set_extrapolate(SEXP drivers_xp, std::string driver_name, bool extrapolate) {
-  auto drv = get_Drivers(drivers_xp);
-  drv->set_extrapolate(driver_name, extrapolate);
-}
-
-// [[Rcpp::export]]
-double Drivers_evaluate(SEXP drivers_xp, std::string driver_name, double x) {
-  auto drv = get_Drivers(drivers_xp);
-  return drv->evaluate(driver_name, x);
-}
-
-// [[Rcpp::export]]
-Rcpp::NumericVector Drivers_evaluate_range(SEXP drivers_xp, std::string driver_name,
-                                           Rcpp::NumericVector x) {
-  auto drv = get_Drivers(drivers_xp);
-  std::vector<double> x_vec(x.begin(), x.end());
-  std::vector<double> result = drv->evaluate_range(driver_name, x_vec);
-  return Rcpp::wrap(result);
-}
-
-// [[Rcpp::export]]
-Rcpp::CharacterVector Drivers_get_names(SEXP drivers_xp) {
-  auto drv = get_Drivers(drivers_xp);
-  std::vector<std::string> names = drv->get_names();
-  return Rcpp::wrap(names);
-}
-
-// [[Rcpp::export]]
-void Drivers_clear(SEXP drivers_xp) {
-  auto drv = get_Drivers(drivers_xp);
-  drv->clear();
-}
-
-//-------------------------------------------------------------------------
-// Generic Solver interface (templated implementations)
-//
-// These functions work with any System type. System-specific interfaces
-// call these with their specific types (e.g., LorenzSystem, LeafThermalSystem)
 
 namespace odelia {
 namespace solver {
@@ -111,7 +26,7 @@ inline Rcpp::XPtr<ode::Solver<T>> get_solver(SEXP xp) {
 
 // Generic Solver_reset
 template<typename SystemType, typename ActiveSystemType>
-void Solver_reset_impl(SEXP solver_xp, bool active) {
+inline void Solver_reset_impl(SEXP solver_xp, bool active) {
   if (active) {
     get_solver<ActiveSystemType>(solver_xp)->reset();
   } else {
@@ -121,7 +36,7 @@ void Solver_reset_impl(SEXP solver_xp, bool active) {
 
 // Generic Solver_time
 template<typename SystemType, typename ActiveSystemType>
-double Solver_time_impl(SEXP solver_xp, bool active) {
+inline double Solver_time_impl(SEXP solver_xp, bool active) {
   if (active) {
     return get_solver<ActiveSystemType>(solver_xp)->time();
   } else {
@@ -131,7 +46,7 @@ double Solver_time_impl(SEXP solver_xp, bool active) {
 
 // Generic Solver_state
 template<typename SystemType, typename ActiveSystemType>
-Rcpp::NumericVector Solver_state_impl(SEXP solver_xp, bool active) {
+inline Rcpp::NumericVector Solver_state_impl(SEXP solver_xp, bool active) {
   if (active) {
     auto state = get_solver<ActiveSystemType>(solver_xp)->state();
     std::vector<double> result(state.size());
@@ -147,7 +62,7 @@ Rcpp::NumericVector Solver_state_impl(SEXP solver_xp, bool active) {
 
 // Generic Solver_times
 template<typename SystemType, typename ActiveSystemType>
-Rcpp::NumericVector Solver_times_impl(SEXP solver_xp, bool active) {
+inline Rcpp::NumericVector Solver_times_impl(SEXP solver_xp, bool active) {
   if (active) {
     return Rcpp::wrap(get_solver<ActiveSystemType>(solver_xp)->times());
   } else {
@@ -157,7 +72,7 @@ Rcpp::NumericVector Solver_times_impl(SEXP solver_xp, bool active) {
 
 // Generic Solver_set_state
 template<typename SystemType, typename ActiveSystemType>
-void Solver_set_state_impl(SEXP solver_xp, Rcpp::NumericVector y, double time, bool active) {
+inline void Solver_set_state_impl(SEXP solver_xp, Rcpp::NumericVector y, double time, bool active) {
   std::vector<double> yy(y.begin(), y.end());
   if (active) {
     get_solver<ActiveSystemType>(solver_xp)->set_state(yy, time);
@@ -168,7 +83,7 @@ void Solver_set_state_impl(SEXP solver_xp, Rcpp::NumericVector y, double time, b
 
 // Generic Solver_advance_adaptive
 template<typename SystemType, typename ActiveSystemType>
-void Solver_advance_adaptive_impl(SEXP solver_xp, Rcpp::NumericVector times, bool active) {
+inline void Solver_advance_adaptive_impl(SEXP solver_xp, Rcpp::NumericVector times, bool active) {
   if (active) {
     Rcpp::stop("advance_adaptive() not supported for AD solvers. Use advance_fixed() with pre-computed schedule.");
   }
@@ -178,7 +93,7 @@ void Solver_advance_adaptive_impl(SEXP solver_xp, Rcpp::NumericVector times, boo
 
 // Generic Solver_advance_fixed
 template<typename SystemType, typename ActiveSystemType>
-void Solver_advance_fixed_impl(SEXP solver_xp, Rcpp::NumericVector times, bool active) {
+inline void Solver_advance_fixed_impl(SEXP solver_xp, Rcpp::NumericVector times, bool active) {
   std::vector<double> ts(times.begin(), times.end());
   if (active) {
     get_solver<ActiveSystemType>(solver_xp)->advance_fixed(ts);
@@ -189,7 +104,7 @@ void Solver_advance_fixed_impl(SEXP solver_xp, Rcpp::NumericVector times, bool a
 
 // Generic Solver_step
 template<typename SystemType, typename ActiveSystemType>
-void Solver_step_impl(SEXP solver_xp, bool active) {
+inline void Solver_step_impl(SEXP solver_xp, bool active) {
   if (active) {
     Rcpp::stop("step() not supported for AD solvers. Use advance_fixed() instead.");
   }
@@ -198,7 +113,7 @@ void Solver_step_impl(SEXP solver_xp, bool active) {
 
 // Generic Solver_get_collect
 template<typename SystemType, typename ActiveSystemType>
-bool Solver_get_collect_impl(SEXP solver_xp, bool active) {
+inline bool Solver_get_collect_impl(SEXP solver_xp, bool active) {
   if (active) {
     return get_solver<ActiveSystemType>(solver_xp)->get_collect();
   } else {
@@ -208,7 +123,7 @@ bool Solver_get_collect_impl(SEXP solver_xp, bool active) {
 
 // Generic Solver_set_collect
 template<typename SystemType, typename ActiveSystemType>
-void Solver_set_collect_impl(SEXP solver_xp, bool x, bool active) {
+inline void Solver_set_collect_impl(SEXP solver_xp, bool x, bool active) {
   if (active) {
     get_solver<ActiveSystemType>(solver_xp)->set_collect(x);
   } else {
@@ -218,7 +133,7 @@ void Solver_set_collect_impl(SEXP solver_xp, bool x, bool active) {
 
 // Generic Solver_get_history_size
 template<typename SystemType, typename ActiveSystemType>
-std::size_t Solver_get_history_size_impl(SEXP solver_xp, bool active) {
+inline std::size_t Solver_get_history_size_impl(SEXP solver_xp, bool active) {
   if (active) {
     return get_solver<ActiveSystemType>(solver_xp)->get_history_size();
   } else {
@@ -228,8 +143,8 @@ std::size_t Solver_get_history_size_impl(SEXP solver_xp, bool active) {
 
 // Generic Solver_get_history_step
 template<typename SystemType, typename ActiveSystemType>
-Rcpp::DataFrame Solver_get_history_step_impl(SEXP solver_xp, std::size_t i, 
-                                              CharacterVector names, bool active) {
+inline Rcpp::DataFrame Solver_get_history_step_impl(SEXP solver_xp, std::size_t i, 
+                                                     Rcpp::CharacterVector names, bool active) {
   std::vector<double> out;
   
   if (active) {
@@ -257,7 +172,7 @@ Rcpp::DataFrame Solver_get_history_step_impl(SEXP solver_xp, std::size_t i,
 
 // Generic Solver_get_history
 template<typename SystemType, typename ActiveSystemType>
-Rcpp::List Solver_get_history_impl(SEXP solver_xp, CharacterVector names, bool active) {
+inline Rcpp::List Solver_get_history_impl(SEXP solver_xp, Rcpp::CharacterVector names, bool active) {
   int nrows;
   std::vector<std::vector<double>> cols;
   int ncols = names.size();
@@ -290,20 +205,20 @@ Rcpp::List Solver_get_history_impl(SEXP solver_xp, CharacterVector names, bool a
   
   Rcpp::List out(ncols);
   for (size_t j = 0; j < ncols; ++j) {
-    out[j] = NumericVector(cols[j].begin(), cols[j].end());
+    out[j] = Rcpp::NumericVector(cols[j].begin(), cols[j].end());
   }
   out.attr("names") = names;
   
-  return DataFrame(out);
+  return Rcpp::DataFrame(out);
 }
 
 // Generic Solver_set_target
 template<typename SystemType, typename ActiveSystemType>
-void Solver_set_target_impl(SEXP solver_xp, 
-                            Rcpp::NumericVector times,
-                            Rcpp::NumericMatrix target,
-                            Rcpp::IntegerVector obs_indices,
-                            bool active) {
+inline void Solver_set_target_impl(SEXP solver_xp, 
+                                   Rcpp::NumericVector times,
+                                   Rcpp::NumericMatrix target,
+                                   Rcpp::IntegerVector obs_indices,
+                                   bool active) {
   // Convert times
   std::vector<double> times_vec(times.begin(), times.end());
   
@@ -332,9 +247,9 @@ void Solver_set_target_impl(SEXP solver_xp,
 
 // Generic Solver_fit
 template<typename SystemType, typename ActiveSystemType>
-Rcpp::List Solver_fit_impl(SEXP solver_xp,
-                           Rcpp::Nullable<Rcpp::NumericVector> ic,
-                           Rcpp::Nullable<Rcpp::NumericVector> params) {
+inline Rcpp::List Solver_fit_impl(SEXP solver_xp,
+                                  Rcpp::Nullable<Rcpp::NumericVector> ic,
+                                  Rcpp::Nullable<Rcpp::NumericVector> params) {
   // At least one must be provided
   if (ic.isNull() && params.isNull()) {
     Rcpp::stop("Must provide at least one of 'ic' or 'params'");
@@ -371,3 +286,5 @@ Rcpp::List Solver_fit_impl(SEXP solver_xp,
 
 } // namespace solver
 } // namespace odelia
+
+#endif // ODELIA_SOLVER_INTERFACE_HPP_
