@@ -6,6 +6,13 @@
 \description{
 R6 wrapper for Lorenz system
 }
+\section{Public fields}{
+\if{html}{\out{<div class="r6-fields">}}
+\describe{
+\item{\code{ptr}}{External pointer to the underlying C++ Lorenz system object.}
+}
+\if{html}{\out{</div>}}
+}
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
@@ -24,15 +31,28 @@ R6 wrapper for Lorenz system
 \if{html}{\out{<a id="method-LorenzSystem-new"></a>}}
 \if{latex}{\out{\hypertarget{method-LorenzSystem-new}{}}}
 \subsection{Method \code{new()}}{
+Initialize a Lorenz system object.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{LorenzSystem$new(sigma, R, b)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{sigma}}{Lorenz parameter sigma.}
+
+\item{\code{R}}{Lorenz parameter R.}
+
+\item{\code{b}}{Lorenz parameter b.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-LorenzSystem-pars"></a>}}
 \if{latex}{\out{\hypertarget{method-LorenzSystem-pars}{}}}
 \subsection{Method \code{pars()}}{
+Return current system parameters.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{LorenzSystem$pars()}\if{html}{\out{</div>}}
 }
@@ -42,24 +62,43 @@ R6 wrapper for Lorenz system
 \if{html}{\out{<a id="method-LorenzSystem-set_params"></a>}}
 \if{latex}{\out{\hypertarget{method-LorenzSystem-set_params}{}}}
 \subsection{Method \code{set_params()}}{
+Set model parameters.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{LorenzSystem$set_params(params)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{params}}{Numeric vector of system parameters.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-LorenzSystem-set_state"></a>}}
 \if{latex}{\out{\hypertarget{method-LorenzSystem-set_state}{}}}
 \subsection{Method \code{set_state()}}{
+Set system state and time.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{LorenzSystem$set_state(y, time = 0)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{y}}{Numeric state vector.}
+
+\item{\code{time}}{Scalar time value.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-LorenzSystem-state"></a>}}
 \if{latex}{\out{\hypertarget{method-LorenzSystem-state}{}}}
 \subsection{Method \code{state()}}{
+Return current state.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{LorenzSystem$state()}\if{html}{\out{</div>}}
 }
@@ -69,6 +108,7 @@ R6 wrapper for Lorenz system
 \if{html}{\out{<a id="method-LorenzSystem-rates"></a>}}
 \if{latex}{\out{\hypertarget{method-LorenzSystem-rates}{}}}
 \subsection{Method \code{rates()}}{
+Return current rates.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{LorenzSystem$rates()}\if{html}{\out{</div>}}
 }
@@ -78,15 +118,26 @@ R6 wrapper for Lorenz system
 \if{html}{\out{<a id="method-LorenzSystem-set_initial_state"></a>}}
 \if{latex}{\out{\hypertarget{method-LorenzSystem-set_initial_state}{}}}
 \subsection{Method \code{set_initial_state()}}{
+Set initial state and initial time.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{LorenzSystem$set_initial_state(y, t0 = 0)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{y}}{Numeric state vector.}
+
+\item{\code{t0}}{Initial time value.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-LorenzSystem-reset"></a>}}
 \if{latex}{\out{\hypertarget{method-LorenzSystem-reset}{}}}
 \subsection{Method \code{reset()}}{
+Reset the system to its initial condition.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{LorenzSystem$reset()}\if{html}{\out{</div>}}
 }
