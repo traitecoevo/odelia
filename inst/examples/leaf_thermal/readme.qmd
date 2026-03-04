@@ -26,11 +26,37 @@ library(odelia)
 library(tidyverse)
 setwd(here::here("inst/examples/leaf_thermal"))
 
-# Compile C++ code: use rebuild = TRUE to force recompilation, verbose=TRUE to see compiler output
-Rcpp::sourceCpp("src/leaf_thermal_interface.cpp",
-  verbose = TRUE, rebuild = TRUE
-)
-# Load R interface
+prepare_leaf_thermal_sourcecpp <- function(rebuild = TRUE, verbose = TRUE) {
+  # `rebuild`: force recompilation when C++ has changed.
+  # `verbose`: show compiler commands/messages for debugging.
+
+  # Preload odelia shared library with global symbol visibility.
+  # This avoids macOS flat-namespace linker errors for XAD symbols
+  # (e.g., Tape<double,1>::active_tape_) when loading sourceCpp .so files.
+  odelia_so <- file.path(
+    system.file("libs", .Platform$r_arch, package = "odelia"),
+    paste0("odelia", .Platform$dynlib.ext)
+  )
+  if (!file.exists(odelia_so)) {
+    stop("Could not find odelia shared library; run make install (or reinstall odelia) and try again.")
+  }
+  suppressWarnings(try(dyn.load(odelia_so, local = FALSE, now = TRUE), silent = TRUE))
+
+  # Compile the generic interface first because it provides Drivers_* and
+  # OdeControl_* entry points used by the leaf-specific R6 wrappers.
+  Rcpp::sourceCpp("../../../src/ode_interface.cpp",
+    verbose = verbose, rebuild = rebuild
+  )
+
+  # Compile the leaf-thermal interface (model-specific exported functions).
+  Rcpp::sourceCpp("src/leaf_thermal_interface.cpp",
+    verbose = verbose, rebuild = rebuild
+  )
+}
+
+prepare_leaf_thermal_sourcecpp(rebuild = TRUE, verbose = TRUE)
+
+# Load R6 wrappers after C++ symbols exist in the R session.
 source("R/leaf_thermal_interface.R")
 ```
 
@@ -84,7 +110,7 @@ lz$initialize_drivers(drivers)
 
 # Create ODE solver
 ctrl <- OdeControl$new()
-runner <- LeafThermalSolver$new(lz$ptr, ctrl$ptr)
+runner <- LeafThermalSolver$new(lz$ptr, ctrl$ptr, drivers$ptr)
 
 # Solve the system over time
 # times we want output at
@@ -127,7 +153,7 @@ simulate_strategy <- function(strategy_name) {
   pars <- strategies[[strategy_name]]
   lz <- LeafThermalSystem$new(pars, drivers)
   lz$set_state(c(25), 0)
-  runner <- LeafThermalSolver$new(lz$ptr, ctrl$ptr)
+  runner <- LeafThermalSolver$new(lz$ptr, ctrl$ptr, drivers$ptr)
   runner$advance_adaptive(times)
 
   runner$history() |>
@@ -167,7 +193,7 @@ drivers2$set_variable("temperature", time_driver, t_air)
 
 # Run simulation with new drivers
 lz2 <- LeafThermalSystem$new(pars, drivers2)
-runner2 <- LeafThermalSolver$new(lz2$ptr, ctrl$ptr)
+runner2 <- LeafThermalSolver$new(lz2$ptr, ctrl$ptr, drivers2$ptr)
 runner2$advance_adaptive(times) 
 out2 <- runner2$history() |>
   mutate(time = times, strategy = "different drivers")

@@ -14,6 +14,7 @@
 #include <XAD/XAD.hpp>
 #include <odelia/ode_solver.hpp>
 #include <odelia/ode_fit.hpp>
+#include <odelia/rcpp_interface_helpers.hpp>
 
 namespace odelia {
 namespace solver {
