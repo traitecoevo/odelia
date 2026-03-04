@@ -115,13 +115,6 @@ class OperationsContainerPaired
         ++idx_;
     }
 
-#if defined(__GNUC__) && !defined(__clang__)
-// GCC 12 flags this warning in the code below, although it is perfectly safe
-// and tested
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-#endif
-
     template <class MulIt, class SlotIt>
     XAD_FORCE_INLINE void append_n(MulIt muls, SlotIt slots, size_type n)
     {
@@ -145,10 +138,6 @@ class OperationsContainerPaired
             idx_ += items;
         }
     }
-
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
 
     XAD_FORCE_INLINE std::pair<mul_type, slot_type> operator[](size_type n) const
     {
