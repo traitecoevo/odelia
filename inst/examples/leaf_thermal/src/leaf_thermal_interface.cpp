@@ -1,3 +1,26 @@
+// [[Rcpp::depends(Rcpp, odelia)]]
+// [[Rcpp::plugins(cpp20)]]
+
+/* This file defines uses Rcpp to create an interface for the leaf thermal model, including
+- parameter struct: LeafThermalPars
+- model system: LeafThermalSystem
+- drivers: drivers::Drivers
+- ODE solver: ode::Solver<LeafThermalSystem>
+
+Most are straightforward general wrappers around the underlying C++ methods and not specific to the leaf thermal model.
+
+Throughout the functions below, we
+
+- use functions names like Class_method to indicate method 'method' for class 'Class'. You should refer to these functions for details on underlying C++ methods.
+- use Rcpp::XPtr to manage pointers to C++ objects created in R and passed back to C++.
+- convert between Rcpp types (NumericVector, List, DataFrame) and C++ types (std::vector, structs) as needed.
+- provide error checking for input sizes and validity where appropriate.
+- return results in R-friendly formats.
+- all functions are exported to R using the [[Rcpp::export]] attribute.
+
+These functions are intended only as interface and are called via a corresponding R interface,to provide a user-friendly R interface. See `R/leaf_thermal_interface.R` for details.
+*/
+
 #include <Rcpp.h>
 #include <XAD/XAD.hpp>
 #include <odelia/ode_solver.hpp>
@@ -15,10 +38,6 @@ typedef LeafThermalSystem<xad::adj<double>::active_type> ActiveSystemType;
 // Helper to get system pointer
 inline Rcpp::XPtr<SystemType> get_LeafThermalSystem(SEXP xp) {
   return Rcpp::XPtr<SystemType>(xp);
-}
-
-inline Rcpp::XPtr<drivers::Drivers> get_Drivers(SEXP xp) {
-  return Rcpp::XPtr<drivers::Drivers>(xp);
 }
 
 // System interface (Leaf-specific)
