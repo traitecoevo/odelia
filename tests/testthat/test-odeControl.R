@@ -1,7 +1,6 @@
 testthat::test_that("OdeControl can be instantiated", {
 
   testthat::skip_on_cran()
-  ensure_leaf_thermal_interfaces(rebuild = FALSE)
   
   expected <- list(
     tol_abs = 1e-8,
@@ -18,7 +17,5 @@ testthat::test_that("OdeControl can be instantiated", {
   ctrl <- OdeControl$new()
   )
 
-#  expect_identical(sort(names(ctrl)), keys)
-#  expect_identical(unclass(ctrl)[keys], expected[keys])
 })
 

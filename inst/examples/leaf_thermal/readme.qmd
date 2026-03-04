@@ -26,35 +26,12 @@ library(odelia)
 library(tidyverse)
 setwd(here::here("inst/examples/leaf_thermal"))
 
-prepare_leaf_thermal_sourcecpp <- function(rebuild = TRUE, verbose = TRUE) {
-  # `rebuild`: force recompilation when C++ has changed.
-  # `verbose`: show compiler commands/messages for debugging.
+odelia_load_dll()
 
-  # Preload odelia shared library with global symbol visibility.
-  # This avoids macOS flat-namespace linker errors for XAD symbols
-  # (e.g., Tape<double,1>::active_tape_) when loading sourceCpp .so files.
-  odelia_so <- file.path(
-    system.file("libs", .Platform$r_arch, package = "odelia"),
-    paste0("odelia", .Platform$dynlib.ext)
-  )
-  if (!file.exists(odelia_so)) {
-    stop("Could not find odelia shared library; run make install (or reinstall odelia) and try again.")
-  }
-  suppressWarnings(try(dyn.load(odelia_so, local = FALSE, now = TRUE), silent = TRUE))
-
-  # Compile the generic interface first because it provides Drivers_* and
-  # OdeControl_* entry points used by the leaf-specific R6 wrappers.
-  Rcpp::sourceCpp("../../../src/ode_interface.cpp",
-    verbose = verbose, rebuild = rebuild
-  )
-
-  # Compile the leaf-thermal interface (model-specific exported functions).
-  Rcpp::sourceCpp("src/leaf_thermal_interface.cpp",
-    verbose = verbose, rebuild = rebuild
-  )
-}
-
-prepare_leaf_thermal_sourcecpp(rebuild = TRUE, verbose = TRUE)
+# Compile the leaf-thermal interface (model-specific exported functions).
+Rcpp::sourceCpp("src/leaf_thermal_interface.cpp",
+  verbose = TRUE, rebuild = TRUE
+)
 
 # Load R6 wrappers after C++ symbols exist in the R session.
 source("R/leaf_thermal_interface.R")
