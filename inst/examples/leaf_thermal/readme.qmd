@@ -28,7 +28,7 @@ setwd(here::here("inst/examples/leaf_thermal"))
 
 # Compile C++ code: use rebuild = TRUE to force recompilation, verbose=TRUE to see compiler output
 Rcpp::sourceCpp("src/leaf_thermal_interface.cpp",
-  verbose = FALSE, rebuild = FALSE
+  verbose = TRUE, rebuild = TRUE
 )
 # Load R interface
 source("R/leaf_thermal_interface.R")
