@@ -24,6 +24,13 @@
 using namespace Rcpp;
 using namespace odelia;
 
+namespace odelia {
+namespace solver {
+template<typename T>
+inline Rcpp::XPtr<ode::Solver<T>> get_solver(SEXP xp);
+}  // namespace solver
+}  // namespace odelia
+
 //-------------------------------------------------------------------------
 // OdeControl interface
 

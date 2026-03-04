@@ -32,7 +32,6 @@
 #include <XAD/Traits.hpp>
 #include <XAD/UnaryOperators.hpp>
 
-#include <iostream>
 #include <numeric>
 #include <sstream>
 
@@ -468,15 +467,17 @@ void Tape<T, N>::printStatus() const
         if (statement_[i].second < INVALID_SLOT)
             actmax = std::max(actmax, statement_[i].second);
     }
-    std::cout << "XAD Tape Info:\n"
-              << "   Statements: " << statement_.size() - 1 << "\n"
-              << "   Operations: " << operations_.size() << "\n"
-              << "   Total der : " << currentRec_->maxDerivative_ << "\n"
-              << "   Der alloc : " << derivatives_.size() << "\n"
-              << "   curr der  : " << currentRec_->numDerivatives_ << "\n"
-              << "   act. max  : " << actmax << "\n"
-              << "   next idx  : " << currentRec_->iDerivative_ << "\n"
-              << "   Gaps      : " << getReusableSlotsString() << std::endl;
+    std::ostringstream status;
+    status << "XAD Tape Info:\n"
+           << "   Statements: " << statement_.size() - 1 << "\n"
+           << "   Operations: " << operations_.size() << "\n"
+           << "   Total der : " << currentRec_->maxDerivative_ << "\n"
+           << "   Der alloc : " << derivatives_.size() << "\n"
+           << "   curr der  : " << currentRec_->numDerivatives_ << "\n"
+           << "   act. max  : " << actmax << "\n"
+           << "   next idx  : " << currentRec_->iDerivative_ << "\n"
+           << "   Gaps      : " << getReusableSlotsString();
+    LOG_DEBUG(status.str());
 }
 
 template <class T, std::size_t N>
