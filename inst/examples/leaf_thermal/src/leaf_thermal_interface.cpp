@@ -21,10 +21,6 @@ Throughout the functions below, we
 These functions are intended only as interface and are called via a corresponding R interface,to provide a user-friendly R interface. See `R/leaf_thermal_interface.R` for details.
 */
 
-#include <Rcpp.h>
-#include <XAD/XAD.hpp>
-#include <odelia/ode_solver.hpp>
-#include <odelia/ode_fit.hpp>
 #include <odelia/solver_interface.hpp>
 #include "leaf_thermal_system.hpp"
 

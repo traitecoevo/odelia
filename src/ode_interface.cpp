@@ -19,6 +19,7 @@
 #include <odelia/ode_control.hpp>
 #include <odelia/ode_solver.hpp>
 #include <odelia/ode_fit.hpp>
+#include <odelia/rcpp_interface_helpers.hpp>
 
 using namespace Rcpp;
 using namespace odelia;
@@ -104,11 +105,6 @@ void OdeControl_set_step_size_initial(SEXP control_xp, double step_size_initial)
 //-------------------------------------------------------------------------
 // Drivers interface
 
-// Helper to get Drivers pointer
-inline Rcpp::XPtr<drivers::Drivers> get_Drivers(SEXP xp) {
-  return Rcpp::XPtr<drivers::Drivers>(xp);
-}
-
 // [[Rcpp::export]]
 SEXP Drivers_new() {
   Rcpp::XPtr<drivers::Drivers> ptr(new drivers::Drivers(), true);
@@ -173,11 +169,6 @@ void Drivers_clear(SEXP drivers_xp) {
 namespace odelia {
 namespace solver {
 
-// Helper to get solver pointer (templated)
-template<typename T>
-inline Rcpp::XPtr<ode::Solver<T>> get_solver(SEXP xp) {
-  return Rcpp::XPtr<ode::Solver<T>>(xp);
-}
 
 // Generic Solver_reset
 template<typename SystemType, typename ActiveSystemType>

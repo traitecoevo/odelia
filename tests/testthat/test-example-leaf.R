@@ -13,6 +13,19 @@ testthat::test_that("leaf thermal example runs", {
   pkg_include <- here::here("inst/include")
   withr::local_envvar(PKG_CPPFLAGS = paste0("-I", pkg_include))
 
+  expect_true(isNamespaceLoaded("odelia"))
+
+  odelia_so <- file.path(
+    system.file("libs", .Platform$r_arch, package = "odelia"),
+    paste0("odelia", .Platform$dynlib.ext)
+  )
+  expect_true(file.exists(odelia_so))
+  expect_silent(suppressWarnings(try(dyn.load(odelia_so, local = FALSE, now = TRUE), silent = TRUE)))
+
+  expect_silent(
+    Rcpp::sourceCpp("../../../src/ode_interface.cpp", rebuild = FALSE, verbose = FALSE)
+  )
+
   expect_silent(
     Rcpp::sourceCpp("src/leaf_thermal_interface.cpp", rebuild = FALSE, verbose = FALSE)
   )
