@@ -1,7 +1,6 @@
 test_that("Extrinsic Drivers", {
 
   testthat::skip_on_cran()
-  ensure_leaf_thermal_interfaces(rebuild = FALSE)
   
   # create Drivers object
   expect_silent(drv <- Drivers$new())
