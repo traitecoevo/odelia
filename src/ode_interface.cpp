@@ -26,9 +26,79 @@ using namespace odelia;
 //-------------------------------------------------------------------------
 // OdeControl interface
 
+// Helper to get OdeControl pointer
+inline Rcpp::XPtr<ode::OdeControl> get_OdeControl(SEXP xp) {
+  return Rcpp::XPtr<ode::OdeControl>(xp);
+}
+
 // [[Rcpp::export]]
 SEXP OdeControl_new() {
   return Rcpp::XPtr<ode::OdeControl>(new ode::OdeControl(), true);
+}
+
+// [[Rcpp::export]]
+Rcpp::List OdeControl_get_controls(SEXP control_xp) {
+  auto ctrl = get_OdeControl(control_xp);
+  return Rcpp::List::create(
+    Rcpp::Named("tol_abs") = ctrl->tol_abs,
+    Rcpp::Named("tol_rel") = ctrl->tol_rel,
+    Rcpp::Named("a_y") = ctrl->a_y,
+    Rcpp::Named("a_dydt") = ctrl->a_dydt,
+    Rcpp::Named("step_size_min") = ctrl->step_size_min,
+    Rcpp::Named("step_size_max") = ctrl->step_size_max,
+    Rcpp::Named("step_size_initial") = ctrl->step_size_initial
+  );
+}
+
+// [[Rcpp::export]]
+void OdeControl_set_controls(SEXP control_xp,
+                             double tol_abs, double tol_rel,
+                             double a_y, double a_dydt,
+                             double step_size_min, double step_size_max,
+                             double step_size_initial) {
+  auto ctrl = get_OdeControl(control_xp);
+  ctrl->tol_abs = tol_abs;
+  ctrl->tol_rel = tol_rel;
+  ctrl->a_y = a_y;
+  ctrl->a_dydt = a_dydt;
+  ctrl->step_size_min = step_size_min;
+  ctrl->step_size_max = step_size_max;
+  ctrl->step_size_initial = step_size_initial;
+}
+
+// [[Rcpp::export]]
+void OdeControl_set_tol_abs(SEXP control_xp, double tol_abs) {
+  get_OdeControl(control_xp)->tol_abs = tol_abs;
+}
+
+// [[Rcpp::export]]
+void OdeControl_set_tol_rel(SEXP control_xp, double tol_rel) {
+  get_OdeControl(control_xp)->tol_rel = tol_rel;
+}
+
+// [[Rcpp::export]]
+void OdeControl_set_a_y(SEXP control_xp, double a_y) {
+  get_OdeControl(control_xp)->a_y = a_y;
+}
+
+// [[Rcpp::export]]
+void OdeControl_set_a_dydt(SEXP control_xp, double a_dydt) {
+  get_OdeControl(control_xp)->a_dydt = a_dydt;
+}
+
+// [[Rcpp::export]]
+void OdeControl_set_step_size_min(SEXP control_xp, double step_size_min) {
+  get_OdeControl(control_xp)->step_size_min = step_size_min;
+}
+
+// [[Rcpp::export]]
+void OdeControl_set_step_size_max(SEXP control_xp, double step_size_max) {
+  get_OdeControl(control_xp)->step_size_max = step_size_max;
+}
+
+// [[Rcpp::export]]
+void OdeControl_set_step_size_initial(SEXP control_xp, double step_size_initial) {
+  get_OdeControl(control_xp)->step_size_initial = step_size_initial;
 }
 
 //-------------------------------------------------------------------------
