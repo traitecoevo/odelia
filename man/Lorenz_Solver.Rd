@@ -6,6 +6,15 @@
 \description{
 R6 wrapper for Lorenz ODE solver with optional AD support
 }
+\section{Public fields}{
+\if{html}{\out{<div class="r6-fields">}}
+\describe{
+\item{\code{ptr}}{External pointer to the underlying C++ solver object.}
+
+\item{\code{active}}{Logical flag indicating whether AD mode is enabled.}
+}
+\if{html}{\out{</div>}}
+}
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
@@ -31,15 +40,28 @@ R6 wrapper for Lorenz ODE solver with optional AD support
 \if{html}{\out{<a id="method-Lorenz_Solver-new"></a>}}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-new}{}}}
 \subsection{Method \code{new()}}{
+Initialize a solver for a Lorenz system.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$new(System_xp, control_xp, active = FALSE)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{System_xp}}{External pointer to the Lorenz system object.}
+
+\item{\code{control_xp}}{External pointer to the ODE control object.}
+
+\item{\code{active}}{Logical flag for AD-enabled solver mode.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Lorenz_Solver-time"></a>}}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-time}{}}}
 \subsection{Method \code{time()}}{
+Get current solver time.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$time()}\if{html}{\out{</div>}}
 }
@@ -49,6 +71,7 @@ R6 wrapper for Lorenz ODE solver with optional AD support
 \if{html}{\out{<a id="method-Lorenz_Solver-state"></a>}}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-state}{}}}
 \subsection{Method \code{state()}}{
+Get current solver state.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$state()}\if{html}{\out{</div>}}
 }
@@ -58,15 +81,26 @@ R6 wrapper for Lorenz ODE solver with optional AD support
 \if{html}{\out{<a id="method-Lorenz_Solver-set_state"></a>}}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-set_state}{}}}
 \subsection{Method \code{set_state()}}{
+Set current solver state and time.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$set_state(y, time)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{y}}{Numeric state vector.}
+
+\item{\code{time}}{Scalar time value.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Lorenz_Solver-times"></a>}}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-times}{}}}
 \subsection{Method \code{times()}}{
+Get stored solver times.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$times()}\if{html}{\out{</div>}}
 }
@@ -76,24 +110,41 @@ R6 wrapper for Lorenz ODE solver with optional AD support
 \if{html}{\out{<a id="method-Lorenz_Solver-advance_adaptive"></a>}}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-advance_adaptive}{}}}
 \subsection{Method \code{advance_adaptive()}}{
+Advance solver using adaptive stepping.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$advance_adaptive(times)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{times}}{Numeric vector of requested output times.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Lorenz_Solver-advance_fixed"></a>}}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-advance_fixed}{}}}
 \subsection{Method \code{advance_fixed()}}{
+Advance solver using fixed stepping.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$advance_fixed(times)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{times}}{Numeric vector of requested output times.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Lorenz_Solver-step"></a>}}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-step}{}}}
 \subsection{Method \code{step()}}{
+Advance solver by one step.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$step()}\if{html}{\out{</div>}}
 }
@@ -103,6 +154,7 @@ R6 wrapper for Lorenz ODE solver with optional AD support
 \if{html}{\out{<a id="method-Lorenz_Solver-reset"></a>}}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-reset}{}}}
 \subsection{Method \code{reset()}}{
+Reset solver to its initial state.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$reset()}\if{html}{\out{</div>}}
 }
@@ -112,15 +164,24 @@ R6 wrapper for Lorenz ODE solver with optional AD support
 \if{html}{\out{<a id="method-Lorenz_Solver-collect"></a>}}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-collect}{}}}
 \subsection{Method \code{collect()}}{
+Get or set history collection behavior.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$collect(value)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{value}}{Logical flag for collect-history behavior.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Lorenz_Solver-history_size"></a>}}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-history_size}{}}}
 \subsection{Method \code{history_size()}}{
+Return number of stored history entries.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$history_size()}\if{html}{\out{</div>}}
 }
@@ -130,15 +191,24 @@ R6 wrapper for Lorenz ODE solver with optional AD support
 \if{html}{\out{<a id="method-Lorenz_Solver-history_step"></a>}}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-history_step}{}}}
 \subsection{Method \code{history_step()}}{
+Return one history entry by index.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$history_step(i)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{i}}{Integer index into solver history.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Lorenz_Solver-history"></a>}}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-history}{}}}
 \subsection{Method \code{history()}}{
+Return history as a tibble.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$history()}\if{html}{\out{</div>}}
 }
@@ -148,19 +218,41 @@ R6 wrapper for Lorenz ODE solver with optional AD support
 \if{html}{\out{<a id="method-Lorenz_Solver-set_target"></a>}}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-set_target}{}}}
 \subsection{Method \code{set_target()}}{
+Set calibration targets for fitting.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$set_target(times, target, obs_indices)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{times}}{Numeric vector of requested output times.}
+
+\item{\code{target}}{Numeric matrix of target observations.}
+
+\item{\code{obs_indices}}{Integer vector of observed-state indices.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Lorenz_Solver-fit"></a>}}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-fit}{}}}
 \subsection{Method \code{fit()}}{
+Fit initial conditions and/or parameters.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$fit(ic = NULL, params = NULL)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{ic}}{Optional initial condition value(s) for fitting.}
+
+\item{\code{params}}{Optional parameter vector for fitting.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Lorenz_Solver-clone"></a>}}
