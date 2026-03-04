@@ -1,22 +1,7 @@
-library(odelia)
-
 test_that("Extrinsic Drivers", {
 
   testthat::skip_on_cran()
-  
-  # set working directory to example folder
-  withr::local_dir(here::here("inst/examples/leaf_thermal"))
-  pkg_include <- here::here("inst/include")
-  withr::local_envvar(PKG_CPPFLAGS = paste0("-I", pkg_include))
-
-  # check compilation & loading
-  pkg_include <- here::here("inst/include")
-  expect_silent(
-    Rcpp::sourceCpp("src/leaf_thermal_interface.cpp", rebuild = FALSE, verbose = FALSE)
-  )
-  expect_silent(
-    source("R/leaf_thermal_interface.R")
-  )
+  ensure_leaf_thermal_interfaces(rebuild = FALSE)
   
   # create Drivers object
   expect_silent(drv <- Drivers$new())

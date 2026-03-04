@@ -1,37 +1,11 @@
-library(odelia)
-
-setup_leaf_thermal_interfaces <- function(rebuild = FALSE) {
-  withr::local_dir(here::here("inst/examples/leaf_thermal"))
-
-  pkg_include <- here::here("inst/include")
-  withr::local_envvar(PKG_CPPFLAGS = paste0("-I", pkg_include))
-
-  expect_true(isNamespaceLoaded("odelia"))
-
-  odelia_so <- file.path(
-    system.file("libs", .Platform$r_arch, package = "odelia"),
-    paste0("odelia", .Platform$dynlib.ext)
-  )
-  expect_true(file.exists(odelia_so))
-  expect_silent(suppressWarnings(try(dyn.load(odelia_so, local = FALSE, now = TRUE), silent = TRUE)))
-
-  expect_no_error(
-    Rcpp::sourceCpp("../../../src/ode_interface.cpp", rebuild = rebuild, verbose = FALSE)
-  )
-  expect_no_error(
-    Rcpp::sourceCpp("src/leaf_thermal_interface.cpp", rebuild = rebuild, verbose = FALSE)
-  )
-  expect_silent(source("R/leaf_thermal_interface.R"))
-}
-
 testthat::test_that("leaf thermal AD setup compiles", {
   testthat::skip_on_cran()
-  setup_leaf_thermal_interfaces(rebuild = FALSE)
+  ensure_leaf_thermal_interfaces(rebuild = FALSE)
 })
 
 testthat::test_that("leaf thermal set_initial_state and reset work", {
   testthat::skip_on_cran()
-  setup_leaf_thermal_interfaces(rebuild = FALSE)
+  ensure_leaf_thermal_interfaces(rebuild = FALSE)
 
   drv <- Drivers$new()
   drv$set_constant("temperature", 25.0)
@@ -48,7 +22,7 @@ testthat::test_that("leaf thermal set_initial_state and reset work", {
 
 testthat::test_that("leaf thermal AD solver can be created", {
   testthat::skip_on_cran()
-  setup_leaf_thermal_interfaces(rebuild = FALSE)
+  ensure_leaf_thermal_interfaces(rebuild = FALSE)
 
   drv <- Drivers$new()
   drv$set_constant("temperature", 25.0)
@@ -65,7 +39,7 @@ testthat::test_that("leaf thermal AD solver can be created", {
 
 testthat::test_that("leaf thermal AD set_target works", {
   testthat::skip_on_cran()
-  setup_leaf_thermal_interfaces(rebuild = FALSE)
+  ensure_leaf_thermal_interfaces(rebuild = FALSE)
 
   drv <- Drivers$new()
   drv$set_constant("temperature", 25.0)
@@ -88,7 +62,7 @@ testthat::test_that("leaf thermal AD set_target works", {
 
 testthat::test_that("leaf thermal AD fit computes finite outputs", {
   testthat::skip_on_cran()
-  setup_leaf_thermal_interfaces(rebuild = FALSE)
+  ensure_leaf_thermal_interfaces(rebuild = FALSE)
 
   drv <- Drivers$new()
   drv$set_constant("temperature", 25.0)

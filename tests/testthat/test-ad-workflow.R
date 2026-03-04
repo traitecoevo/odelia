@@ -1,5 +1,4 @@
-library(testthat)
-library(odelia)
+
 
 # Using a stateful function to memoise the AD avoids re-running the solver to
 # give optim the gradient 
@@ -22,14 +21,16 @@ memoise_fit <- function(runner) {
 }
 
 test_that("AD workflow optimizes Lorenz parameters", {
+  testthat::skip_on_cran()
+
   true_pars <- c(sigma = 10.0, R = 28.0, b = 8.0 / 3.0)
   
   # Generate reference trajectory
   lz <- LorenzSystem$new(sigma = true_pars[1], R = true_pars[2], b = true_pars[3])
   lz$set_initial_state(c(1, 1, 1), t0 = 0)
-  ctrl_ptr <- OdeControl_new()
+  ctrl <- odelia:::OdeControl$new()
   
-  runner <- Lorenz_Solver$new(lz$ptr, ctrl_ptr)
+  runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
   runner$advance_adaptive(c(0, 10)) 
   hist <- runner$history() 
   
@@ -38,7 +39,7 @@ test_that("AD workflow optimizes Lorenz parameters", {
   lz$set_params(initial_guess)
   
   # Create AD solver
-  ad_runner <- Lorenz_Solver$new(lz$ptr, ctrl_ptr, active = TRUE)
+  ad_runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr, active = TRUE)
   
   target_times <- hist$time
   target_vals <- as.matrix(hist[, c("x", "y", "z")])

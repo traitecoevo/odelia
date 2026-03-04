@@ -1,11 +1,6 @@
-library(testthat)
-library(odelia)
 
 testthat::test_that("lorenz system runs and produces expected results", {
   testthat::skip_on_cran()
-  
-  # set working directory to example folder
-  withr::local_dir(here::here("inst/examples/lorenz"))
 
   # function to compute Lorenz derivatives in R for comparison
   derivs_lorenz <- function(y, pars) {
@@ -24,14 +19,6 @@ testthat::test_that("lorenz system runs and produces expected results", {
   }
   
   # check compilation
-  pkg_include <- here::here("inst/include")
-  withr::local_envvar(PKG_CPPFLAGS = paste0("-I", pkg_include))
-
-  expect_silent(
-    Rcpp::sourceCpp("src/lorenz_interface.cpp", rebuild = FALSE, verbose = FALSE)
-  )
-  expect_silent( source("R/lorenz_interface.R") )
-
   # comparison data
   pars <- c(sigma=10.0,
             R=28.0,
@@ -51,7 +38,7 @@ testthat::test_that("lorenz system runs and produces expected results", {
     lz$rates()
 
     # Set up ODE solver
-    expect_silent(ctrl <- OdeControl$new())
+    expect_silent(ctrl <- odelia:::OdeControl$new())
 
     # Advance with adaptive time stepping to time 10000
     runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
@@ -103,7 +90,7 @@ testthat::test_that("lorenz system runs and produces expected results", {
   # Todo: reset history and re-run to check identical output
 
   ## Run with different tolerance, should be different results
-  ctrl2 <- OdeControl$new()
+  ctrl2 <- odelia:::OdeControl$new()
   ctrl2$set_tol_rel(1e-12)
   expect_silent({
     times <- out$time
