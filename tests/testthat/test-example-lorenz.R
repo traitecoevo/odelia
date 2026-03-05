@@ -104,7 +104,7 @@ testthat::test_that("lorenz system runs and produces expected results", {
 
 })
 testthat::test_that("lorenz AD IC gradients are NON-ZERO", {
-  testthat::skip_on_cran()
+  #testthat::skip_on_cran()
 
   lz_true <- LorenzSystem$new(10, 28, 8/3)
   lz_true$set_initial_state(c(1, 1, 1), 0)
@@ -134,7 +134,7 @@ testthat::test_that("lorenz AD IC gradients are NON-ZERO", {
     info = "IC gradients are all zero - AD tape not capturing IC dependencies!")
 })
 testthat::test_that("lorenz AD parameter gradients are NON-ZERO", {
-  testthat::skip_on_cran()
+  #testthat::skip_on_cran()
 
   true_pars <- c(sigma = 10.0, R = 28.0, b = 8.0/3.0)
   

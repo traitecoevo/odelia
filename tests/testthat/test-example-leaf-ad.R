@@ -97,7 +97,7 @@ testthat::test_that("leaf thermal AD fit computes finite outputs", {
   expect_true(all(is.finite(result_params$gradient)))
 })
 testthat::test_that("leaf thermal AD parameter gradients are NON-ZERO", {
-  testthat::skip_on_cran()
+  #testthat::skip_on_cran()
   ensure_leaf_thermal_interfaces(rebuild = FALSE)
 
   drv_true <- Drivers$new()
@@ -138,7 +138,7 @@ testthat::test_that("leaf thermal AD parameter gradients are NON-ZERO", {
 })
 
 testthat::test_that("leaf thermal AD IC gradients are NON-ZERO", {
-  testthat::skip_on_cran()
+  #testthat::skip_on_cran()
   ensure_leaf_thermal_interfaces(rebuild = FALSE)
 
   drv <- Drivers$new()
