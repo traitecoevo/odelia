@@ -13,9 +13,9 @@ public:
   using value_type = T; 
   
   LorenzSystem(T sigma_, T R_, T b_)
-    : sigma(sigma_), R(R_), b(b_),
-      y0_init(1.0), y1_init(1.0), y2_init(1.0),
+    : y0_init(1.0), y1_init(1.0), y2_init(1.0),
       t0(0.0),
+      sigma(sigma_), R(R_), b(b_),
       dy0dt(0.0), dy1dt(0.0), dy2dt(0.0) {
     reset();  // initialises state & time
   }
