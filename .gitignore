@@ -16,7 +16,4 @@ doc
 Meta
 *.knit.md
 
-# Rcpp auto-generated
-src/RcppExports.cpp
-R/RcppExports.R
 *.tar.gz
