@@ -15,3 +15,5 @@ src/*.dll
 doc
 Meta
 *.knit.md
+
+*.tar.gz
