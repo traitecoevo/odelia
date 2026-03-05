@@ -46,6 +46,13 @@ public:
   System get_system() const { return system; }
   System& get_system_ref() { return system; }
 
+  // Synchronize internal ODE buffers from the current system state without
+  // resetting solver history/step-size state.
+  void set_state_from_system()
+  {
+    solver.set_state_from_system(system);
+  }
+
   void set_state(std::vector<double> y, double time)
   {
     util::check_length(y.size(), system.ode_size());
