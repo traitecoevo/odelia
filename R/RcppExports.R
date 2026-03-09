@@ -177,7 +177,3 @@ Drivers_clear <- function(drivers_xp) {
     invisible(.Call(`_odelia_Drivers_clear`, drivers_xp))
 }
 
-parabola_eval <- function(params) {
-    .Call(`_odelia_parabola_eval`, params)
-}
-

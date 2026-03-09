@@ -530,17 +530,6 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
-// parabola_eval
-Rcpp::List parabola_eval(Rcpp::NumericVector params);
-RcppExport SEXP _odelia_parabola_eval(SEXP paramsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type params(paramsSEXP);
-    rcpp_result_gen = Rcpp::wrap(parabola_eval(params));
-    return rcpp_result_gen;
-END_RCPP
-}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_odelia_System_new", (DL_FUNC) &_odelia_System_new, 3},
@@ -587,7 +576,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_odelia_Drivers_evaluate_range", (DL_FUNC) &_odelia_Drivers_evaluate_range, 3},
     {"_odelia_Drivers_get_names", (DL_FUNC) &_odelia_Drivers_get_names, 1},
     {"_odelia_Drivers_clear", (DL_FUNC) &_odelia_Drivers_clear, 1},
-    {"_odelia_parabola_eval", (DL_FUNC) &_odelia_parabola_eval, 1},
     {NULL, NULL, 0}
 };
 
