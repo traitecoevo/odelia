@@ -1,22 +1,8 @@
-library(odelia)
 
 testthat::test_that("leaf thermal example runs", {
   
-  
   testthat::skip_on_cran()
-  
-  # set working directory to example folder
-  withr::local_dir(here::here("inst/examples/leaf_thermal"))
-
-  # check compilation
-  # Add package include path
-  pkg_include <- here::here("inst/include")
-  withr::local_envvar(PKG_CPPFLAGS = paste0("-I", pkg_include))
-
-  expect_silent(
-    Rcpp::sourceCpp("src/leaf_thermal_interface.cpp", rebuild = FALSE, verbose = FALSE)
-  )
-  expect_silent( source("R/leaf_thermal_interface.R") )
+  ensure_leaf_thermal_interfaces(rebuild = FALSE)
 
   # drivers
   p <- list(Tmean = 32, Tamp = 6, tpeak = 15)
@@ -32,7 +18,7 @@ testthat::test_that("leaf thermal example runs", {
     lz <- LeafThermalSystem$new(pars, drivers)
     lz$set_state(c(25), 0)   
     ctrl <- OdeControl$new()
-    runner <- LeafThermalSolver$new(lz$ptr, ctrl$ptr)
+    runner <- LeafThermalSolver$new(lz$ptr, ctrl$ptr, drivers$ptr)
     times <- seq(0, 48, by = 0.5)
     runner$advance_adaptive(times)
     out <- runner$history() |>

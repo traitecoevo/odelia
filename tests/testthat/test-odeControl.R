@@ -1,21 +1,6 @@
-library(odelia)
-
-test_that("Drivers can be instantiated", {
+testthat::test_that("OdeControl can be instantiated", {
 
   testthat::skip_on_cran()
-  
-  # set working directory to example folder
-  withr::local_dir(here::here("inst/examples/leaf_thermal"))
-  pkg_include <- here::here("inst/include")
-  withr::local_envvar(PKG_CPPFLAGS = paste0("-I", pkg_include))
-
-  # check compilation
-  expect_silent(
-    Rcpp::sourceCpp("src/leaf_thermal_interface.cpp", rebuild = FALSE, verbose = FALSE))
-
-  expect_silent(
-    source("R/leaf_thermal_interface.R")
-  )
   
   expected <- list(
     tol_abs = 1e-8,
@@ -32,7 +17,5 @@ test_that("Drivers can be instantiated", {
   ctrl <- OdeControl$new()
   )
 
-#  expect_identical(sort(names(ctrl)), keys)
-#  expect_identical(unclass(ctrl)[keys], expected[keys])
 })
 
