@@ -40,27 +40,30 @@ std::pair<double, std::vector<double>> compute_gradient(
     
     // Create tape
     ad::tape_type tape;
-    
+
     // Collect input pointers for gradient extraction
     std::vector<ad_type*> inputs;
-    
+
     auto& system = solver.get_system_ref();
-    
-    // Set params and register
+
+    // Set params and register BEFORE newRecording (XAD requirement)
     if (params) {
         auto refs = system.set_params(tape, params->begin());
         inputs.insert(inputs.end(), refs.begin(), refs.end());
     }
-    
-    // Set initial conditions and register
+
+    // Set initial conditions and register BEFORE newRecording (XAD requirement)
     if (ic) {
         auto refs = system.set_initial_state(tape, ic->begin(), solver.fit_times()[0]);
         inputs.insert(inputs.end(), refs.begin(), refs.end());
-    
     }
-    solver.reset();
-    
+
+    // Start recording AFTER registering inputs (XAD requirement)
     tape.newRecording();
+
+    // Reset AFTER recording starts so the copy operation is recorded as a dependency
+    // This ensures compute_rates() in reset() uses the registered AD types
+    solver.reset();
     
     // Forward pass - returns states at observation times
     auto obs = solver.advance_target();
