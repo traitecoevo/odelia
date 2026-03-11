@@ -156,14 +156,14 @@ SEXP LeafSolver_new(SEXP system_xp, SEXP control_xp, SEXP drivers_xp, bool activ
 
   if (active) {
     auto pars = sys->get_pars();
-    
+
     std::vector<double> initial_state(sys->ode_size());
     sys->ode_initial_state(initial_state.begin());
     auto t0 = sys->ode_t0();
-    
+
     auto* sys_active = new ActiveSystemType(LeafThermalPars{pars[0], pars[1], pars[2], pars[3]}, *drv);
     sys_active->set_initial_state(initial_state.begin(), t0);
-    
+
     auto* solver = new ode::Solver<ActiveSystemType>(*sys_active, *ctrl);
     return Rcpp::XPtr<ode::Solver<ActiveSystemType>>(solver, true);
   } else {
