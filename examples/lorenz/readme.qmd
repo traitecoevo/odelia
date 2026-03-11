@@ -13,9 +13,7 @@ It's a relatively straightforward ODE system with only three equations, that is 
 ## Load libraries and compile C++ code
 
 ```{r}
-library(odelia)
-library(dplyr)
-library(ggplot2)
+devtools::load_all()
 
 setwd(here::here("inst/examples/lorenz"))
 source("R/lorenz_interface.R")

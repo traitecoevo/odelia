@@ -7,15 +7,15 @@
 namespace odelia {
 namespace ode {
 
-// These are utilities designed to make it more pleasant to work with
-// ode objects.  The first in-place functions work with the
-// boost::odeint interface, and the types are just to reduce typing.
-typedef std::vector<double>        state_type;
-typedef state_type::const_iterator const_iterator;
-typedef state_type::iterator       iterator;
+// Type alias for state vectors based on System's value_type
+template<typename System>
+using state_type = std::vector<typename System::value_type>;
 
-// By default, we assume that systems are time homogeneous; systems
-// that provide an `ode_time` function will be treated differently.
+// Legacy typedefs for R interface (always double)
+typedef std::vector<double>::const_iterator const_iterator;
+typedef std::vector<double>::iterator       iterator;
+
+// By default, we assume that systems are time homogeneous
 template <typename T>
 class needs_time {
   typedef char true_type;
@@ -26,7 +26,6 @@ public:
   enum { value = sizeof(test<T>(0)) == sizeof(true_type) };
 };
 
-// Have a special case where we want to store and reuse Patch state at each RK45 step
 template <typename System>
 class has_cache {
   typedef char true_type;
@@ -111,29 +110,28 @@ ode_time(const T& /* obj */) {
 }
 
 namespace internal {
-template <typename T>
+template <typename T, typename StateType>
 typename std::enable_if<needs_time<T>::value, void>::type
-set_ode_state(T& obj, const state_type& y, double time) {
+set_ode_state(T& obj, const StateType& y, double time) {
   obj.set_ode_state(y.begin(), time);
 }
 
-template <typename T>
+template <typename T, typename StateType>
 typename std::enable_if<!needs_time<T>::value, void>::type
-set_ode_state(T& obj, const state_type& y, double /* time */) {
+set_ode_state(T& obj, const StateType& y, double /* time */) {
   obj.set_ode_state(y.begin());
 }
 
-// mutants only
-template <typename T>
+template <typename T, typename StateType>
 typename std::enable_if<has_cache<T>::value, void>::type
-set_ode_state(T& obj, const state_type& y, int index) {
+set_ode_state(T& obj, const StateType& y, int index) {
   obj.set_ode_state(y.begin(), index);
 }
 }
 
 // primarily for Ode_R - maybe remove
-template <typename T>
-void derivs(T& obj, const state_type& y, state_type& dydt,
+template <typename T, typename StateType>
+void derivs(T& obj, const StateType& y, StateType& dydt,
             const double time) {
 
   internal::set_ode_state(obj, y, time);
@@ -141,9 +139,9 @@ void derivs(T& obj, const state_type& y, state_type& dydt,
 }
 
 // for ODE stepping
-template <typename T>
+template <typename T, typename StateType>
 typename std::enable_if<!has_cache<T>::value, void>::type
-derivs(T& obj, const state_type& y, state_type& dydt,
+derivs(T& obj, const StateType& y, StateType& dydt,
             const double time, const int /* index */) {
 
   internal::set_ode_state(obj, y, time);
@@ -151,13 +149,13 @@ derivs(T& obj, const state_type& y, state_type& dydt,
 }
 
 // for mutants or ODE stepping
-template <typename T>
+template <typename T, typename StateType>
 typename std::enable_if<has_cache<T>::value, void>::type
-derivs(T& obj, const state_type& y, state_type& dydt,
+derivs(T& obj, const StateType& y, StateType& dydt,
             const double time, const int index) {
 
     if(obj.use_cached_environment) {
-      internal::set_ode_state(obj, y, index); // only works for patches
+      internal::set_ode_state(obj, y, index);
     } else {
       internal::set_ode_state(obj, y, time);
     }
@@ -165,24 +163,24 @@ derivs(T& obj, const state_type& y, state_type& dydt,
   obj.ode_rates(dydt.begin());
 }
 
+// R interface functions - always use std::vector<double>
 template <typename T>
-state_type r_derivs(T& obj, const state_type& y, const double time) {
-  state_type dydt(obj.ode_size());
+std::vector<double> r_derivs(T& obj, const std::vector<double>& y, const double time) {
+  std::vector<double> dydt(obj.ode_size());
   derivs(obj, y, dydt, time);
   return dydt;
 }
 
-// These out-of-place versions are useful for interfacing with R.
 template <typename T>
 typename std::enable_if<needs_time<T>::value, void>::type
-r_set_ode_state(T& obj, const state_type& y, double time) {
+r_set_ode_state(T& obj, const std::vector<double>& y, double time) {
   util::check_length(y.size(), obj.ode_size());
   obj.set_ode_state(y.begin(), time);
 }
 
 template <typename T>
 typename std::enable_if<!needs_time<T>::value, void>::type
-r_set_ode_state(T& obj, const state_type& y) {
+r_set_ode_state(T& obj, const std::vector<double>& y) {
   util::check_length(y.size(), obj.ode_size());
   obj.set_ode_state(y.begin());
 }
@@ -200,22 +198,22 @@ r_ode_time(const T& /* obj */) {
 }
 
 template <typename T>
-state_type r_ode_state(const T& obj) {
-  state_type values(obj.ode_size());
+std::vector<double> r_ode_state(const T& obj) {
+  std::vector<double> values(obj.ode_size());
   obj.ode_state(values.begin());
   return values;
 }
 
 template <typename T>
-state_type r_ode_rates(const T& obj) {
-  state_type dydt(obj.ode_size());
+std::vector<double> r_ode_rates(const T& obj) {
+  std::vector<double> dydt(obj.ode_size());
   obj.ode_rates(dydt.begin());
   return dydt;
 }
 
 template <typename T>
-state_type r_ode_aux(const T& obj) {
-  state_type dydt(obj.aux_size());
+std::vector<double> r_ode_aux(const T& obj) {
+  std::vector<double> dydt(obj.aux_size());
   obj.ode_aux(dydt.begin());
   return dydt;
 }

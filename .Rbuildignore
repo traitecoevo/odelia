@@ -13,3 +13,5 @@
 ^odelia.Rcheck$
 ^check$
 ^gh-pages$
+^examples$
+^docs$
