@@ -6,9 +6,16 @@
 
 The odelia package for R is an ODE solver in C++ header files, using RK4-5. There's potenital to link to R via Rcpp. Code was first developed by  Rich FitzJohn as part of the [plant package](https://github.com/traitecoevo/plant/). I'm spinning that code out into a package, as I want to use it elsewhere. 
 
-Vocabulary- 
+Vocabulary-
 - system
 - stepper
 - solver
 - runner
 
+## License
+
+This package is released under the [GNU Affero General Public License v3 (AGPL-3)](LICENSE).
+
+## Contributing
+
+Contributions are welcome. By submitting a pull request or code to this repository, you agree to the terms of the [Contributor License Agreement](CLA.md).
