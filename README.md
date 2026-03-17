@@ -68,3 +68,10 @@ make test-installed
 
 Installs with tests and runs `testthat::test_package()` against the installed package copy.
 
+## License
+
+This package is released under the [GNU Affero General Public License v3 (AGPL-3)](LICENSE).
+
+## Contributing
+
+Contributions are welcome. By submitting a pull request or code to this repository, you agree to the terms of the [Contributor License Agreement](CLA.md).
