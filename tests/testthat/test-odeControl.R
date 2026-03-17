@@ -1,6 +1,4 @@
 testthat::test_that("OdeControl can be instantiated", {
-
-  testthat::skip_on_cran()
   
   expected <- list(
     tol_abs = 1e-8,
