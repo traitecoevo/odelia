@@ -44,3 +44,27 @@ An ODE system in odelia consists of:
 - **An R wrapper** (`R/*-interface.R`, optional) — R6 classes providing a friendlier API around the external pointers.
 
 - **A demo script** (`examples/*/demo.R`) — Runnable demonstration.
+
+
+### Testing variants
+
+Use the Makefile targets below depending on the level of test coverage you want.
+
+```bash
+make test
+```
+
+Runs package tests after local compile. Fast default for day-to-day work.
+
+```bash
+make test-local
+```
+
+Runs `testthat::test_local()` from the source tree.
+
+```bash
+make test-installed
+```
+
+Installs with tests and runs `testthat::test_package()` against the installed package copy.
+

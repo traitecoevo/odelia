@@ -1,7 +1,6 @@
 
 testthat::test_that("leaf thermal example runs", {
   
-  testthat::skip_on_cran()
   ensure_leaf_thermal_interfaces(rebuild = FALSE)
 
   # drivers

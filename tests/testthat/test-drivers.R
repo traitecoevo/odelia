@@ -1,6 +1,4 @@
 test_that("Extrinsic Drivers", {
-
-  testthat::skip_on_cran()
   
   # create Drivers object
   expect_silent(drv <- Drivers$new())
