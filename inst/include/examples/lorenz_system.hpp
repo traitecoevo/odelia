@@ -3,6 +3,7 @@
 
 #include <odelia/ode_solver.hpp>
 #include <XAD/XAD.hpp>
+#include <utility>
 
 using namespace odelia;
 
@@ -48,9 +49,12 @@ public:
   template <typename Iterator>
   Iterator set_initial_state(Iterator it, double t0_ = 0.0) {
     t0 = t0_;
-    y0_init = *it++;
-    y1_init = *it++;
-    y2_init = *it++;
+    T y0_new(*it++);
+    T y1_new(*it++);
+    T y2_new(*it++);
+    y0_init = std::move(y0_new);
+    y1_init = std::move(y1_new);
+    y2_init = std::move(y2_new);
     return it;
   }
 
@@ -58,9 +62,12 @@ public:
   template <typename Tape, typename Iterator>
   std::vector<T*> set_initial_state(Tape& tape, Iterator it, double t0_) {
     t0 = t0_;
-    y0_init = *it++;
-    y1_init = *it++;
-    y2_init = *it++;
+    T y0_new(*it++);
+    T y1_new(*it++);
+    T y2_new(*it++);
+    y0_init = std::move(y0_new);
+    y1_init = std::move(y1_new);
+    y2_init = std::move(y2_new);
     
     tape.registerInput(y0_init);
     tape.registerInput(y1_init);
@@ -71,18 +78,24 @@ public:
 
   template <typename Iterator>
   Iterator set_params(Iterator it) {
-    sigma = *it++;
-    R = *it++;
-    b = *it++;
+    T sigma_new(*it++);
+    T R_new(*it++);
+    T b_new(*it++);
+    sigma = std::move(sigma_new);
+    R = std::move(R_new);
+    b = std::move(b_new);
     return it;
   }
 
   // Registers inputs, returns pointers for AD gradient computation
   template <typename Tape, typename Iterator>
   std::vector<T*> set_params(Tape& tape, Iterator it) {
-    sigma = *it++;
-    R = *it++;
-    b = *it++;
+    T sigma_new(*it++);
+    T R_new(*it++);
+    T b_new(*it++);
+    sigma = std::move(sigma_new);
+    R = std::move(R_new);
+    b = std::move(b_new);
     tape.registerInput(sigma);
     tape.registerInput(R);
     tape.registerInput(b);

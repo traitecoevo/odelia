@@ -276,8 +276,10 @@ inline Rcpp::List Solver_fit_impl(SEXP solver_xp,
     params_opt = std::vector<double>(params_vec.begin(), params_vec.end());
   }
   
-  // Compute gradient using unified function
-  auto [loss, gradient] = ode::compute_gradient(*solver, ic_opt, params_opt);
+  // Evaluate on a fresh copy each call so AD variables are reconstructed
+  // and tape registration cannot leak across repeated fit() invocations.
+  auto solver_copy = *solver;
+  auto [loss, gradient] = ode::compute_gradient(solver_copy, ic_opt, params_opt);
   
   return Rcpp::List::create(
     Rcpp::Named("loss") = loss,

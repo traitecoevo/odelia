@@ -2,6 +2,7 @@
 #define ODELIA_ODE_SOLVER_HPP_
 
 #include <odelia/ode_solver_internal.hpp>
+#include <algorithm>
 
 namespace odelia {
 namespace ode {
@@ -21,9 +22,15 @@ template <typename System>
 class Solver
 {
 public:
+  enum class TargetMode {
+    StateIndices,
+    TimeIndices
+  };
+
   Solver(System sys_, OdeControl control) : system(sys_), solver(system, control)
   {
     collect = true;
+    target_mode_ = TargetMode::StateIndices;
   }
 
   // TODO: solver.reset() will set time within the solver to zero.
@@ -140,6 +147,119 @@ public:
   void set_target(const std::vector<double>& times, 
                   const std::vector<std::vector<double>>& targets,
                   const std::vector<size_t>& obs_indices) {
+      if (times.empty()) {
+        util::stop("'times' must have at least one element");
+      }
+      if (obs_indices.empty()) {
+        util::stop("'obs_indices' must have at least one element");
+      }
+
+      const size_t n_state = system.ode_size();
+
+      const bool looks_like_state_indices =
+        std::all_of(obs_indices.begin(), obs_indices.end(), [n_state](size_t i) {
+          return i < n_state;
+        });
+
+      const bool looks_like_time_indices =
+        std::all_of(obs_indices.begin(), obs_indices.end(), [times](size_t i) {
+          return i < times.size();
+        });
+
+      const bool state_shape_ok =
+        targets.size() == times.size() &&
+        std::all_of(targets.begin(), targets.end(), [&obs_indices](const std::vector<double>& row) {
+          return row.size() == obs_indices.size();
+        });
+
+      const bool time_shape_ok =
+        targets.size() == obs_indices.size() &&
+        std::all_of(targets.begin(), targets.end(), [n_state](const std::vector<double>& row) {
+          return row.size() == n_state;
+        });
+
+      const bool time_indices_monotone =
+        std::is_sorted(obs_indices.begin(), obs_indices.end());
+
+      bool looks_like_full_time_sequence = (obs_indices.size() == times.size());
+      if (looks_like_full_time_sequence) {
+        for (size_t i = 0; i < obs_indices.size(); ++i) {
+          if (obs_indices[i] != i) {
+            looks_like_full_time_sequence = false;
+            break;
+          }
+        }
+      }
+
+      if (looks_like_state_indices && !looks_like_time_indices) {
+        target_mode_ = TargetMode::StateIndices;
+
+        if (targets.size() != times.size()) {
+          util::stop("For state-index targets, number of target rows must equal length(times)");
+        }
+
+        for (const auto& row : targets) {
+          if (row.size() != obs_indices.size()) {
+            util::stop("For state-index targets, each target row must have length(obs_indices)");
+          }
+        }
+      } else if (looks_like_time_indices && !looks_like_state_indices) {
+        target_mode_ = TargetMode::TimeIndices;
+
+        if (targets.size() != obs_indices.size()) {
+          util::stop("For time-index targets, number of target rows must equal length(obs_indices)");
+        }
+
+        for (const auto& row : targets) {
+          if (row.size() != n_state) {
+            util::stop("For time-index targets, each target row must have system state dimension columns");
+          }
+        }
+
+        for (size_t i = 1; i < obs_indices.size(); ++i) {
+          if (obs_indices[i] < obs_indices[i - 1]) {
+            util::stop("For time-index targets, obs_indices must be non-decreasing");
+          }
+        }
+      } else if (looks_like_state_indices && looks_like_time_indices) {
+        if (time_shape_ok && time_indices_monotone && (looks_like_full_time_sequence || !state_shape_ok)) {
+          target_mode_ = TargetMode::TimeIndices;
+        } else if (state_shape_ok) {
+          target_mode_ = TargetMode::StateIndices;
+        } else if (time_shape_ok && time_indices_monotone) {
+          target_mode_ = TargetMode::TimeIndices;
+        } else {
+          util::stop("Ambiguous 'obs_indices' mode: target dimensions do not match state-index or time-index expectations");
+        }
+
+        if (target_mode_ == TargetMode::StateIndices) {
+          if (targets.size() != times.size()) {
+            util::stop("For state-index targets, number of target rows must equal length(times)");
+          }
+          for (const auto& row : targets) {
+            if (row.size() != obs_indices.size()) {
+              util::stop("For state-index targets, each target row must have length(obs_indices)");
+            }
+          }
+        } else {
+          if (targets.size() != obs_indices.size()) {
+            util::stop("For time-index targets, number of target rows must equal length(obs_indices)");
+          }
+          for (const auto& row : targets) {
+            if (row.size() != n_state) {
+              util::stop("For time-index targets, each target row must have system state dimension columns");
+            }
+          }
+          for (size_t i = 1; i < obs_indices.size(); ++i) {
+            if (obs_indices[i] < obs_indices[i - 1]) {
+              util::stop("For time-index targets, obs_indices must be non-decreasing");
+            }
+          }
+        }
+      } else {
+        util::stop("'obs_indices' must be either valid state indices or valid time indices");
+      }
+
       fit_times_ = times;
       targets_ = targets;
       obs_indices_ = obs_indices;
@@ -156,27 +276,41 @@ std::vector<std::vector<typename System::value_type>> advance_target() {
       util::stop("First element in fit_times must be same as current time");
     }
     
-    // Vector to store states at observation times
     std::vector<std::vector<typename System::value_type>> observations;
-    observations.reserve(obs_indices_.size());
-    
-    // Track which observation we're looking for
-    size_t obs_idx = 0;
-    
-    // Check if initial time is an observation
-    if (obs_idx < obs_indices_.size() && obs_indices_[obs_idx] == 0) {
-      observations.push_back(state());
-      obs_idx++;
-    }
-    
-      // Step through times
+
+    if (target_mode_ == TargetMode::StateIndices) {
+      observations.reserve(fit_times_.size());
+
+      auto select_state = [this](const std::vector<typename System::value_type>& full_state) {
+        std::vector<typename System::value_type> selected;
+        selected.reserve(obs_indices_.size());
+        for (size_t idx : obs_indices_) {
+          selected.push_back(full_state[idx]);
+        }
+        return selected;
+      };
+
+      observations.push_back(select_state(state()));
+
       for (size_t i = 1; i < fit_times_.size(); ++i) {
-        solver.step_to(system, fit_times_[i]);
-      
-      // Check if this time index is an observation point
-      while (obs_idx < obs_indices_.size() && obs_indices_[obs_idx] == i) {
+        solver.advance_adaptive(system, fit_times_[i]);
+        observations.push_back(select_state(state()));
+      }
+    } else {
+      observations.reserve(obs_indices_.size());
+
+      size_t obs_idx = 0;
+      if (obs_idx < obs_indices_.size() && obs_indices_[obs_idx] == 0) {
         observations.push_back(state());
         obs_idx++;
+      }
+
+      for (size_t i = 1; i < fit_times_.size(); ++i) {
+        solver.advance_adaptive(system, fit_times_[i]);
+        while (obs_idx < obs_indices_.size() && obs_indices_[obs_idx] == i) {
+          observations.push_back(state());
+          obs_idx++;
+        }
       }
     }
     
@@ -199,6 +333,7 @@ private:
   std::vector<double> fit_times_;
   std::vector<size_t> obs_indices_;
   std::vector<std::vector<double>> targets_;
+  TargetMode target_mode_;
 
 };
 }

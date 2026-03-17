@@ -9,9 +9,19 @@
 #include <limits>
 #include <vector>
 #include <cstddef>
+#include <XAD/XAD.hpp>
 
 namespace odelia {
 namespace ode {
+
+template <typename T>
+inline double control_value(const T& x) {
+  return xad::value(x);
+}
+
+inline double control_value(double x) {
+  return x;
+}
 
 template <class System>
 class SolverInternal {
@@ -188,9 +198,18 @@ void SolverInternal<System>::step(System& system) {
 
     stepper.step(system, time, step_size, y, yerr, dydt_in, dydt_out);
        
+    std::vector<double> y_control(size);
+    std::vector<double> yerr_control(size);
+    std::vector<double> dydt_control(size);
+    for (size_t i = 0; i < size; ++i) {
+      y_control[i] = control_value(y[i]);
+      yerr_control[i] = control_value(yerr[i]);
+      dydt_control[i] = control_value(dydt_out[i]);
+    }
+
     const double step_size_next =
       control.adjust_step_size(size, stepper.order(), step_size,
-			       y, yerr, dydt_out);
+			       y_control, yerr_control, dydt_control);
 
     if (control.step_size_shrank()) {
         // GSL checks that the step size is actually decreased.

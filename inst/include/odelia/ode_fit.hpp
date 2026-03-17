@@ -5,6 +5,7 @@
 #include <odelia/ode_solver.hpp>
 #include <optional>
 #include <vector>
+#include <cmath>
 
 namespace odelia {
 namespace ode {
@@ -44,6 +45,11 @@ std::pair<double, std::vector<double>> compute_gradient(
     // Collect input pointers for gradient extraction
     std::vector<ad_type*> inputs;
 
+        constexpr double nonfinite_penalty = 1e100;
+        auto penalty_result = [&inputs, nonfinite_penalty]() {
+            return std::make_pair(nonfinite_penalty, std::vector<double>(inputs.size(), 0.0));
+        };
+
     auto& system = solver.get_system_ref();
 
     // Set params and register BEFORE newRecording (XAD requirement)
@@ -67,9 +73,23 @@ std::pair<double, std::vector<double>> compute_gradient(
     
     // Forward pass - returns states at observation times
     auto obs = solver.advance_target();
+
+        // If trajectory values become non-finite, return a large finite loss so
+        // optimizers can continue searching without aborting on NaN/Inf.
+        for (const auto& row : obs) {
+            for (const auto& value : row) {
+                if (!std::isfinite(xad::value(value))) {
+                    return penalty_result();
+                }
+            }
+        }
     
     // Compute loss
     ad_type loss = sum_of_squares(obs, solver.targets());
+
+        if (!std::isfinite(xad::value(loss))) {
+            return penalty_result();
+        }
     
     // Backpropagate
     tape.registerOutput(loss);
@@ -79,7 +99,11 @@ std::pair<double, std::vector<double>> compute_gradient(
     // Extract gradients from registered inputs
     std::vector<double> gradient(inputs.size());
     for (size_t i = 0; i < inputs.size(); ++i) {
-        gradient[i] = xad::derivative(*inputs[i]);
+                const double g = xad::derivative(*inputs[i]);
+                if (!std::isfinite(g)) {
+                    return penalty_result();
+                }
+                gradient[i] = g;
     }
     
     return {xad::value(loss), gradient};

@@ -7,6 +7,7 @@
 #include <vector>
 #include <cmath>
 #include <algorithm>
+#include <utility>
 
 using namespace odelia;
 
@@ -64,7 +65,8 @@ public:
   template <typename Iterator>
   Iterator set_initial_state(Iterator it, double t0_ = 0.0) {
     t0 = t0_;
-    T_LC_init = *it++;
+    T T_LC_init_new(*it++);
+    T_LC_init = std::move(T_LC_init_new);
     return it;
   }
 
@@ -72,7 +74,8 @@ public:
   template <typename Tape, typename Iterator>
   std::vector<T*> set_initial_state(Tape& tape, Iterator it, double t0_) {
     t0 = t0_;
-    T_LC_init = *it++;
+    T T_LC_init_new(*it++);
+    T_LC_init = std::move(T_LC_init_new);
     tape.registerInput(T_LC_init);
     return {&T_LC_init};
   }
@@ -80,20 +83,28 @@ public:
   // Set parameters - no tape registration
   template <typename Iterator>
   Iterator set_params(Iterator it) {
-    k_H = *it++;
-    g_tr_max = *it++;
-    m_tr = *it++;
-    T_tr_mid = *it++;
+    T k_H_new(*it++);
+    T g_tr_max_new(*it++);
+    T m_tr_new(*it++);
+    T T_tr_mid_new(*it++);
+    k_H = std::move(k_H_new);
+    g_tr_max = std::move(g_tr_max_new);
+    m_tr = std::move(m_tr_new);
+    T_tr_mid = std::move(T_tr_mid_new);
     return it;
   }
 
   // Set parameters and register on tape for AD gradient computation
   template <typename Tape, typename Iterator>
   std::vector<T*> set_params(Tape& tape, Iterator it) {
-    k_H = *it++;
-    g_tr_max = *it++;
-    m_tr = *it++;
-    T_tr_mid = *it++;
+    T k_H_new(*it++);
+    T g_tr_max_new(*it++);
+    T m_tr_new(*it++);
+    T T_tr_mid_new(*it++);
+    k_H = std::move(k_H_new);
+    g_tr_max = std::move(g_tr_max_new);
+    m_tr = std::move(m_tr_new);
+    T_tr_mid = std::move(T_tr_mid_new);
     tape.registerInput(k_H);
     tape.registerInput(g_tr_max);
     tape.registerInput(m_tr);
