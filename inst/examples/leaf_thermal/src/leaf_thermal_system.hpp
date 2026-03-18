@@ -41,7 +41,7 @@ public:
 
   void initialize_drivers(const drivers::Drivers &drv) {
     drivers = drv;
-    temperature_fn = drv.get_function_ptr("temperature");
+    temperature_fn = drivers.get_function_ptr("temperature");
     if (!temperature_fn)
       throw std::runtime_error("Missing driver 'temperature' for LeafThermalSystem");
   }
