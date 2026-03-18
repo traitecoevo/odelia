@@ -1,10 +1,8 @@
 testthat::test_that("leaf thermal AD setup compiles", {
-  
   ensure_leaf_thermal_interfaces(rebuild = FALSE)
 })
 
 testthat::test_that("leaf thermal set_initial_state and reset work", {
-  
   ensure_leaf_thermal_interfaces(rebuild = FALSE)
 
   drv <- Drivers$new()
@@ -21,7 +19,6 @@ testthat::test_that("leaf thermal set_initial_state and reset work", {
 })
 
 testthat::test_that("leaf thermal AD solver can be created", {
-  
   ensure_leaf_thermal_interfaces(rebuild = FALSE)
 
   drv <- Drivers$new()
@@ -38,7 +35,6 @@ testthat::test_that("leaf thermal AD solver can be created", {
 })
 
 testthat::test_that("leaf thermal AD set_target works", {
-  
   ensure_leaf_thermal_interfaces(rebuild = FALSE)
 
   drv <- Drivers$new()
@@ -53,7 +49,7 @@ testthat::test_that("leaf thermal AD set_target works", {
 
   times <- c(0.0, 1.0, 2.0)
   target <- matrix(c(20.0, 21.0, 22.0), nrow = 3, ncol = 1)
-  obs_indices <- as.integer(1)
+  obs_indices <- seq_along(times)
 
   expect_silent(
     LeafSolver_set_target(solver_ad, times, target, obs_indices, active = TRUE)
@@ -61,7 +57,6 @@ testthat::test_that("leaf thermal AD set_target works", {
 })
 
 testthat::test_that("leaf thermal AD fit computes finite outputs", {
-  
   ensure_leaf_thermal_interfaces(rebuild = FALSE)
 
   drv <- Drivers$new()
@@ -76,7 +71,7 @@ testthat::test_that("leaf thermal AD fit computes finite outputs", {
 
   times <- c(0.0, 1.0, 2.0, 3.0)
   target <- matrix(c(20.0, 21.0, 22.0, 23.0), nrow = 4, ncol = 1)
-  obs_indices <- as.integer(1)
+  obs_indices <- seq_along(times)
 
   LeafSolver_set_target(solver_ad, times, target, obs_indices, active = TRUE)
 
@@ -98,7 +93,6 @@ testthat::test_that("leaf thermal AD fit computes finite outputs", {
 })
 
 testthat::test_that("leaf thermal AD parameter gradients are NON-ZERO", {
-  
   ensure_leaf_thermal_interfaces(rebuild = FALSE)
 
   drv_true <- Drivers$new()
@@ -110,11 +104,11 @@ testthat::test_that("leaf thermal AD parameter gradients are NON-ZERO", {
 
   ctrl_true <- OdeControl$new()
   solver_true <- LeafSolver_new(sys_true$ptr, ctrl_true$ptr, drv_true$ptr, active = FALSE)
-  LeafSolver_advance_adaptive(solver_true, seq(0, 20, by=1), active = FALSE)
+  LeafSolver_advance_adaptive(solver_true, seq(0, 20, by = 1), active = FALSE)
   hist_true <- LeafSolver_get_history(solver_true, active = FALSE)
 
   target_times <- hist_true[[1]]
-  target_vals <- matrix(hist_true[[2]], ncol=1)
+  target_vals <- matrix(hist_true[[2]], ncol = 1)
 
   drv_fit <- Drivers$new()
   drv_fit$set_constant("temperature", 30.0)
@@ -125,7 +119,7 @@ testthat::test_that("leaf thermal AD parameter gradients are NON-ZERO", {
 
   ctrl_fit <- OdeControl$new()
   solver_fit_ad <- LeafSolver_new(sys_fit$ptr, ctrl_fit$ptr, drv_fit$ptr, active = TRUE)
-  LeafSolver_set_target(solver_fit_ad, target_times, target_vals, as.integer(1), active = TRUE)
+  LeafSolver_set_target(solver_fit_ad, target_times, target_vals, seq_along(target_times), active = TRUE)
 
   params_vec <- c(0.5, 1.0, 0.5, 30.0)
   result <- LeafSolver_fit(solver_fit_ad, ic = NULL, params = params_vec)
@@ -133,13 +127,13 @@ testthat::test_that("leaf thermal AD parameter gradients are NON-ZERO", {
   expect_true(is.finite(result$loss))
   expect_true(all(is.finite(result$gradient)))
   expect_equal(length(result$gradient), 4)
-  
-  expect_true(any(result$gradient != 0), 
-    info = "Parameter gradients are all zero - AD tape not capturing parameter dependencies!")
+
+  expect_true(any(result$gradient != 0),
+    info = "Parameter gradients are all zero - AD tape not capturing parameter dependencies!"
+  )
 })
 
 testthat::test_that("leaf thermal AD IC gradients are NON-ZERO", {
-  
   ensure_leaf_thermal_interfaces(rebuild = FALSE)
 
   drv <- Drivers$new()
@@ -151,17 +145,17 @@ testthat::test_that("leaf thermal AD IC gradients are NON-ZERO", {
 
   ctrl <- OdeControl$new()
   solver_true <- LeafSolver_new(sys_true$ptr, ctrl$ptr, drv$ptr, active = FALSE)
-  LeafSolver_advance_adaptive(solver_true, seq(0, 10, by=0.5), active = FALSE)
+  LeafSolver_advance_adaptive(solver_true, seq(0, 10, by = 0.5), active = FALSE)
   hist_true <- LeafSolver_get_history(solver_true, active = FALSE)
 
   target_times <- hist_true[[1]]
-  target_vals <- matrix(hist_true[[2]], ncol=1)
+  target_vals <- matrix(hist_true[[2]], ncol = 1)
 
   sys_fit <- LeafThermalSystem$new(pars, drv)
   LeafThermalSystem_set_initial_state(sys_fit$ptr, 20.0, 0.0)
 
   solver_fit_ad <- LeafSolver_new(sys_fit$ptr, ctrl$ptr, drv$ptr, active = TRUE)
-  LeafSolver_set_target(solver_fit_ad, target_times, target_vals, as.integer(1), active = TRUE)
+  LeafSolver_set_target(solver_fit_ad, target_times, target_vals, seq_along(target_times), active = TRUE)
 
   wrong_ic <- 25.0
   result <- LeafSolver_fit(solver_fit_ad, ic = wrong_ic, params = NULL)
@@ -169,7 +163,8 @@ testthat::test_that("leaf thermal AD IC gradients are NON-ZERO", {
   expect_true(is.finite(result$loss))
   expect_true(is.finite(result$gradient))
   expect_equal(length(result$gradient), 1)
-  
+
   expect_true(result$gradient != 0,
-    info = "IC gradient is zero - AD tape not capturing IC dependencies!")
+    info = "IC gradient is zero - AD tape not capturing IC dependencies!"
+  )
 })
