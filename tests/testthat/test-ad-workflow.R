@@ -62,12 +62,12 @@ test_that("AD workflow optimizes Lorenz parameters", {
 
   # Verify optimized parameters reproduce the target trajectory
   lz$set_params(res$par)
-  runner$reset()
-  runner$advance_adaptive(times)
+  runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
+  runner$advance_fixed(times)
   optimized_hist <- runner$history()
 
   expect_equal(nrow(optimized_hist), nrow(hist))
-  expect_equal(optimized_hist$x, hist$x, tolerance = 1e-4)
-  expect_equal(optimized_hist$y, hist$y, tolerance = 1e-4)
-  expect_equal(optimized_hist$z, hist$z, tolerance = 1e-4)
+  expect_equal(optimized_hist$x, hist$x)
+  expect_equal(optimized_hist$y, hist$y)
+  expect_equal(optimized_hist$z, hist$z)
 })
