@@ -107,16 +107,16 @@ SEXP Solver_new(SEXP system_xp, SEXP control_xp, bool active = false) {
     sys->ode_initial_state(initial_state.begin());
     auto t0 = sys->ode_t0();
     
-    auto* sys_active = new ActiveSystemType(params[0], params[1], params[2]);
-    sys_active->set_initial_state(initial_state.begin(), t0);
+    ActiveSystemType sys_active(params[0], params[1], params[2]);
+    sys_active.set_initial_state(initial_state.begin(), t0);
     
-    auto* solver = new ode::Solver<ActiveSystemType>(*sys_active, *ctrl);
+    auto* solver = new ode::Solver<ActiveSystemType>(sys_active, *ctrl);
     
     return Rcpp::XPtr<ode::Solver<ActiveSystemType>>(solver, true);
   } else {
     // Create regular solver
-    auto* sys_copy = new SystemType(*sys);
-    auto* solver = new ode::Solver<SystemType>(*sys_copy, *ctrl);
+    SystemType sys_copy(*sys);
+    auto* solver = new ode::Solver<SystemType>(sys_copy, *ctrl);
     
     return Rcpp::XPtr<ode::Solver<SystemType>>(solver, true);
   }
