@@ -2,6 +2,7 @@
 #define ODELIA_ODE_SOLVER_HPP_
 
 #include <odelia/ode_solver_internal.hpp>
+#include <XAD/Tape.hpp>
 
 namespace odelia {
 namespace ode {
@@ -24,6 +25,13 @@ public:
   Solver(System sys_, OdeControl control) : system(sys_), solver(system, control)
   {
     collect = true;
+  }
+
+  // destructor to delete XAD tape
+  ~Solver() {
+    if (tape) {
+      delete tape;
+    }
   }
 
   // TODO: solver.reset() will set time within the solver to zero.
@@ -185,6 +193,9 @@ std::vector<std::vector<typename System::value_type>> advance_target() {
   const std::vector<double>& fit_times() const { return fit_times_; }
   const std::vector<std::vector<double>>& targets() const { return targets_; }
   const std::vector<size_t>& obs_indices() const { return obs_indices_; }
+
+  // Persistent tape for AD gradient computation
+  xad::Tape<double>* tape = nullptr;
 
   // Should we record history at every step?
   // TODO: should this be part of ode_solver?

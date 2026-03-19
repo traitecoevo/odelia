@@ -37,52 +37,61 @@ std::pair<double, std::vector<double>> compute_gradient(
     if (!ic && !params) {
         util::stop("Must provide at least one of 'ic' or 'params'");
     }
-    
-    // Create tape
-    ad::tape_type tape;
 
-    // Collect input pointers for gradient extraction
-    std::vector<ad_type*> inputs;
-
-    auto& system = solver.get_system_ref();
-
-    // Set params and register BEFORE newRecording (XAD requirement)
-    if (params) {
-        auto refs = system.set_params(tape, params->begin());
-        inputs.insert(inputs.end(), refs.begin(), refs.end());
+    // Reuse tape across calls to avoid invalidating slots
+    if (!solver.tape) {
+        solver.tape = new ad::tape_type(false); // create without activating
     }
+    solver.tape->activate();
 
-    // Set initial conditions and register BEFORE newRecording (XAD requirement)
-    if (ic) {
-        auto refs = system.set_initial_state(tape, ic->begin(), solver.fit_times()[0]);
-        inputs.insert(inputs.end(), refs.begin(), refs.end());
+    try {      
+        // Collect input pointers for gradient extraction
+        std::vector<ad_type*> inputs;
+
+        // Configure the System
+        auto& system = solver.get_system_ref();
+
+        if (params) {
+            auto refs = system.set_params(*solver.tape, params->begin());
+            inputs.insert(inputs.end(), refs.begin(), refs.end());
+        }
+
+        if (ic) {
+            auto refs = system.set_initial_state(*solver.tape, ic->begin(), solver.fit_times()[0]);
+            inputs.insert(inputs.end(), refs.begin(), refs.end());
+        }
+
+        // Start recording operations on AD tape
+        solver.tape->newRecording();
+
+        // Reset system to propagate initial conditions into ODE buffers
+        solver.reset();
+        
+        // Forward pass - returns states at observation times
+        auto obs = solver.advance_target();
+        
+        // Compute loss
+        ad_type loss = sum_of_squares(obs, solver.targets());
+        
+        // Backpropagate
+        solver.tape->registerOutput(loss);
+        xad::derivative(loss) = 1.0;
+        solver.tape->computeAdjoints();
+        
+        // Extract gradients from registered inputs
+        std::vector<double> gradient(inputs.size());
+        for (size_t i = 0; i < inputs.size(); ++i) {
+            gradient[i] = xad::derivative(*inputs[i]);
+        }
+        
+        // Stop recording
+        solver.tape->deactivate();
+        return {xad::value(loss), gradient};
+        
+    } catch (const std::exception& e) {
+        solver.tape->deactivate();
+        throw;
     }
-
-    // Start recording AFTER registering inputs (XAD requirement)
-    tape.newRecording();
-
-    // Reset AFTER recording starts so the copy operation is recorded as a dependency
-    // This ensures compute_rates() in reset() uses the registered AD types
-    solver.reset();
-    
-    // Forward pass - returns states at observation times
-    auto obs = solver.advance_target();
-    
-    // Compute loss
-    ad_type loss = sum_of_squares(obs, solver.targets());
-    
-    // Backpropagate
-    tape.registerOutput(loss);
-    xad::derivative(loss) = 1.0;
-    tape.computeAdjoints();
-    
-    // Extract gradients from registered inputs
-    std::vector<double> gradient(inputs.size());
-    for (size_t i = 0; i < inputs.size(); ++i) {
-        gradient[i] = xad::derivative(*inputs[i]);
-    }
-    
-    return {xad::value(loss), gradient};
 }
 
 } // namespace ode
