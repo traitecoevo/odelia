@@ -26,11 +26,14 @@ library(odelia)
 library(tidyverse)
 setwd(here::here("inst/examples/leaf_thermal"))
 
-# Compile C++ code: use rebuild = TRUE to force recompilation, verbose=TRUE to see compiler output
+odelia_load_dll()
+
+# Compile the leaf-thermal interface (model-specific exported functions).
 Rcpp::sourceCpp("src/leaf_thermal_interface.cpp",
-  verbose = FALSE, rebuild = FALSE
+  verbose = TRUE, rebuild = TRUE
 )
-# Load R interface
+
+# Load R6 wrappers after C++ symbols exist in the R session.
 source("R/leaf_thermal_interface.R")
 ```
 
@@ -84,7 +87,7 @@ lz$initialize_drivers(drivers)
 
 # Create ODE solver
 ctrl <- OdeControl$new()
-runner <- LeafThermalSolver$new(lz$ptr, ctrl$ptr)
+runner <- LeafThermalSolver$new(lz$ptr, ctrl$ptr, drivers$ptr)
 
 # Solve the system over time
 # times we want output at
@@ -127,7 +130,7 @@ simulate_strategy <- function(strategy_name) {
   pars <- strategies[[strategy_name]]
   lz <- LeafThermalSystem$new(pars, drivers)
   lz$set_state(c(25), 0)
-  runner <- LeafThermalSolver$new(lz$ptr, ctrl$ptr)
+  runner <- LeafThermalSolver$new(lz$ptr, ctrl$ptr, drivers$ptr)
   runner$advance_adaptive(times)
 
   runner$history() |>
@@ -167,7 +170,7 @@ drivers2$set_variable("temperature", time_driver, t_air)
 
 # Run simulation with new drivers
 lz2 <- LeafThermalSystem$new(pars, drivers2)
-runner2 <- LeafThermalSolver$new(lz2$ptr, ctrl$ptr)
+runner2 <- LeafThermalSolver$new(lz2$ptr, ctrl$ptr, drivers2$ptr)
 runner2$advance_adaptive(times) 
 out2 <- runner2$history() |>
   mutate(time = times, strategy = "different drivers")

@@ -2,6 +2,8 @@
 #ifndef ODELIA_UTIL_HPP_
 #define ODELIA_UTIL_HPP_
 
+#include <cstdint>
+#include <cstring>
 #include <stddef.h> // size_t
 #include <RcppCommon.h> // as/wrap/SEXP
 
@@ -24,11 +26,11 @@ inline std::vector<index> index_vector(const std::vector<size_t> x) {
   return ret;
 }
 
-bool is_finite(double x) {
+inline bool is_finite(double x) {
   return R_FINITE(x);
 }
 
-void check_length(size_t received, size_t expected)
+inline void check_length(size_t received, size_t expected)
 {
   if (expected != received)
   {
@@ -39,18 +41,14 @@ void check_length(size_t received, size_t expected)
 }
 
 // Use this to be explicit when a potentially unsafe floating point
-// equality test is being made.  I've disabled the clang warnings
-// around this use, while other places warnings will still occur.
+// equality test is being made.
 inline
 bool identical(double a, double b) {
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wfloat-equal"
-#endif
-  return a == b;
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
+  std::uint64_t ua = 0;
+  std::uint64_t ub = 0;
+  std::memcpy(&ua, &a, sizeof(double));
+  std::memcpy(&ub, &b, sizeof(double));
+  return ua == ub;
 }
 
 // http://en.cppreference.com/w/cpp/types/numeric_limits/epsilon
@@ -116,9 +114,9 @@ bool is_decreasing(ForwardIterator first, ForwardIterator last) {
   return true;
 }
 
-void stop(const std::string &msg) { Rcpp::stop(msg); }
+inline void stop(const std::string &msg) { Rcpp::stop(msg); }
 
-void warning(const std::string &msg) { Rcpp::warning(msg); }
+inline void warning(const std::string &msg) { Rcpp::warning(msg); }
 
 template<typename T>
 std::string to_string(T x) {

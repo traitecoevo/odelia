@@ -1,11 +1,5 @@
-library(testthat)
-library(odelia)
 
 testthat::test_that("lorenz system runs and produces expected results", {
-  testthat::skip_on_cran()
-  
-  # set working directory to example folder
-  withr::local_dir(here::here("inst/examples/lorenz"))
 
   # function to compute Lorenz derivatives in R for comparison
   derivs_lorenz <- function(y, pars) {
@@ -24,14 +18,6 @@ testthat::test_that("lorenz system runs and produces expected results", {
   }
   
   # check compilation
-  pkg_include <- here::here("inst/include")
-  withr::local_envvar(PKG_CPPFLAGS = paste0("-I", pkg_include))
-
-  expect_silent(
-    Rcpp::sourceCpp("src/lorenz_interface.cpp", rebuild = FALSE, verbose = FALSE)
-  )
-  expect_silent( source("R/lorenz_interface.R") )
-
   # comparison data
   pars <- c(sigma=10.0,
             R=28.0,
@@ -51,7 +37,7 @@ testthat::test_that("lorenz system runs and produces expected results", {
     lz$rates()
 
     # Set up ODE solver
-    expect_silent(ctrl <- OdeControl$new())
+    expect_silent(ctrl <- odelia:::OdeControl$new())
 
     # Advance with adaptive time stepping to time 10000
     runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
@@ -103,7 +89,7 @@ testthat::test_that("lorenz system runs and produces expected results", {
   # Todo: reset history and re-run to check identical output
 
   ## Run with different tolerance, should be different results
-  ctrl2 <- OdeControl$new()
+  ctrl2 <- odelia:::OdeControl$new()
   ctrl2$set_tol_rel(1e-12)
   expect_silent({
     times <- out$time
@@ -115,4 +101,66 @@ testthat::test_that("lorenz system runs and produces expected results", {
 
   expect_false(all(out[,-1] == out2[,-1]))
 
+})
+
+testthat::test_that("lorenz AD IC gradients are NON-ZERO", {
+
+  lz_true <- LorenzSystem$new(10, 28, 8/3)
+  lz_true$set_initial_state(c(1, 1, 1), 0)
+
+  ctrl <- OdeControl$new()
+  runner_true <- Lorenz_Solver$new(lz_true$ptr, ctrl$ptr, active = FALSE)
+  runner_true$advance_adaptive(seq(0, 5, by=0.25))
+  hist_true <- runner_true$history()
+
+  target_times <- hist_true$time
+  target_vals <- as.matrix(hist_true[, c("x", "y", "z")])
+
+  lz_fit <- LorenzSystem$new(10, 28, 8/3)
+  lz_fit$set_initial_state(c(1, 1, 1), 0)
+
+  ad_runner <- Lorenz_Solver$new(lz_fit$ptr, ctrl$ptr, active = TRUE)
+  ad_runner$set_target(target_times, target_vals, c(1L, 2L, 3L))
+
+  wrong_ic <- c(2, 2, 2)
+  result <- ad_runner$fit(ic = wrong_ic, params = NULL)
+
+  expect_true(is.finite(result$loss))
+  expect_true(all(is.finite(result$gradient)))
+  expect_equal(length(result$gradient), 3)
+  
+  expect_true(any(result$gradient != 0),
+    info = "IC gradients are all zero - AD tape not capturing IC dependencies!")
+})
+testthat::test_that("lorenz AD parameter gradients are NON-ZERO", {
+
+  true_pars <- c(sigma = 10.0, R = 28.0, b = 8.0/3.0)
+  
+  lz_true <- LorenzSystem$new(true_pars[1], true_pars[2], true_pars[3])
+  lz_true$set_initial_state(c(1, 1, 1), 0)
+
+  ctrl <- OdeControl$new()
+  runner_true <- Lorenz_Solver$new(lz_true$ptr, ctrl$ptr, active = FALSE)
+  runner_true$advance_adaptive(seq(0, 10, by=0.5))
+  hist_true <- runner_true$history()
+
+  target_times <- hist_true$time
+  target_vals <- as.matrix(hist_true[, c("x", "y", "z")])
+
+  wrong_pars <- c(sigma = 5.0, R = 20.0, b = 2.0)
+  lz_fit <- LorenzSystem$new(wrong_pars[1], wrong_pars[2], wrong_pars[3])
+  lz_fit$set_initial_state(c(1, 1, 1), 0)
+  lz_fit$set_params(wrong_pars)
+
+  ad_runner <- Lorenz_Solver$new(lz_fit$ptr, ctrl$ptr, active = TRUE)
+  ad_runner$set_target(target_times, target_vals, c(1L, 2L, 3L))
+
+  result <- ad_runner$fit(ic = NULL, params = wrong_pars)
+
+  expect_true(is.finite(result$loss))
+  expect_true(all(is.finite(result$gradient)))
+  expect_equal(length(result$gradient), 3)
+  
+  expect_true(any(result$gradient != 0),
+    info = "Lorenz parameter gradients should be non-zero (this is the only working AD gradient!)")
 })
