@@ -14,3 +14,5 @@
 ^check$
 ^gh-pages$
 ^LICENSE\.md$
+^examples$
+^docs$
