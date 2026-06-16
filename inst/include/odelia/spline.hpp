@@ -226,6 +226,14 @@ namespace spline {
       // interpolation parameters
       // f(x) = a*(x-x_i)^3 + b*(x-x_i)^2 + c*(x-x_i) + y_i
       std::vector<double> m_a, m_b, m_c, m_d;
+      // Fast O(1) index lookup for (near-)equidistant x-grids. When the knots
+      // are evenly spaced the std::lower_bound binary search in operator() can
+      // be replaced by direct arithmetic, which profiling showed to be a large
+      // share of runtime in spline-heavy workloads. See traitecoevo/odelia#21
+      // (and traitecoevo/plant#435).
+      bool m_uniform = false;  // set in set_points() if the x-grid is equidistant
+      double m_x0 = 0.0;       // first knot (m_x[0])
+      double m_inv_dx = 0.0;   // 1 / mean knot spacing
 
    public:
       void set_points(const std::vector<double> &x,
@@ -293,15 +301,65 @@ namespace spline {
          // m_b[n-1] is determined by the boundary condition
          m_a[n - 1] = 0.0;
          m_c[n - 1] = 3.0 * m_a[n - 2] * h * h + 2.0 * m_b[n - 2] * h + m_c[n - 2]; // = f'_{n-2}(x_{n-1})
+
+         // Detect a (near-)equidistant x-grid so operator() can skip the
+         // std::lower_bound binary search. (traitecoevo/odelia#21)
+         m_uniform = false;
+         if (n >= 2)
+         {
+            const double dx = (m_x[n - 1] - m_x[0]) / (n - 1);
+            if (dx > 0.0)
+            {
+               const double tol = 1e-6 * dx;
+               bool uniform = true;
+               for (int i = 0; i < n - 1; i++)
+               {
+                  double gap = (m_x[i + 1] - m_x[i]) - dx;
+                  if (gap < 0.0)
+                     gap = -gap;
+                  if (gap > tol)
+                  {
+                     uniform = false;
+                     break;
+                  }
+               }
+               m_uniform = uniform;
+               m_x0 = m_x[0];
+               m_inv_dx = 1.0 / dx;
+            }
+         }
       }
       
       double operator()(double x) const
       {
          size_t n = m_x.size();
          // find the closest point m_x[idx] < x, idx=0 even if x<m_x[0]
-         std::vector<double>::const_iterator it;
-         it = std::lower_bound(m_x.begin(), m_x.end(), x);
-         int idx = std::max(int(it - m_x.begin()) - 1, 0);
+         int idx;
+         if (m_uniform)
+         {
+            // O(1) index from the uniform spacing, then nudge by at most a step
+            // or two so the result is bit-identical to std::lower_bound (covers
+            // knot rounding from grid construction and the exact-knot edge
+            // case). (traitecoevo/odelia#21)
+            idx = static_cast<int>((x - m_x0) * m_inv_dx);
+            // clamp to [0, n-1]: idx == n-1 is the right-extrapolation case,
+            // where lower_bound() also returns n-1 (so h = x - m_x[n-1]).
+            const int last = static_cast<int>(n) - 1;
+            if (idx < 0)
+               idx = 0;
+            else if (idx > last)
+               idx = last;
+            while (idx > 0 && m_x[idx] >= x)
+               --idx; // ensure m_x[idx] < x
+            while (idx < last && m_x[idx + 1] < x)
+               ++idx; // ensure x <= m_x[idx+1] (or idx == n-1 for right extrap.)
+         }
+         else
+         {
+            std::vector<double>::const_iterator it;
+            it = std::lower_bound(m_x.begin(), m_x.end(), x);
+            idx = std::max(int(it - m_x.begin()) - 1, 0);
+         }
 
          double h = x - m_x[idx];
          double interpol;
