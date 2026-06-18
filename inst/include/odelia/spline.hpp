@@ -356,9 +356,24 @@ namespace spline {
          }
          else
          {
-            std::vector<double>::const_iterator it;
-            it = std::lower_bound(m_x.begin(), m_x.end(), x);
-            idx = std::max(int(it - m_x.begin()) - 1, 0);
+            // Non-uniform grid: seed idx with an O(1) proportional guess based
+            // on the average spacing, then nudge to the exact segment. The
+            // nudge loops converge to the same idx as std::lower_bound
+            // (m_x[idx] < x <= m_x[idx+1], clamped to [0, last]), so this is
+            // bit-identical; on a smoothly graded grid the guess lands within a
+            // step or two, replacing the O(log n) binary search with
+            // O(1)-amortised stepping. This matters when many ordered queries
+            // hit the same spline. (traitecoevo/odelia#21)
+            const int last = static_cast<int>(n) - 1;
+            idx = static_cast<int>((x - m_x[0]) * (last / (m_x[last] - m_x[0])));
+            if (idx < 0)
+               idx = 0;
+            else if (idx > last)
+               idx = last;
+            while (idx > 0 && m_x[idx] >= x)
+               --idx; // ensure m_x[idx] < x
+            while (idx < last && m_x[idx + 1] < x)
+               ++idx; // ensure x <= m_x[idx+1] (or idx == n-1 for right extrap.)
          }
 
          double h = x - m_x[idx];
