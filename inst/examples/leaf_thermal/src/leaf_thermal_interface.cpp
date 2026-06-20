@@ -222,6 +222,11 @@ void LeafSolver_advance_fixed(SEXP solver_xp, Rcpp::NumericVector times, bool ac
 }
 
 // [[Rcpp::export]]
+void LeafSolver_advance_euler(SEXP solver_xp, Rcpp::NumericVector times, bool active = false) {
+  odelia::solver::Solver_advance_euler_impl<SystemType, ActiveSystemType>(solver_xp, times, active);
+}
+
+// [[Rcpp::export]]
 void LeafSolver_step(SEXP solver_xp, bool active = false) {
   odelia::solver::Solver_step_impl<SystemType, ActiveSystemType>(solver_xp, active);
 }

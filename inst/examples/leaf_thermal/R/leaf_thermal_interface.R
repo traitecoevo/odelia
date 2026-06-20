@@ -26,6 +26,10 @@ LeafThermalSolver <- R6::R6Class(
       LeafSolver_advance_fixed(self$ptr, times)
       invisible(self)
     },
+    advance_euler = function(times) {
+      LeafSolver_advance_euler(self$ptr, times)
+      invisible(self)
+    },
     step = function() {
       LeafSolver_step(self$ptr)
       invisible(self)

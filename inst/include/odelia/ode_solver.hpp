@@ -125,6 +125,36 @@ public:
     }
   }
 
+  // Take a series of plain forward-Euler steps over the supplied grid. One
+  // derivative evaluation per step, no error control (cf. advance_fixed, which
+  // drives the full RKCK stepper). Collects history at each supplied time.
+  void advance_euler(std::vector<double> times)
+  {
+    if (times.empty())
+    {
+      util::stop("'times' must be vector of at least length 1");
+    }
+    std::vector<double>::const_iterator t = times.begin();
+    if (!util::identical(*t++, time()))
+    {
+      util::stop("First element in 'times' must be same as current time");
+    }
+
+    if (collect)
+    {
+      history.push_back(system);
+    }
+
+    while (t != times.end())
+    {
+      solver.step_euler(system, *t++);
+      if (collect)
+      {
+        history.push_back(system);
+      }
+    }
+  }
+
   void step()
   {
     solver.step(system);

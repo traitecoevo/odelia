@@ -30,9 +30,11 @@ public:
 
   void advance_adaptive(System &system, double time_max_);
   void advance_fixed(System& system, const std::vector<double>& times);
+  void advance_euler(System& system, const std::vector<double>& times);
 
   void step(System& system);
   void step_to(System& system, double time_max_);
+  void step_euler(System& system, double time_max_);
 
   void set_time_max(double time_max_);
 
@@ -142,6 +144,49 @@ void SolverInternal<System>::advance_fixed(System& system,
   while (t != times.end()) {
     step_to(system, *t++);
   }
+}
+
+// Plain forward (explicit) Euler integration over a supplied grid
+// {t_0, t_1, ...}.  Unlike advance_fixed (which still drives the full multi-stage
+// RKCK stepper at each interval), this does ONE derivative evaluation per
+// interval: derivatives at the current state, then y <- y + h * dydt, advancing
+// the time exactly to each grid point.  The `Step` (RKCK) machinery is bypassed
+// entirely, so there is no error estimate and no step-size control.  Used to run
+// systems the way fixed-step DGVMs do (e.g. a daily step).
+template <class System>
+void SolverInternal<System>::advance_euler(System& system,
+                                   const std::vector<double>& times) {
+  if (times.empty()) {
+    util::stop("'times' must be vector of at least length 1");
+  }
+  std::vector<double>::const_iterator t = times.begin();
+  if (!util::identical(*t++, time)) {
+    util::stop("First element in 'times' must be same as current time");
+  }
+  while (t != times.end()) {
+    step_euler(system, *t++);
+  }
+}
+
+// A single forward-Euler step from the current time up to time_max_.  One
+// derivative evaluation; no error estimate.  Leaves the system synchronised with
+// the new state (like step_to, whose final RK derivs settles the system at y) so
+// that collected history / record_step reflect the post-step values.
+template <class System>
+void SolverInternal<System>::step_euler(System& system, double time_max_) {
+  set_time_max(time_max_);
+  const double h = time_max - time;
+  // Derivatives at the current state (also sets the system to y at this time).
+  ode::derivs(system, y, dydt_in, time);
+  const size_t size = y.size();
+  for (size_t i = 0; i < size; ++i) {
+    y[i] += h * dydt_in[i];
+  }
+  time = time_max;
+  // Settle the system onto the new state at the new time.
+  ode::internal::set_ode_state(system, y, time);
+  prev_times.push_back(time);
+  dydt_in_is_clean = false;
 }
 
 // After `stepper.step()`, the GSL checks to see if the step succeeded
