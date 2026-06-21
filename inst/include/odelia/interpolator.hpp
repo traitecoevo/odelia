@@ -3,6 +3,7 @@
 #define ODELIA_INTERPOLATOR_HPP
 
 #include <vector>
+#include <limits>
 #include <odelia/spline.hpp>
 #include <odelia/ode_util.hpp>
 
@@ -85,11 +86,11 @@ public:
   // always find they do.  This is the same principle as R's
   // range(numeric(0)) -> c(Inf, -Inf)
   double min() const {
-    return size() > 0 ? x.front() : R_PosInf;
+    return size() > 0 ? x.front() : std::numeric_limits<double>::infinity();
   }
 
   double max() const {
-    return size() > 0 ? x.back() : R_NegInf;
+    return size() > 0 ? x.back() : -std::numeric_limits<double>::infinity();
   }
 
   void set_extrapolate(bool e) {
