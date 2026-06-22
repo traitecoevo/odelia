@@ -144,7 +144,6 @@ An ODE system in odelia consists of:
 - **An R wrapper** (`R/*-interface.R`, optional) — R6 classes providing a friendlier API around the external pointers.
 
 - **A demo script** (`examples/*/demo.R`) — Runnable demonstration.
-
 ### Testing variants
 
 Use the Makefile targets below depending on the level of test coverage you want.
