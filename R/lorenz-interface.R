@@ -66,7 +66,6 @@ Lorenz_Solver <- R6::R6Class(
       Solver_advance_euler(self$ptr, times, self$active)
       invisible(self)
     },
-
     #' @description Advance solver by one step.
     step = function() {
       Solver_step(self$ptr, self$active)

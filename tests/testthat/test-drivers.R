@@ -78,3 +78,34 @@ test_that("Extrinsic Drivers", {
   yy_C <- drv$evaluate_range("sine", xx_cmp)
   expect_equal(yy_C, sin(xx_cmp), tolerance = 1e-6)
 })
+
+test_that("Non-uniform spline grid evaluates correctly", {
+  # The grids above (1:10, seq(...)) are equidistant and hit the O(1) uniform
+  # fast path. This case uses quadratically-spaced knots (dense near 0, sparse
+  # near 10; gaps vary ~70x) so the non-uniform index branch is exercised. The
+  # proportional index guess assumes uniform spacing, so on this grid it lands
+  # many segments away from the true one, stress-testing the nudge correction.
+  drv <- Drivers$new()
+  x <- 10 * (seq(0, 1, length.out = 40))^2
+  y <- sin(x)
+  expect_silent(drv$set_variable("nu", x, y))
+
+  # A cubic spline interpolates its control points exactly, so evaluating at the
+  # knots must return y. This fails if the segment index is wrong at any knot,
+  # including the first/last (extrapolation-edge) knots.
+  for (i in seq_along(x)) {
+    expect_equal(drv$evaluate("nu", x[i]), y[i])
+  }
+
+  # Between knots it should still approximate the underlying smooth function.
+  x_cmp <- seq(0, 10, length.out = 60)
+  expect_equal(drv$evaluate_range("nu", x_cmp), sin(x_cmp), tolerance = 1e-2)
+
+  # Out-of-range queries on a non-uniform grid: error by default, then allowed
+  # once extrapolation is enabled (left tail below min, right tail above max).
+  expect_error(drv$evaluate("nu", -0.001))
+  expect_error(drv$evaluate("nu", 10.001))
+  expect_silent(drv$set_extrapolate("nu", TRUE))
+  expect_silent(drv$evaluate("nu", -0.001))
+  expect_silent(drv$evaluate("nu", 10.001))
+})

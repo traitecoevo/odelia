@@ -1,0 +1,37 @@
+url: https://traitecoevo.github.io/odelia/
+
+template:
+  bootstrap: 5
+
+reference:
+- title: Systems and solvers
+  desc: Define an ODE system and advance it through time.
+  contents:
+  - LorenzSystem
+  - Lorenz_Solver
+- title: Solver control
+  desc: Tolerances and step-size settings for the adaptive stepper.
+  contents:
+  - OdeControl
+- title: Drivers
+  desc: External, time-varying forcing variables.
+  contents:
+  - Drivers
+- title: Package and utilities
+  contents:
+  - odelia-package
+  - odelia_load_dll
+- title: Low-level wrappers
+  desc: >
+    Thin wrappers over the underlying C++ functions. Most users should prefer
+    the R6 classes above.
+  contents:
+  - low_level_wrappers
+
+articles:
+- title: Articles
+  navbar: ~
+  contents:
+  - odelia
+  - parameter-fitting
+  - articles/leaf-thermal
