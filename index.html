@@ -166,12 +166,8 @@
 <li><p><strong>A system header</strong> (<code>inst/include/odelia/examples/*.hpp</code>) — C++ class defining the ODE. Must implement <code>ode_size()</code>, <code>set_ode_state()</code>, <code>ode_state()</code>, and <code>ode_rates()</code>. Template on scalar type for AD support.</p></li>
 <li><p><strong>An Rcpp interface</strong> (<code>src/*_interface.cpp</code>) — <code>[[Rcpp::export]]</code> functions exposing the system to R.</p></li>
 <li><p><strong>An R wrapper</strong> (<code>R/*-interface.R</code>, optional) — R6 classes providing a friendlier API around the external pointers.</p></li>
-<li><p><strong>A demo script</strong> (<code>examples/*/demo.R</code>) — Runnable demonstration.</p></li>
+<li><p><strong>A demo script</strong> (<code>examples/*/demo.R</code>) — Runnable demonstration. ### Testing variants</p></li>
 </ul>
-</div>
-<div class="section level3">
-<h3 id="testing-variants">Testing variants<a class="anchor" aria-label="anchor" href="#testing-variants"></a>
-</h3>
 <p>Use the Makefile targets below depending on the level of test coverage you want.</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">make</span> test</span></code></pre></div>
 <p>Runs package tests after local compile. Fast default for day-to-day work.</p>
