@@ -160,6 +160,11 @@ void Solver_advance_fixed(SEXP solver_xp, Rcpp::NumericVector times, bool active
 }
 
 // [[Rcpp::export]]
+void Solver_advance_euler(SEXP solver_xp, Rcpp::NumericVector times, bool active = false) {
+  odelia::solver::Solver_advance_euler_impl<SystemType, ActiveSystemType>(solver_xp, times, active);
+}
+
+// [[Rcpp::export]]
 void Solver_step(SEXP solver_xp, bool active = false) {
   odelia::solver::Solver_step_impl<SystemType, ActiveSystemType>(solver_xp, active);
 }
