@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <cmath>
 #include <stddef.h> // size_t
 #include <RcppCommon.h> // as/wrap/SEXP
 
@@ -27,7 +28,7 @@ inline std::vector<index> index_vector(const std::vector<size_t> x) {
 }
 
 inline bool is_finite(double x) {
-  return R_FINITE(x);
+  return std::isfinite(x);
 }
 
 inline void check_length(size_t received, size_t expected)
