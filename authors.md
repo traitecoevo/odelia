@@ -12,7 +12,7 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/traitecoevo/odelia/blob/documentation/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/traitecoevo/odelia/blob/master/DESCRIPTION)
 
 Falster D, FitzJohn R, O'Reilly-Nugent A (2026). *odelia: ODE Solver
 with Automatic Differentiation, in C++ Header Files*. R package version
