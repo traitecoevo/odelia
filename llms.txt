@@ -149,6 +149,13 @@ Contributions are welcome. By submitting a pull request or code to this
 repository, you agree to the terms of the [Contributor License
 Agreement](https://traitecoevo.github.io/odelia/CLA.md).
 
+> **Linking from another package?** If you `LinkingTo: odelia` and
+> instantiate `Solver`, read
+> [ARCHITECTURE.md](https://traitecoevo.github.io/odelia/ARCHITECTURE.md)
+> — it documents how the compiled XAD `Tape` symbols are resolved per
+> platform, what your package must do, and the invariants that must not
+> be broken.
+
 ### ODE System Structure
 
 An ODE system in odelia consists of:
