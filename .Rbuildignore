@@ -20,3 +20,4 @@
 ^pkgdown$
 ^\.github/workflows/pkgdown\.yaml$
 ^vignettes/articles$
+^tools$
