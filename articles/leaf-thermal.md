@@ -77,17 +77,17 @@ and accepts any time grid that covers the simulation.
 ## Compile the model
 
 Compiling a model interface requires the `odelia` headers on the include
-path.
-[`odelia_load_dll()`](https://traitecoevo.github.io/odelia/reference/odelia_load_dll.md)
-makes the package’s compiled symbols available to the temporary shared
+path. Loading `odelia` exposes its compiled symbols (including the XAD
+runtime) globally via the package `.onLoad`, so the temporary shared
 object that
 [`Rcpp::sourceCpp()`](https://rdrr.io/pkg/Rcpp/man/sourceCpp.html)
-builds.
+builds can resolve them — no manual
+[`odelia_load_dll()`](https://traitecoevo.github.io/odelia/reference/odelia_load_dll.md)
+call is needed.
 
 ``` r
 
 library(odelia)
-odelia_load_dll()
 
 ex_dir <- system.file("examples/leaf_thermal", package = "odelia")
 

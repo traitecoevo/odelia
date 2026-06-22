@@ -41,7 +41,9 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.0.0.9000" id="odelia-0009000">Odelia 0.0.0.9000<a class="anchor" aria-label="anchor" href="#odelia-0009000"></a></h2>
 <p>Odelia is a new package, arsising out of <a href="https://github.com/traitecoevo/plant/" class="external-link uri">https://github.com/traitecoevo/plant/</a>. In that project, Rich FitzJohn built a custom ODE solver, using Runge-Kutta4-5 method, in C++. I’m spinning that code out into a package, as I want to use it elsewhere.</p>
-</div>
+<ul><li>
+<code>odelia</code> now loads its shared library with global symbol visibility in <code>.onLoad</code>, so packages that <code>LinkingTo: odelia</code> and instantiate <code>Solver</code> can resolve the compiled XAD runtime symbols at load time without per-package linker hacks (<a href="https://github.com/traitecoevo/odelia/issues/26" class="external-link">#26</a>).</li>
+</ul></div>
   </main></div>
 
 
