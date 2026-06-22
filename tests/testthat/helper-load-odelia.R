@@ -1,6 +1,7 @@
 .odelia_test_cache <- new.env(parent = emptyenv())
 .odelia_test_cache$ode_loaded <- FALSE
 .odelia_test_cache$leaf_loaded <- FALSE
+.odelia_test_cache$odelia_so <- NA_character_
 
 resolve_test_path <- function(installed_rel, source_rel) {
   pkg_path <- system.file(package = "odelia")
@@ -46,7 +47,11 @@ ensure_ode_interface_loaded <- function(rebuild = FALSE) {
     return(invisible(TRUE))
   }
 
-  testthat::expect_no_error(odelia_load_dll(local = FALSE, now = TRUE))
+  odelia_so <- NA_character_
+  testthat::expect_no_error(
+    odelia_so <- odelia_load_dll(local = FALSE, now = TRUE)
+  )
+  .odelia_test_cache$odelia_so <- odelia_so
 
   .odelia_test_cache$ode_loaded <- TRUE
   invisible(TRUE)
@@ -72,7 +77,30 @@ ensure_leaf_thermal_interfaces <- function(rebuild = FALSE) {
   )
 
   # Provide include paths needed by sourceCpp for package headers.
-  withr::local_envvar(PKG_CPPFLAGS = paste0("-I", include_dir))
+  #
+  # The XAD Tape<T,N> template methods are explicitly instantiated only in
+  # src/Tape.cpp, which is compiled into the odelia shared library. The leaf
+  # interface is built standalone by sourceCpp, so those symbols must be
+  # resolved against the odelia library. On Linux/macOS odelia_load_dll() makes
+  # them globally visible (RTLD_GLOBAL) and they resolve at load time, but
+  # Windows has no global symbol namespace - DLL imports must be resolved at
+  # link time. Linking the sourceCpp build directly against the odelia library
+  # via PKG_LIBS (honoured by R CMD SHLIB) works on every platform.
+  pkg_cppflags <- paste0("-I", include_dir)
+  odelia_so <- .odelia_test_cache$odelia_so
+  pkg_libs <- if (is.character(odelia_so) &&
+                  length(odelia_so) == 1 &&
+                  !is.na(odelia_so) &&
+                  nzchar(odelia_so) &&
+                  file.exists(odelia_so)) {
+    shQuote(normalizePath(odelia_so, winslash = "/", mustWork = FALSE))
+  } else {
+    Sys.getenv("PKG_LIBS", unset = "")
+  }
+  withr::local_envvar(
+    PKG_CPPFLAGS = pkg_cppflags,
+    PKG_LIBS = pkg_libs
+  )
 
   source_cpp_result <- tryCatch(
     {
