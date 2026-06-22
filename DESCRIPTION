@@ -1,6 +1,6 @@
 Package: odelia
 Type: Package
-Title: ODE solver using Rune-Kutta 4-5 adpative step, C++ header files
+Title: ODE Solver with Automatic Differentiation, in C++ Header Files
 Version: 0.1.0
 Authors@R: c(
     person("Daniel", "Falster", , "daniel.falster@unsw.edu.au", c("aut", "cre"), 
@@ -9,7 +9,10 @@ Authors@R: c(
     person("Andrew", "O'Reilly-Nugent", , "", "aut")
     )
 Maintainer: Daniel Falster <daniel.falster@unsw.edu.au>
-Description: odelia provides an ODE solver in C++ header files, using RK4-5. There's potenital to link to R via Rcpp. 
+Description: odelia provides an ODE solver in C++ header files, using an
+    adaptive-step Runge-Kutta 4-5 method, with an interface to R via Rcpp.
+    ODE systems can be templated on their scalar type to support automatic
+    differentiation, enabling exact gradients for parameter fitting.
 Depends:
     R (>= 4.2.0)
 Imports:
@@ -19,13 +22,16 @@ Imports:
     tibble (>= 3.1.0)
 Suggests:
     here,
+    knitr,
+    rmarkdown,
     testthat (>= 3.0.0),
     withr
 LinkingTo:
     Rcpp
+VignetteBuilder: knitr
 Encoding: UTF-8
 License: AGPL (>= 3)
-URL: https://github.com/traitecoevo/odelia
+URL: https://github.com/traitecoevo/odelia, https://traitecoevo.github.io/odelia/
 BugReports: https://github.com/traitecoevo/odelia/issues
 RoxygenNote: 7.3.3
 Config/testthat/edition: 3

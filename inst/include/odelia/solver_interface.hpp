@@ -103,6 +103,16 @@ inline void Solver_advance_fixed_impl(SEXP solver_xp, Rcpp::NumericVector times,
   }
 }
 
+// Generic Solver_advance_euler
+template<typename SystemType, typename ActiveSystemType>
+inline void Solver_advance_euler_impl(SEXP solver_xp, Rcpp::NumericVector times, bool active) {
+  std::vector<double> ts(times.begin(), times.end());
+  if (active) {
+    get_solver<ActiveSystemType>(solver_xp)->advance_euler(ts);
+  } else {
+    get_solver<SystemType>(solver_xp)->advance_euler(ts);
+  }
+}
 // Generic Solver_step
 template<typename SystemType, typename ActiveSystemType>
 inline void Solver_step_impl(SEXP solver_xp, bool active) {

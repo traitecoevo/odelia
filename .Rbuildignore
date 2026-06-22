@@ -16,3 +16,8 @@
 ^LICENSE\.md$
 ^examples$
 ^docs$
+^_pkgdown\.yml$
+^pkgdown$
+^\.github/workflows/pkgdown\.yaml$
+^vignettes/articles$
+^tools$

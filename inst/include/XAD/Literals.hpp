@@ -842,7 +842,15 @@ typedef ARealDirect<float, 1> AFD;
 }  // namespace xad
 
 
-#if __clang_major__ > 16 && defined(_LIBCPP_VERSION)
+// libc++ 21 (_LIBCPP_VERSION >= 210000) replaced the specializable `__promote`
+// class template with a SFINAE-friendly `__promote_t` alias built from
+// `__promote_impl` overloads. The alias is constrained to arithmetic types, so
+// std math overloads such as pow(AReal, int) now drop out of overload
+// resolution cleanly and XAD's own ADL overloads are selected without help.
+// The specializations below are therefore both unnecessary and ill-formed on
+// libc++ 21+, so we only emit them on older libc++ that still has the class.
+// odelia local patch: not yet fixed upstream (auto-differentiation/xad).
+#if __clang_major__ > 16 && defined(_LIBCPP_VERSION) && _LIBCPP_VERSION < 210000
 
 namespace std {
 

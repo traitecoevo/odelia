@@ -198,6 +198,18 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
+// Solver_advance_euler
+void Solver_advance_euler(SEXP solver_xp, Rcpp::NumericVector times, bool active);
+RcppExport SEXP _odelia_Solver_advance_euler(SEXP solver_xpSEXP, SEXP timesSEXP, SEXP activeSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type times(timesSEXP);
+    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
+    Solver_advance_euler(solver_xp, times, active);
+    return R_NilValue;
+END_RCPP
+}
 // Solver_step
 void Solver_step(SEXP solver_xp, bool active);
 RcppExport SEXP _odelia_Solver_step(SEXP solver_xpSEXP, SEXP activeSEXP) {
@@ -548,6 +560,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_odelia_Solver_set_state", (DL_FUNC) &_odelia_Solver_set_state, 4},
     {"_odelia_Solver_advance_adaptive", (DL_FUNC) &_odelia_Solver_advance_adaptive, 3},
     {"_odelia_Solver_advance_fixed", (DL_FUNC) &_odelia_Solver_advance_fixed, 3},
+    {"_odelia_Solver_advance_euler", (DL_FUNC) &_odelia_Solver_advance_euler, 3},
     {"_odelia_Solver_step", (DL_FUNC) &_odelia_Solver_step, 2},
     {"_odelia_Solver_get_collect", (DL_FUNC) &_odelia_Solver_get_collect, 2},
     {"_odelia_Solver_set_collect", (DL_FUNC) &_odelia_Solver_set_collect, 3},

@@ -65,6 +65,10 @@ Solver_advance_fixed <- function(solver_xp, times, active = FALSE) {
     invisible(.Call(`_odelia_Solver_advance_fixed`, solver_xp, times, active))
 }
 
+Solver_advance_euler <- function(solver_xp, times, active = FALSE) {
+    invisible(.Call(`_odelia_Solver_advance_euler`, solver_xp, times, active))
+}
+
 Solver_step <- function(solver_xp, active = FALSE) {
     invisible(.Call(`_odelia_Solver_step`, solver_xp, active))
 }
