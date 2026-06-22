@@ -64,12 +64,29 @@ compiled `Tape` symbols resolved. Two things make that work today:
 |---|---|---|
 | **macOS** | `-undefined dynamic_lookup` (flat namespace): allowed in `.so`, bound lazily at first call; resolved against globally-loaded odelia | ✅ works (steps 1–2) |
 | **Linux** | GNU `ld -shared` allows undefined symbols in `.so`, resolved at `dlopen` against globally-loaded odelia | ✅ works (steps 1–2) |
-| **Windows** | mingw `ld` **requires every symbol resolved at link time**; a DLL cannot carry undefined imports, so the runtime trick in step 1 cannot help | ❌ **open — see [traitecoevo/odelia#29](https://github.com/traitecoevo/odelia/issues/29)** |
+| **Windows** | mingw `ld` **requires every symbol resolved at link time**; a DLL cannot carry undefined imports, so the runtime trick in step 1 cannot help. The consumer must **link against odelia's single compiled DLL** at build time | ✅ works (consumer `Makevars.win`, below) |
 
-On Windows the consumer's `plant.dll` fails to link with `undefined reference to
-xad::Tape<double, 1ull>::~Tape()`. The fix (link-time access to the single
-compiled `Tape`, e.g. an import library or a documented link line) is tracked in
-**#29**; update this table and the downstream contract below once it lands.
+On Windows the runtime global-load (step 1) cannot satisfy the linker, so the
+consumer links `plant.dll` directly against odelia's one compiled `odelia.dll` —
+which exports the XAD `Tape` runtime (mingw exports all global symbols by
+default). This keeps exactly **one** copy of `Tape` / `active_tape_` in the
+process (the same single-definition guarantee macOS/Linux get at load time), so
+it is consistent with the invariant above. The consumer adds a Windows-only
+`src/Makevars.win`:
+
+```make
+CXX_STD = CXX20
+PKG_CPPFLAGS = -isystem../inst/include/
+## odelia's DLL is at <odelia>/libs/<arch>/odelia.dll. Resolve the base libs dir
+## in R, then append R's $(R_ARCH) make-variable (e.g. /x64). Do the arch in make
+## -- putting $r_arch inside the Rscript -e quotes lets the shell expand it away.
+ODELIA_LIBDIR = $(shell "${R_HOME}/bin/Rscript" -e "cat(system.file('libs', package='odelia'))")
+PKG_LIBS = "$(ODELIA_LIBDIR)$(R_ARCH)/odelia.dll"
+```
+
+(plant uses exactly this; verified green on `windows-latest` R-CMD-check.) odelia
+must therefore keep **exporting** these symbols from its DLL — do not add a
+restrictive `.def` or `-Wl,--exclude-all-symbols` to odelia's build.
 
 ## Contract for `LinkingTo: odelia` consumers
 
@@ -77,8 +94,10 @@ compiled `Tape`, e.g. an import library or a documented link line) is tracked in
 - Add a real NAMESPACE import from odelia (e.g. `@importFrom odelia
   odelia_load_dll`) so odelia's namespace — and its global-load `.onLoad` —
   runs before your package's `useDynLib`.
-- macOS / Linux: nothing else is required.
-- Windows: pending #29.
+- macOS / Linux: nothing else is required (load-time resolution via the global
+  `.onLoad` above).
+- Windows: add a `src/Makevars.win` linking `plant.dll` against odelia's DLL (see
+  the snippet in the platform table above).
 
 ## Do NOT change without coordinating downstream
 
@@ -86,7 +105,11 @@ compiled `Tape`, e.g. an import library or a documented link line) is tracked in
   the single-`active_tape_` invariant above.
 - The set of explicit `Tape` instantiations in `src/Tape.cpp` (consumers rely on
   the exact instantiated types).
-- The global-visibility load in `R/zzz.R` (`odelia_load_dll(local = FALSE)`).
+- The global-visibility load in `R/zzz.R` (`odelia_load_dll(local = FALSE)`) —
+  needed for macOS/Linux.
+- The set of symbols **exported** from `odelia.dll` on Windows — do not add a
+  restrictive `.def` file or `-Wl,--exclude-all-symbols`, or Windows consumers
+  can no longer link the `Tape` runtime.
 
 Any of these will break downstream linking/loading silently (odelia's own checks
 will still pass). Coordinate with consumers (plant) and update this document.
