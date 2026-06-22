@@ -325,6 +325,11 @@ class Tape
 };
 
 // declare external explicit instantiations
+// These `extern template` declarations are why a `LinkingTo: odelia` consumer
+// does NOT compile Tape itself and instead resolves the symbols against odelia's
+// compiled library (defined in src/Tape.cpp). Removing them (or otherwise making
+// Tape header-only) duplicates the thread-local `active_tape_` per consumer DLL.
+// See ../../../ARCHITECTURE.md before changing this block.
 #define XAD_DECLARE_EXTERN_TAPE(type) extern template class Tape<type>;
 #define XAD_SINGLE_ARG(...) __VA_ARGS__
 

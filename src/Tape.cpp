@@ -726,6 +726,13 @@ typename Tape<T, N>::derivative_type Tape<T, N>::getAndResetOutputAdjoint(slot_t
     return ret;
 }
 
+// NOTE: this single definition of the thread-local `active_tape_`, plus the
+// explicit `Tape` instantiations below, are the ONLY compiled copies of the XAD
+// Tape runtime in the process. Packages that `LinkingTo: odelia` resolve their
+// undefined `Tape` symbols against these. Do not move these into a header / make
+// Tape header-only, and do not change the instantiated type set, without reading
+// ../ARCHITECTURE.md (the single-`active_tape_` invariant and the downstream
+// linking contract depend on it).
 template <class T, std::size_t N>
 XAD_THREAD_LOCAL Tape<T, N>* Tape<T, N>::active_tape_ = nullptr;
 

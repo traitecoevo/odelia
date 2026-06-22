@@ -7,6 +7,8 @@
   # R loads an imported namespace and runs its `.onLoad` before it loads the
   # importing package's own DLL, so doing this here fixes every consumer for
   # both `library()` and `devtools::load_all()` without per-package, OS-specific
-  # linker hacks.
+  # linker hacks. See ARCHITECTURE.md for the full per-platform contract (and the
+  # open Windows case, #29). Do not remove this global load without coordinating
+  # with downstream consumers (e.g. plant).
   odelia_load_dll(local = FALSE)
 }

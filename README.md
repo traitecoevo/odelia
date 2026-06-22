@@ -133,6 +133,11 @@ library retains its own license; see [inst/include/XAD/LICENSE.md](inst/include/
 Contributions are welcome. By submitting a pull request or code to this repository,
 you agree to the terms of the [Contributor License Agreement](CLA.md).
 
+> **Linking from another package?** If you `LinkingTo: odelia` and instantiate
+> `Solver`, read [ARCHITECTURE.md](ARCHITECTURE.md) — it documents how the
+> compiled XAD `Tape` symbols are resolved per platform, what your package must
+> do, and the invariants that must not be broken.
+
 ### ODE System Structure
 
 An ODE system in odelia consists of:
