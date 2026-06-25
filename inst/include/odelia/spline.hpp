@@ -395,6 +395,47 @@ namespace spline {
          }
          return interpol;
       }
+
+      // Analytic first derivative dy/dx at x, consistent with operator() (the
+      // exact derivative of the same per-segment cubic / quadratic-extrapolation
+      // polynomial). Enables exact, smooth gradients (e.g. for autodiff via a
+      // value+deriv wrapper) without differentiating through the spline build.
+      double deriv(double x) const
+      {
+         size_t n = m_x.size();
+         // Reproduce operator()'s segment selection exactly (see comments there).
+         int idx;
+         const int last = static_cast<int>(n) - 1;
+         if (m_uniform)
+            idx = static_cast<int>((x - m_x0) * m_inv_dx);
+         else
+            idx = static_cast<int>((x - m_x[0]) * (last / (m_x[last] - m_x[0])));
+         if (idx < 0)
+            idx = 0;
+         else if (idx > last)
+            idx = last;
+         while (idx > 0 && m_x[idx] >= x)
+            --idx;
+         while (idx < last && m_x[idx + 1] < x)
+            ++idx;
+
+         double h = x - m_x[idx];
+         if (x < m_x[0])
+         {
+            // left extrapolation is quadratic: m_b[0] h^2 + m_c[0] h + m_y[0]
+            return 2.0 * m_b[0] * h + m_c[0];
+         }
+         else if (x > m_x[n - 1])
+         {
+            // right extrapolation is quadratic about the last knot
+            return 2.0 * m_b[n - 1] * h + m_c[n - 1];
+         }
+         else
+         {
+            // cubic segment: d/dx [a h^3 + b h^2 + c h + y] = 3a h^2 + 2b h + c
+            return (3.0 * m_a[idx] * h + 2.0 * m_b[idx]) * h + m_c[idx];
+         }
+      }
    };
 }
 }

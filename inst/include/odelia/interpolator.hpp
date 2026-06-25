@@ -76,6 +76,13 @@ public:
     return spline(u);
   }
 
+  // Analytic first derivative dy/du at u (exact derivative of the interpolating
+  // polynomial; see Spline::deriv). Useful for exact/smooth gradients.
+  double deriv(double u) const {
+    check_active();
+    return spline.deriv(u);
+  }
+
   // Return the number of (x,y) pairs contained in the Interpolator.
   size_t size() const {
     return x.size();
