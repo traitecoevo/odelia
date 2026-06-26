@@ -10,11 +10,17 @@
 namespace odelia {
 namespace interpolator {
 
-class Interpolator {
+// Templated on the scalar S of the knot VALUES (knot positions x stay double).
+// `Interpolator` (alias below) pins S = double, leaving every existing caller
+// unchanged; S = an AD active type makes the interpolated value differentiable
+// w.r.t. the knot values, delegating to basic_spline<S>. (#472 scope B /
+// traitecoevo/plant#537.)
+template <typename S>
+class basic_interpolator {
 public:
   // Build an interpolator out of the vectors 'x' and 'y'.
   void init(const std::vector<double> &x_,
-            const std::vector<double> &y_) {
+            const std::vector<S> &y_) {
     util::check_length(y_.size(), x_.size());
     if (x_.size() < 3)
     {
@@ -41,13 +47,13 @@ public:
 
   // Support for adding points in turn (assumes monotonic increasing in
   // 'x', unchecked).
-  void add_point(double xi, double yi) {
+  void add_point(double xi, S yi) {
     x.push_back(xi);
     y.push_back(yi);
   }
 
   // adds point in sorted position (slower than above)
-  void add_point_sorted(double xi, double yi) {
+  void add_point_sorted(double xi, S yi) {
     auto x_upper = std::upper_bound(x.begin(), x.end(), xi); // find smallest number larger than xi
     x.insert(x_upper, xi);                                   // add xi below that number
     auto y_upper = std::upper_bound(y.begin(), y.end(), yi);
@@ -62,7 +68,7 @@ public:
   }
 
   // Compute the value of the interpolated function at point `x=u`
-  double eval(double u) const {
+  S eval(double u) const {
     check_active();
     if (not extrapolate and (u < min() or u > max()))
     {
@@ -72,13 +78,13 @@ public:
   }
 
   // faster version of above
-  double operator()(double u) const {
+  S operator()(double u) const {
     return spline(u);
   }
 
   // Analytic first derivative dy/du at u (exact derivative of the interpolating
   // polynomial; see Spline::deriv). Useful for exact/smooth gradients.
-  double deriv(double u) const {
+  S deriv(double u) const {
     check_active();
     return spline.deriv(u);
   }
@@ -108,16 +114,16 @@ public:
     return x;
   }
 
-  std::vector<double> get_y() const {
+  std::vector<S> get_y() const {
     return y;
   }
 
   // Compute the value of the interpolated function at a vector of
   // points `x=u`, returning a vector of the same length.
   // change to const& vec?
-  std::vector<double> r_eval(std::vector<double> u) const {
+  std::vector<S> r_eval(std::vector<double> u) const {
     check_active();
-    auto ret = std::vector<double>();
+    auto ret = std::vector<S>();
     ret.reserve(u.size()); // fast to do this once rather than multiple times with push_back
     for (auto const &x : u)
     {
@@ -134,11 +140,16 @@ private:
     }
   }
 
-  std::vector<double> x, y;
-  spline::Spline spline;
+  std::vector<double> x;
+  std::vector<S> y;
+  spline::basic_spline<S> spline;
   bool active = false;
   bool extrapolate = true;
 };
+
+// Default interpolator (knot values in double): the unchanged production type
+// used by AdaptiveInterpolator, plant's ResourceSpline, the leaf model, etc.
+using Interpolator = basic_interpolator<double>;
 
 }
 }

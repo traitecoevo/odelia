@@ -59,6 +59,36 @@ compile_spline_ad_interface <- function() {
         odelia::spline::Spline s;   // = basic_spline<double>
         s.set_points(x, y);
         return s(q);
+      }
+
+      // Same, one level up through the Interpolator wrapper (what plant uses).
+      // [[Rcpp::export]]
+      Rcpp::NumericVector interp_knot_value_grad(std::vector<double> x,
+                                                 std::vector<double> y,
+                                                 double q) {
+        using ad = xad::adj<double>;
+        using ad_t = ad::active_type;
+        ad::tape_type tape;
+        std::vector<ad_t> ya(y.begin(), y.end());
+        for (auto& v : ya) tape.registerInput(v);
+        tape.newRecording();
+        odelia::interpolator::basic_interpolator<ad_t> I;
+        I.init(x, ya);
+        ad_t val = I.eval(q);
+        tape.registerOutput(val);
+        xad::derivative(val) = 1.0;
+        tape.computeAdjoints();
+        Rcpp::NumericVector g(y.size());
+        for (size_t i = 0; i < y.size(); ++i) g[i] = xad::derivative(ya[i]);
+        return g;
+      }
+
+      // [[Rcpp::export]]
+      double interp_value_double(std::vector<double> x, std::vector<double> y,
+                                 double q) {
+        odelia::interpolator::Interpolator I;   // = basic_interpolator<double>
+        I.init(x, y);
+        return I.eval(q);
       }', verbose = FALSE)
     NULL
   }, error = function(e) e)
@@ -107,4 +137,24 @@ testthat::test_that("templated spline double alias is unchanged", {
   for (q in c(-2.1, 0.4, 1.7)) {
     expect_equal(spline_value_double(x, f(x), q), f(q), tolerance = 1e-8)
   }
+})
+
+testthat::test_that("basic_interpolator<ad> matches FD (the wrapper plant uses)", {
+  testthat::skip_if(is_pkgload_dll(),
+    "Skipping AD interpolator in pkgload load_all sessions.")
+  compile_spline_ad_interface()
+
+  x <- c(0.0, 1.0, 2.5, 4.0, 6.0, 9.0)
+  y <- sin(0.4 * x) + 0.1 * x
+  q <- 3.3
+
+  g_ad <- interp_knot_value_grad(x, y, q)
+  h <- 1e-6
+  g_fd <- vapply(seq_along(y), function(i) {
+    yp <- y; ym <- y; yp[i] <- yp[i] + h; ym[i] <- ym[i] - h
+    (interp_value_double(x, yp, q) - interp_value_double(x, ym, q)) / (2 * h)
+  }, numeric(1))
+
+  expect_equal(g_ad, g_fd, tolerance = 1e-6)
+  expect_equal(sum(g_ad), 1, tolerance = 1e-9)
 })
