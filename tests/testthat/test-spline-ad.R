@@ -29,6 +29,7 @@ compile_spline_ad_interface <- function() {
       #include <vector>
       #include <XAD/XAD.hpp>
       #include <odelia/spline.hpp>
+      #include <odelia/interpolator.hpp>
 
       // Reverse-mode gradient of the spline value at q w.r.t. each knot value.
       // [[Rcpp::export]]
