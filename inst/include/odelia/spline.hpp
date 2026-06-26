@@ -169,15 +169,21 @@ namespace spline {
          }
       }
 
-      std::vector<double> l_solve(const std::vector<double> &b) const
+      // Solves are templated on the RHS scalar S so the same constant double
+      // band matrix (assembled from frozen knot positions x) can be applied to
+      // an ACTIVE right-hand side (knot values), making the spline coefficients
+      // differentiable w.r.t. those values without tracing the solve build.
+      // (#472 scope B; S = double is the unchanged production path.)
+      template <typename S>
+      std::vector<S> l_solve(const std::vector<S> &b) const
       {
          assert(this->dim() == (int)b.size());
-         std::vector<double> x(this->dim());
+         std::vector<S> x(this->dim());
          int j_start;
-         double sum;
+         S sum;
          for (int i = 0; i < this->dim(); i++)
          {
-            sum = 0;
+            sum = S(0);
             j_start = std::max(0, i - this->num_lower());
             for (int j = j_start; j < i; j++)
                sum += this->operator()(i, j) * x[j];
@@ -186,15 +192,16 @@ namespace spline {
          return x;
       }
 
-      std::vector<double> r_solve(const std::vector<double> &b) const
+      template <typename S>
+      std::vector<S> r_solve(const std::vector<S> &b) const
       {
          assert(this->dim() == (int)b.size());
-         std::vector<double> x(this->dim());
+         std::vector<S> x(this->dim());
          int j_stop;
-         double sum;
+         S sum;
          for (int i = this->dim() - 1; i >= 0; i--)
          {
-            sum = 0;
+            sum = S(0);
             j_stop = std::min(this->dim() - 1, i + this->num_upper());
             for (int j = i + 1; j <= j_stop; j++)
                sum += this->operator()(i, j) * x[j];
@@ -203,11 +210,12 @@ namespace spline {
          return x;
       }
 
-      std::vector<double> lu_solve(const std::vector<double> &b,
-                                   bool is_lu_decomposed = false)
+      template <typename S>
+      std::vector<S> lu_solve(const std::vector<S> &b,
+                              bool is_lu_decomposed = false)
       {
          assert(this->dim() == (int)b.size());
-         std::vector<double> x, y;
+         std::vector<S> x, y;
          if (is_lu_decomposed == false)
          {
             this->lu_decompose();
@@ -218,14 +226,24 @@ namespace spline {
       }
    };
 
-   // spline interpolation
-   class Spline
+   // spline interpolation.
+   //
+   // Templated on the scalar S of the knot VALUES and the resulting cubic
+   // coefficients; the knot POSITIONS m_x stay double. With x frozen, the
+   // coefficient solve is a constant-double band matrix applied to an active RHS
+   // (see band_matrix::lu_solve), so an S = AD active type makes the spline value
+   // differentiable w.r.t. its knot values with no special handling. The
+   // `Spline` alias pins S = double, leaving every existing use unchanged.
+   // (#472 scope B / traitecoevo/plant#537.)
+   template <typename S>
+   class basic_spline
    {
    private:
-      std::vector<double> m_x, m_y; // x,y coordinates of points
+      std::vector<double> m_x;      // x coordinates of points (frozen positions)
+      std::vector<S> m_y;           // y coordinates of points (active values)
       // interpolation parameters
       // f(x) = a*(x-x_i)^3 + b*(x-x_i)^2 + c*(x-x_i) + y_i
-      std::vector<double> m_a, m_b, m_c, m_d;
+      std::vector<S> m_a, m_b, m_c, m_d;
       // Fast O(1) index lookup for (near-)equidistant x-grids. When the knots
       // are evenly spaced the std::lower_bound binary search in operator() can
       // be replaced by direct arithmetic, which profiling showed to be a large
@@ -237,7 +255,7 @@ namespace spline {
 
    public:
       void set_points(const std::vector<double> &x,
-                      const std::vector<double> &y, bool cubic_spline = true)
+                      const std::vector<S> &y, bool cubic_spline = true)
       {
          assert(x.size() == y.size());
          m_x = x;
@@ -254,7 +272,7 @@ namespace spline {
             // setting up the matrix and right hand side of the equation system
             // for the parameters b[]
             band_matrix A(n, 1, 1);
-            std::vector<double> rhs(n);
+            std::vector<S> rhs(n);
             for (int i = 1; i < n - 1; i++)
             {
                A(i, i - 1) = 1.0 / 3.0 * (x[i] - x[i - 1]);
@@ -330,7 +348,7 @@ namespace spline {
          }
       }
       
-      double operator()(double x) const
+      S operator()(double x) const
       {
          size_t n = m_x.size();
          // find the closest point m_x[idx] < x, idx=0 even if x<m_x[0]
@@ -377,7 +395,7 @@ namespace spline {
          }
 
          double h = x - m_x[idx];
-         double interpol;
+         S interpol;
          if (x < m_x[0])
          {
             // extrapolation to the left
@@ -400,7 +418,7 @@ namespace spline {
       // exact derivative of the same per-segment cubic / quadratic-extrapolation
       // polynomial). Enables exact, smooth gradients (e.g. for autodiff via a
       // value+deriv wrapper) without differentiating through the spline build.
-      double deriv(double x) const
+      S deriv(double x) const
       {
          size_t n = m_x.size();
          // Reproduce operator()'s segment selection exactly (see comments there).
@@ -437,6 +455,10 @@ namespace spline {
          }
       }
    };
+
+   // Default spline (knot values + coefficients in double): the unchanged
+   // production type that the Interpolator and all existing callers use.
+   using Spline = basic_spline<double>;
 }
 }
 
