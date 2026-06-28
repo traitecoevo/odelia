@@ -1,12 +1,9 @@
 # CLAUDE.md
 
-_Repo-local guidance for `odelia` goes here._
+This repo keeps its guidance in **[`AGENTS.md`](../AGENTS.md)** so the same content
+serves every agent and tool.
 
-## Cross-package context
+**👉 Read [`AGENTS.md`](../AGENTS.md)** — the repo-local developer guide plus the
+plant-family pointers (docs hub, `plant-meta`, issues/board).
 
-This repo is part of the **plant family** in the `traitecoevo` org (the standalone ODE solver + autodiff core). For
-cross-package orientation — how the family fits together, dependency direction,
-source-of-truth rules, and the shared label/board conventions — see
-**[`plant-meta`](https://github.com/traitecoevo/plant-meta)** (start with its
-`AGENTS.md`). Don't restate family-wide concerns here; link to plant-meta and
-keep this file about `odelia`-local matters.
+Don't duplicate that content here; edit `AGENTS.md` and this file stays correct by reference.
