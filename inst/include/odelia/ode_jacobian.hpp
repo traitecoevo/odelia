@@ -29,6 +29,12 @@
 // A system declaring neither cannot use the implicit stepper: `supported` says so
 // at compile time and the stepper raises a clear error. When both exist the hook
 // wins -- whoever wrote it meant it.
+//
+// The AD route also yields the parameter Jacobian d(dydt)/dtheta, used by the
+// implicit-function-theorem steady-state sensitivity in ode_steady_state.hpp:
+// the same forward sweep on the same twin, differing only in where the unit
+// tangent seed is placed. It needs the twin (a hook knows nothing about
+// parameters), so it is gated on `params_supported` below.
 
 #include <algorithm>
 #include <cmath>
@@ -65,6 +71,18 @@ class has_jacobian {
 public:
   enum { value = sizeof(test<S>(0)) == sizeof(true_type) };
 };
+
+// Detect a `std::vector<scalar*> ode_parameters()` hook: pointers to the
+// system's differentiable parameters, in a fixed order, used to seed parameter
+// tangents for the forward-mode parameter Jacobian df/dtheta. A system that
+// omits it simply cannot have its parameter sensitivity taken (gated below).
+template <typename S, typename = void>
+struct has_ode_parameters : std::false_type {};
+
+template <typename S>
+struct has_ode_parameters<
+    S, std::void_t<decltype(std::declval<S&>().ode_parameters())>>
+    : std::true_type {};
 
 // The System type rebound to scalar U, i.e. decltype(system.rebind<U>()). When
 // the System has no rebind() the type is not evaluated (a harmless placeholder
@@ -104,6 +122,13 @@ public:
   // systems that never use the implicit stepper.
   static constexpr bool supported = has_jacobian<System>::value || ad_supported;
 
+  // Whether the parameter Jacobian df/dtheta is additionally available: needs
+  // the AD route (a twin to differentiate on; a hook says nothing about
+  // parameters) plus an `ode_parameters()` hook on that twin exposing pointers
+  // to the differentiable parameters to seed.
+  static constexpr bool params_supported =
+      ad_supported && has_ode_parameters<twin_type>::value;
+
   void resize(size_t size_) {
     size = size_;
     v.resize(size);
@@ -142,6 +167,46 @@ public:
         }
         xad::derivative(v[col]) = 0.0;
       }
+    }
+  }
+
+  // Compute the parameter Jacobian Jp = d f / d theta at (y, t), written
+  // row-major into `Jp` (size n * n_params), Jp[row * n_params + col] =
+  // d f_row / d theta_col. `n_params` is set to the number of parameters the
+  // System exposes via ode_parameters().
+  //
+  // Same forward-mode sweep as compute()'s AD route, but the tangent seed is
+  // placed on a *parameter* of the twin rather than a state component: state
+  // carries zero derivative, one parameter carries unit derivative per column,
+  // so the output tangent is exactly that parameter's column of df/dtheta. This
+  // reuses the twin and buffers -- seeding parameters instead of routing through
+  // the reverse-mode set_params-on-tape path keeps the whole sweep tape-free, so
+  // it never contends with an outer adjoint tape and composes under one later.
+  void compute_params(const System& system, const std::vector<value_type>& y,
+                      double t, std::vector<value_type>& Jp,
+                      size_t& n_params) {
+    static_assert(params_supported,
+                  "compute_params requires rebind() and an ode_parameters() "
+                  "hook on the System twin");
+    twin_type twin = system.template rebind<tangent_type>();
+
+    for (size_t j = 0; j < size; ++j) {
+      v[j] = tangent_type(y[j]);
+    }
+
+    // Pointers into the twin's own parameter storage; valid for the lifetime of
+    // `twin`. Seeding a tangent here propagates through compute_rates().
+    std::vector<tangent_type*> params = twin.ode_parameters();
+    n_params = params.size();
+    Jp.assign(size * n_params, value_type(0.0));
+
+    for (size_t col = 0; col < n_params; ++col) {
+      xad::derivative(*params[col]) = 1.0;
+      ode::derivs(twin, v, dydt_ad, t);
+      for (size_t row = 0; row < size; ++row) {
+        Jp[row * n_params + col] = xad::derivative(dydt_ad[row]);
+      }
+      xad::derivative(*params[col]) = 0.0;
     }
   }
 

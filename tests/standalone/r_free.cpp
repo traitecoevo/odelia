@@ -31,6 +31,7 @@
 #include <odelia/ode_solver_internal.hpp>
 #include <odelia/ode_solver.hpp>
 #include <odelia/ode_fit.hpp>
+#include <odelia/ode_steady_state.hpp>
 #include <odelia/ode_callback_system.hpp>
 #include <examples/lorenz_system.hpp>
 
