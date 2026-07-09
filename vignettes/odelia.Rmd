@@ -99,6 +99,33 @@ ctrl$set_tol_abs(1e-8)
 ctrl$set_tol_rel(1e-8)
 ```
 
+## Choosing an integration method
+
+`odelia` ships two steppers, chosen with the `method` argument when you create a
+solver:
+
+- `"rkck"` (default) — an explicit adaptive Cash-Karp Runge-Kutta 4(5) method.
+  Fast and accurate for **non-stiff** problems like Lorenz.
+- `"rodas"` — an implicit, adaptive RODAS4(3) Rosenbrock method for **stiff**
+  problems. Each step does one exact-Jacobian evaluation (via automatic
+  differentiation) plus a handful of linear solves, so the step size is limited
+  by accuracy rather than stability. On a stiff problem the explicit method is
+  forced into tiny steps (or fails), while RODAS keeps large steps.
+
+```{r method}
+runner_stiff <- Lorenz_Solver$new(lz$ptr, ctrl$ptr, method = "rodas")
+```
+
+Both steppers share the same adaptive step-size controller and `OdeControl`
+tolerances, so you can switch between them without changing anything else.
+
+To use `method = "rodas"` with your own system, the system's C++ class must
+provide a `template<class U> System<U> rebind() const` method (a one-liner that
+copies the system with its scalar type swapped) so its right-hand side can be
+differentiated for the Jacobian; see the Lorenz example. The implicit stepper
+currently runs on the passive (non-AD) solver; differentiating a fit *through*
+RODAS is planned (odelia issue #35).
+
 ## Where next
 
 - For models with **external time-varying forcing**, and how to define your own

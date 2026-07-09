@@ -42,7 +42,7 @@ R6 wrapper for Lorenz ODE solver with optional AD support
 \subsection{Method \code{new()}}{
 Initialize a solver for a Lorenz system.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$new(System_xp, control_xp, active = FALSE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{Lorenz_Solver$new(System_xp, control_xp, active = FALSE, method = "rkck")}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -53,6 +53,9 @@ Initialize a solver for a Lorenz system.
 \item{\code{control_xp}}{External pointer to the ODE control object.}
 
 \item{\code{active}}{Logical flag for AD-enabled solver mode.}
+
+\item{\code{method}}{Integration method: \code{"rkck"} (default, explicit Cash-Karp
+RK 4(5)) or \code{"rodas"} (implicit RODAS4(3) Rosenbrock, for stiff systems).}
 }
 \if{html}{\out{</div>}}
 }

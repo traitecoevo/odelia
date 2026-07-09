@@ -144,6 +144,22 @@ public:
     compute_rates();
   }
 
+  // Return a copy of this system with the scalar type swapped to U. Required by
+  // the implicit (RODAS) stepper, which differentiates the RHS on an active twin
+  // (U = a forward-AD type). Parameters and state are carried across via
+  // xad::value (stripping any active layer to a plain number) and rebuilt as U.
+  template <typename U>
+  LorenzSystem<U> rebind() const {
+    LorenzSystem<U> s(U(xad::value(sigma)), U(xad::value(R)), U(xad::value(b)));
+    std::vector<U> init{U(xad::value(y0_init)), U(xad::value(y1_init)),
+                        U(xad::value(y2_init))};
+    s.set_initial_state(init.begin(), t0);
+    std::vector<U> state{U(xad::value(y0)), U(xad::value(y1)),
+                         U(xad::value(y2))};
+    s.set_ode_state(state.begin(), time);
+    return s;
+  }
+
 private:
   static const int ode_dimension = 3;
 

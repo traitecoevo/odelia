@@ -93,31 +93,44 @@ Rcpp::NumericVector System_rates(SEXP system_xp) {
 //-------------------------------------------------------------------------
 // Solver interface (Lorenz-specific creation, generic operations)
 
+// Map an R-facing method string to the solver Method enum.
+static ode::Method parse_method(const std::string& method) {
+  if (method == "rodas" || method == "implicit") {
+    return ode::Method::rodas;
+  }
+  if (method == "rkck" || method == "rk45" || method == "explicit") {
+    return ode::Method::rkck;
+  }
+  Rcpp::stop("Unknown method '" + method + "'. Use 'rkck' or 'rodas'.");
+}
+
 // Solver creation - Lorenz-specific (must know LorenzSystem type)
 // [[Rcpp::export]]
-SEXP Solver_new(SEXP system_xp, SEXP control_xp, bool active = false) {
+SEXP Solver_new(SEXP system_xp, SEXP control_xp, bool active = false,
+                std::string method = "rkck") {
   Rcpp::XPtr<SystemType> sys(system_xp);
   Rcpp::XPtr<ode::OdeControl> ctrl(control_xp);
-  
+  const ode::Method m = parse_method(method);
+
   if (active) {
     // Initialize new AD compatible system
     auto params = sys->pars();
-    
+
     std::vector<double> initial_state(sys->ode_size());
     sys->ode_initial_state(initial_state.begin());
     auto t0 = sys->ode_t0();
-    
+
     ActiveSystemType sys_active(params[0], params[1], params[2]);
     sys_active.set_initial_state(initial_state.begin(), t0);
-    
-    auto* solver = new ode::Solver<ActiveSystemType>(sys_active, *ctrl);
-    
+
+    auto* solver = new ode::Solver<ActiveSystemType>(sys_active, *ctrl, m);
+
     return Rcpp::XPtr<ode::Solver<ActiveSystemType>>(solver, true);
   } else {
     // Create regular solver
     SystemType sys_copy(*sys);
-    auto* solver = new ode::Solver<SystemType>(sys_copy, *ctrl);
-    
+    auto* solver = new ode::Solver<SystemType>(sys_copy, *ctrl, m);
+
     return Rcpp::XPtr<ode::Solver<SystemType>>(solver, true);
   }
 }

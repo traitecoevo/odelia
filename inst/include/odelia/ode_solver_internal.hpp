@@ -5,6 +5,7 @@
 #include <odelia/ode_interface.hpp>
 #include <odelia/ode_control.hpp>
 #include <odelia/ode_step.hpp>
+#include <odelia/ode_step_rodas.hpp>
 
 #include <limits>
 #include <vector>
@@ -13,14 +14,19 @@
 namespace odelia {
 namespace ode {
 
+// Integration method: the explicit Cash-Karp RKCK 4(5) stepper (default) or the
+// implicit RODAS4(3) Rosenbrock stepper for stiff systems.
+enum class Method { rkck, rodas };
+
 template <class System>
 class SolverInternal {
 public:
   // Extract scalar type from System using traits
-  using value_type = typename System::value_type;  
-  using state_type = std::vector<value_type>;  
-  
-  SolverInternal(const System &system, OdeControl control_);
+  using value_type = typename System::value_type;
+  using state_type = std::vector<value_type>;
+
+  SolverInternal(const System &system, OdeControl control_,
+                 Method method_ = Method::rkck);
   void reset(const System& system);
   void set_state_from_system(const System& system);
 
@@ -44,8 +50,45 @@ private:
   void save_dydt_out_as_in();
   void set_time(double t);
 
+  // Stepper dispatch: SolverInternal holds both steppers and forwards to the one
+  // selected at construction. The adaptive controller (see step()) is otherwise
+  // stepper-agnostic.
+  void stepper_step(System& system, double time_, double step_size,
+                    state_type& y_, state_type& yerr_,
+                    const state_type& dydt_in_, state_type& dydt_out_) {
+    if (method == Method::rodas) {
+      if constexpr (RodasStep<System>::supported) {
+        rodas_stepper.step(system, time_, step_size, y_, yerr_, dydt_in_,
+                           dydt_out_);
+      } else {
+        // RODAS is unavailable for this System: either it provides no rebind()
+        // hook for the AD Jacobian, or its scalar type is itself active (nested
+        // tangent-over-adjoint is not yet wired up -- see issue #35). The passive
+        // solver of a system with rebind() supports RODAS.
+        util::stop("method='rodas' is not available for this system/scalar type "
+                   "(needs a rebind() hook and a non-active scalar); "
+                   "use method='rkck'.");
+      }
+    } else {
+      stepper.step(system, time_, step_size, y_, yerr_, dydt_in_, dydt_out_);
+    }
+  }
+  size_t stepper_order() const {
+    return method == Method::rodas ? rodas_stepper.order() : stepper.order();
+  }
+  bool stepper_can_use_dydt_in() const {
+    return method == Method::rodas ? RodasStep<System>::can_use_dydt_in
+                                   : Step<System>::can_use_dydt_in;
+  }
+  bool stepper_first_same_as_last() const {
+    return method == Method::rodas ? RodasStep<System>::first_same_as_last
+                                   : Step<System>::first_same_as_last;
+  }
+
   OdeControl control;
+  Method method;
   Step<System> stepper;
+  RodasStep<System> rodas_stepper;
 
   double step_size_last; // Size of last successful step (or suggestion)
 
@@ -64,8 +107,9 @@ private:
 // NOTE I'm setting the initial system size to 0 here, but some
 // systems are self-initialising.
 template <class System>
-SolverInternal<System>::SolverInternal(const System &system, OdeControl control_)
-  : control(control_) {
+SolverInternal<System>::SolverInternal(const System &system, OdeControl control_,
+                                       Method method_)
+  : control(control_), method(method_) {
   reset(system);
 }
 
@@ -231,10 +275,10 @@ void SolverInternal<System>::step(System& system) {
       step_size = time_remaining;
     }
 
-    stepper.step(system, time, step_size, y, yerr, dydt_in, dydt_out);
-       
+    stepper_step(system, time, step_size, y, yerr, dydt_in, dydt_out);
+
     const double step_size_next =
-      control.adjust_step_size(size, stepper.order(), step_size,
+      control.adjust_step_size(size, stepper_order(), step_size,
 			       y, yerr, dydt_out);
 
     if (control.step_size_shrank()) {
@@ -283,7 +327,7 @@ void SolverInternal<System>::step_to(System& system, double time_max_) {
   set_time_max(time_max_);
   load(system); // option to load pre-calculated states in mutant runs
   setup_dydt_in(system);
-  stepper.step(system, time, time_max - time, y, yerr, dydt_in, dydt_out);
+  stepper_step(system, time, time_max - time, y, yerr, dydt_in, dydt_out);
   save_dydt_out_as_in();
   cache(system);
 
@@ -298,11 +342,12 @@ void SolverInternal<System>::resize(size_t size_) {
   dydt_in.resize(size_);
   dydt_out.resize(size_);
   stepper.resize(size_);
+  rodas_stepper.resize(size_);
 }
 
 template <class System>
 void SolverInternal<System>::setup_dydt_in(System& system) {
-  if (stepper.can_use_dydt_in && !dydt_in_is_clean) {
+  if (stepper_can_use_dydt_in() && !dydt_in_is_clean) {
     // TODO: Not clear that this is the right thing here; should just
     // be able to look up the correct dydt rates because we've already
     // set state?
@@ -313,7 +358,7 @@ void SolverInternal<System>::setup_dydt_in(System& system) {
 
 template <class System>
 void SolverInternal<System>::save_dydt_out_as_in() {
-  if (stepper.first_same_as_last) {
+  if (stepper_first_same_as_last()) {
     dydt_in = dydt_out;
     dydt_in_is_clean = true;
   } else {

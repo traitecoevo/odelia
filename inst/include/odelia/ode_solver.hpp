@@ -22,7 +22,8 @@ template <typename System>
 class Solver
 {
 public:
-  Solver(System sys_, OdeControl control) : system(sys_), solver(system, control)
+  Solver(System sys_, OdeControl control, Method method = Method::rkck)
+    : system(sys_), solver(system, control, method)
   {
     collect = true;
   }

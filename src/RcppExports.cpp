@@ -102,15 +102,16 @@ BEGIN_RCPP
 END_RCPP
 }
 // Solver_new
-SEXP Solver_new(SEXP system_xp, SEXP control_xp, bool active);
-RcppExport SEXP _odelia_Solver_new(SEXP system_xpSEXP, SEXP control_xpSEXP, SEXP activeSEXP) {
+SEXP Solver_new(SEXP system_xp, SEXP control_xp, bool active, std::string method);
+RcppExport SEXP _odelia_Solver_new(SEXP system_xpSEXP, SEXP control_xpSEXP, SEXP activeSEXP, SEXP methodSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type system_xp(system_xpSEXP);
     Rcpp::traits::input_parameter< SEXP >::type control_xp(control_xpSEXP);
     Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
-    rcpp_result_gen = Rcpp::wrap(Solver_new(system_xp, control_xp, active));
+    Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
+    rcpp_result_gen = Rcpp::wrap(Solver_new(system_xp, control_xp, active, method));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -552,7 +553,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_odelia_System_set_initial_state", (DL_FUNC) &_odelia_System_set_initial_state, 3},
     {"_odelia_System_reset", (DL_FUNC) &_odelia_System_reset, 1},
     {"_odelia_System_rates", (DL_FUNC) &_odelia_System_rates, 1},
-    {"_odelia_Solver_new", (DL_FUNC) &_odelia_Solver_new, 3},
+    {"_odelia_Solver_new", (DL_FUNC) &_odelia_Solver_new, 4},
     {"_odelia_Solver_reset", (DL_FUNC) &_odelia_Solver_reset, 2},
     {"_odelia_Solver_time", (DL_FUNC) &_odelia_Solver_time, 2},
     {"_odelia_Solver_state", (DL_FUNC) &_odelia_Solver_state, 2},
