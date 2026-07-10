@@ -56,7 +56,7 @@ Initialize a solver for a Lorenz system.
 
 #### Usage
 
-    Lorenz_Solver$new(System_xp, control_xp, active = FALSE)
+    Lorenz_Solver$new(System_xp, control_xp, active = FALSE, method = "rkck")
 
 #### Arguments
 
@@ -71,6 +71,11 @@ Initialize a solver for a Lorenz system.
 - `active`:
 
   Logical flag for AD-enabled solver mode.
+
+- `method`:
+
+  Integration method: `"rkck"` (default, explicit Cash-Karp RK 4(5)) or
+  `"rodas"` (implicit RODAS4(3) Rosenbrock, for stiff systems).
 
 ------------------------------------------------------------------------
 

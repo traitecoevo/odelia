@@ -82,7 +82,7 @@
 <h3 id="method-new-">Method <code>new()</code><a class="anchor" aria-label="anchor" href="#method-new-"></a></h3>
 <p>Initialize a solver for a Lorenz system.</p><div class="section">
 <h4 id="usage">Usage<a class="anchor" aria-label="anchor" href="#usage"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va"><a href="../reference/Lorenz_Solver.html">Lorenz_Solver</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="va">System_xp</span>, <span class="va">control_xp</span>, active <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va"><a href="../reference/Lorenz_Solver.html">Lorenz_Solver</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="va">System_xp</span>, <span class="va">control_xp</span>, active <span class="op">=</span> <span class="cn">FALSE</span>, method <span class="op">=</span> <span class="st">"rkck"</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
@@ -97,6 +97,11 @@
 
 <dt><code>active</code></dt>
 <dd><p>Logical flag for AD-enabled solver mode.</p></dd>
+
+
+<dt><code>method</code></dt>
+<dd><p>Integration method: <code>"rkck"</code> (default, explicit Cash-Karp
+RK 4(5)) or <code>"rodas"</code> (implicit RODAS4(3) Rosenbrock, for stiff systems).</p></dd>
 
 
 </dl><p></p></div>
@@ -315,7 +320,7 @@
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer></div>
