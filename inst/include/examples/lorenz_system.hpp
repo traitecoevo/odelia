@@ -3,6 +3,8 @@
 
 #include <odelia/ode_solver.hpp>
 #include <XAD/XAD.hpp>
+#include <vector>
+#include <string>
 
 using namespace odelia;
 
@@ -18,6 +20,23 @@ public:
       sigma(sigma_), R(R_), b(b_),
       dy0dt(0.0), dy1dt(0.0), dy2dt(0.0) {
     reset();  // initialises state & time
+  }
+
+  // rebind names this System on a different scalar, and rebind_from copies its
+  // configuration (values only) into that copy. The gradient driver uses them to
+  // build the active (double -> AD) version of any System the same way, so a new
+  // System gets gradients just by providing these two members. Only values cross,
+  // so the copy starts with no tape state; the driver seeds the active inputs after.
+  template <class S2> using rebind = LorenzSystem<S2>;
+
+  template <class S2>
+  rebind<S2> rebind_from() const {
+    // read the parameters and initial state back to plain double (xad::value), build
+    // the S2 copy from them, and set its initial state.
+    rebind<S2> out(xad::value(sigma), xad::value(R), xad::value(b));
+    const double ic[] = {xad::value(y0_init), xad::value(y1_init), xad::value(y2_init)};
+    out.set_initial_state(ic, t0);
+    return out;
   }
 
   // ODE interface
@@ -54,21 +73,6 @@ public:
     return it;
   }
 
-  // Registers initial state on tape for AD gradient computation
-  template <typename Tape, typename Iterator>
-  std::vector<T*> set_initial_state(Tape& tape, Iterator it, double t0_) {
-    t0 = t0_;
-    y0_init = *it++;
-    y1_init = *it++;
-    y2_init = *it++;
-    
-    tape.registerInput(y0_init);
-    tape.registerInput(y1_init);
-    tape.registerInput(y2_init);
-    
-    return {&y0_init, &y1_init, &y2_init};
-  }
-
   template <typename Iterator>
   Iterator set_params(Iterator it) {
     sigma = *it++;
@@ -77,17 +81,11 @@ public:
     return it;
   }
 
-  // Registers inputs, returns pointers for AD gradient computation
-  template <typename Tape, typename Iterator>
-  std::vector<T*> set_params(Tape& tape, Iterator it) {
-    sigma = *it++;
-    R = *it++;
-    b = *it++;
-    tape.registerInput(sigma);
-    tape.registerInput(R);
-    tape.registerInput(b);
-    return {&sigma, &R, &b};
-  }
+  // The differentiable inputs, in the order DifferentiationTargets indexes them:
+  // parameters (sigma, R, b) then initial state (y0, y1, y2). The driver seeds a
+  // chosen subset active before each solve.
+  std::vector<T*> ad_parameters()    { return {&sigma, &R, &b}; }
+  std::vector<T*> ad_initial_state() { return {&y0_init, &y1_init, &y2_init}; }
 
   template <typename Iterator>
   Iterator ode_state(Iterator it) const {
@@ -111,6 +109,10 @@ public:
     *it++ = dy1dt;
     *it++ = dy2dt;
     return it;
+  }
+
+  std::vector<std::string> record_colnames() const {
+    return {"time", "x", "y", "z", "dxdt", "dydt", "dzdt"};
   }
 
   std::vector<double> record_step() const {
@@ -142,22 +144,6 @@ public:
     y2 = y2_init;
     time = t0;
     compute_rates();
-  }
-
-  // Return a copy of this system with the scalar type swapped to U. Required by
-  // the implicit (RODAS) stepper, which differentiates the RHS on an active twin
-  // (U = a forward-AD type). Parameters and state are carried across via
-  // xad::value (stripping any active layer to a plain number) and rebuilt as U.
-  template <typename U>
-  LorenzSystem<U> rebind() const {
-    LorenzSystem<U> s(U(xad::value(sigma)), U(xad::value(R)), U(xad::value(b)));
-    std::vector<U> init{U(xad::value(y0_init)), U(xad::value(y1_init)),
-                        U(xad::value(y2_init))};
-    s.set_initial_state(init.begin(), t0);
-    std::vector<U> state{U(xad::value(y0)), U(xad::value(y1)),
-                         U(xad::value(y2))};
-    s.set_ode_state(state.begin(), time);
-    return s;
   }
 
 private:

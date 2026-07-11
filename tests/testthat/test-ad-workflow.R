@@ -5,9 +5,9 @@ memoise_fit <- function(runner) {
   cache_res <- NULL
 
   fn <- function(p) {
-    cache_res <<- runner$fit(params = p)
+    cache_res <<- runner$value_and_gradient(params = p)
     cache_p <<- p
-    cache_res$loss
+    cache_res$value
   }
 
   gr <- function(p) {
@@ -39,9 +39,9 @@ test_that("AD workflow optimizes Lorenz parameters", {
   lz$set_params(initial_guess)
 
   # Create AD solver
-  target_vals <- as.matrix(hist[, c("x", "y", "z")])
-  ad_runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr, active = TRUE)
-  ad_runner$set_target(times, target_vals, obs_index)
+  observation_vals <- as.matrix(hist[, c("x", "y", "z")])
+  ad_runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
+  ad_runner$set_observations(times, observation_vals, obs_index)
 
   expect_false(isTRUE(all.equal(lz$pars(), true_pars)))
 

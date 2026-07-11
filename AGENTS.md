@@ -35,6 +35,37 @@ against. The next-generation `plant` core links against it.
   anything that `LinkingTo` it (notably the next-gen `plant`). Treat such changes as
   `cross-package` / `breaking`.
 
+## Code & comment style
+
+New code should be indistinguishable from the existing header core (Rich FitzJohn's):
+terse, template-heavy, `const` by default, 2-space indent. AD code is **glue around the
+vendored XAD facilities** (`computeJacobian`, `CheckpointCallback`, the tape drivers) —
+invoke them, don't re-implement them. Modify the type that already exists rather than
+adding a parallel one, and prefer a mechanism that scales (a System hands back its fields;
+no per-index switch) over a special case.
+
+Comments say what the code **is** and what must hold — the invariant, the reason behind a
+non-obvious choice — and nothing else. The bar the AD surface is held to:
+
+- **State the thing, not its history.** No issue/PR numbers, no "was renamed from…", no
+  "the old X did Y". A stable external anchor (a paper, `#472`, a GSL routine) is fine;
+  process references drift the moment the code moves.
+- **Present odelia's design as its own fact.** Don't explain it via plant, "the spike", or
+  how we got here.
+- **Plain and direct — no metaphor, no flourish.** Name things for what they are; avoid
+  decorative nouns (`contract`, `oracle`, `surface`) and cute metaphors
+  (`frozen`/`mutant`/`live`/`comb`). If a name needs a metaphor to make sense, rename it.
+- **Be sparing.** The code carries most of the meaning; a comment earns its place by
+  helping the reader over a genuine hump. Don't narrate a counter for a paragraph.
+- **Generic machinery is background.** In a concrete System (Lorenz, leaf, canopy) the
+  members required by the AD contract should read as ordinary code, not as the point of
+  the file — the physics is the point. Give an example a real applied domain, not an
+  abstract stand-in.
+
+`AUTODIFF.md` is the reference for the AD surface a System implements; `ARCHITECTURE.md`
+for the XAD `Tape` link. Don't hand-edit generated files (`R/RcppExports.R`,
+`src/RcppExports.cpp`, `NAMESPACE`, `man/`).
+
 ## Plant family
 
 `odelia` is part of the **plant family** in the [`traitecoevo`](https://github.com/traitecoevo)

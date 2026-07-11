@@ -39,6 +39,22 @@ public:
     reset();
   }
 
+  // rebind + rebind_from copy this System's configuration onto another scalar, so
+  // the gradient driver can build its active (AD) version generically (see
+  // LorenzSystem for the pattern). Only values cross; the driver seeds the active
+  // inputs afterwards.
+  template <class S2> using rebind = LeafThermalSystem<S2>;
+
+  template <class S2>
+  rebind<S2> rebind_from() const {
+    const LeafThermalPars p{xad::value(k_H), xad::value(g_tr_max),
+                            xad::value(m_tr), xad::value(T_tr_mid)};
+    rebind<S2> out(p, drivers);
+    const double ic = xad::value(T_LC_init);
+    out.set_initial_state(&ic, t0);
+    return out;
+  }
+
   void initialize_drivers(const drivers::Drivers &drv) {
     drivers = drv;
     temperature_fn = drivers.get_function_ptr("temperature");
@@ -68,15 +84,6 @@ public:
     return it;
   }
 
-  // Set the initial state and register on tape for AD gradient computation
-  template <typename Tape, typename Iterator>
-  std::vector<T*> set_initial_state(Tape& tape, Iterator it, double t0_) {
-    t0 = t0_;
-    T_LC_init = *it++;
-    tape.registerInput(T_LC_init);
-    return {&T_LC_init};
-  }
-
   // Set parameters - no tape registration
   template <typename Iterator>
   Iterator set_params(Iterator it) {
@@ -87,19 +94,10 @@ public:
     return it;
   }
 
-  // Set parameters and register on tape for AD gradient computation
-  template <typename Tape, typename Iterator>
-  std::vector<T*> set_params(Tape& tape, Iterator it) {
-    k_H = *it++;
-    g_tr_max = *it++;
-    m_tr = *it++;
-    T_tr_mid = *it++;
-    tape.registerInput(k_H);
-    tape.registerInput(g_tr_max);
-    tape.registerInput(m_tr);
-    tape.registerInput(T_tr_mid);
-    return {&k_H, &g_tr_max, &m_tr, &T_tr_mid};
-  }
+  // Differentiable inputs, in the order DifferentiationTargets indexes them:
+  // parameters (k_H, g_tr_max, m_tr, T_tr_mid) then initial state (T_LC).
+  std::vector<T*> ad_parameters()    { return {&k_H, &g_tr_max, &m_tr, &T_tr_mid}; }
+  std::vector<T*> ad_initial_state() { return {&T_LC_init}; }
 
 void set_drivers() {
     T_air = temperature_fn->evaluate(time);

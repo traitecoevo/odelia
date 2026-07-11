@@ -61,12 +61,12 @@ private:
         rodas_stepper.step(system, time_, step_size, y_, yerr_, dydt_in_,
                            dydt_out_);
       } else {
-        // RODAS is unavailable for this System: either it provides no rebind()
+        // RODAS is unavailable for this System: either it provides no rebind_from()
         // hook for the AD Jacobian, or its scalar type is itself active (nested
         // tangent-over-adjoint is not yet wired up -- see issue #35). The passive
-        // solver of a system with rebind() supports RODAS.
+        // solver of a system with rebind_from() supports RODAS.
         util::stop("method='rodas' is not available for this system/scalar type "
-                   "(needs a rebind() hook and a non-active scalar); "
+                   "(needs a rebind_from() hook and a non-active scalar); "
                    "use method='rkck'.");
       }
     } else {
@@ -122,30 +122,25 @@ void SolverInternal<System>::reset(const System& system) {
   set_state_from_system(system);
 }
 
-// saving ode steps during adaptive solve
+// Record this ODE step's node positions on a Replayable System during the adaptive
+// pass; a no-op for any System that doesn't record.
 template <typename System>
-typename std::enable_if<has_cache<System>::value, void>::type
-cache(System& system) {
-  system.cache_ode_step();
+void record_ode_step(System& system) {
+  if constexpr (Replayable<System>) {
+    system.record_ode_step();
+  }
 }
 
+// On the replay pass, let a Replayable System restore what it recorded for this step;
+// a no-op otherwise. Called from step_to. What restoring does -- reuse recorded field
+// values, or nothing so the field is recomputed with the active scalar -- is the
+// System's own choice.
 template <typename System>
-typename std::enable_if<!has_cache<System>::value, void>::type
-cache(System& system) {}
-
-// During mutant run, load ode history
-// the history is a vector of 6 states for env, needed to make a 
-// full RK step. Called as part of `step_to`
-template <typename System>
-typename std::enable_if<has_cache<System>::value, void>::type
-load(System& system) {
-  system.load_ode_step();
+void replay_step(System& system) {
+  if constexpr (Replayable<System>) {
+    system.replay_step();
+  }
 }
-
-// During resident run, no cache loaded, proceed as normal
-template <typename System>
-typename std::enable_if<!has_cache<System>::value, void>::type
-load(System& system) {}
 
 template <class System>
 void SolverInternal<System>::set_state_from_system(const System& system) {
@@ -314,7 +309,7 @@ void SolverInternal<System>::step(System& system) {
       }
       prev_times.push_back(time);
       save_dydt_out_as_in();
-      cache(system);
+      record_ode_step(system);
       return; // This exits the infinite loop.
     }
   }
@@ -325,11 +320,11 @@ void SolverInternal<System>::step(System& system) {
 template <class System>
 void SolverInternal<System>::step_to(System& system, double time_max_) {
   set_time_max(time_max_);
-  load(system); // option to load pre-calculated states in mutant runs
+  replay_step(system); // restore this step's recorded state on a replay pass
   setup_dydt_in(system);
   stepper_step(system, time, time_max - time, y, yerr, dydt_in, dydt_out);
   save_dydt_out_as_in();
-  cache(system);
+  record_ode_step(system);
 
   time = time_max;
   prev_times.push_back(time);

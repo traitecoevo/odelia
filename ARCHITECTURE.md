@@ -6,6 +6,10 @@
 > failures in downstream packages (e.g. plant) that do not show up in odelia's
 > own checks.
 
+> For **automatic differentiation** — the gradient API and the contract a System
+> implements to be differentiable — see [`AUTODIFF.md`](AUTODIFF.md).
+> This document is only about how the `Tape` runtime compiles and links.
+
 ## Why there is compiled code at all
 
 odelia is *almost* header-only — the ODE `Solver`, interpolator, and ODE

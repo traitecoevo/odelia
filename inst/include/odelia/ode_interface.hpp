@@ -4,6 +4,8 @@
 
 #include <odelia/ode_util.hpp>
 
+#include <concepts>
+
 namespace odelia {
 namespace ode {
 
@@ -26,14 +28,23 @@ public:
   enum { value = sizeof(test<T>(0)) == sizeof(true_type) };
 };
 
+// A System that records the node positions its adaptive solve chose, then replays
+// them on a later pass so the active scalar propagates through a schedule that no
+// longer moves. The hooks are detected at compile time; an absent hook is a
+// zero-cost no-op, so a System that does not record is unaffected. has_recorded_field()
+// is required by the concept so a System that provides the hooks but not the query is
+// rejected here, at the boundary, rather than deep inside derivs.
+//
+// Two replay depths. With only positions recorded, the field is recomputed with the
+// active scalar on the fixed positions (its derivative flows). With field values
+// also recorded, they are reused as fixed doubles (the derivative through the field
+// is then zero). has_recorded_field() reports which of the two applies.
 template <typename System>
-class has_cache {
-  typedef char true_type;
-  typedef long false_type;
-  template <typename C> static true_type test(decltype(&C::cache_RK45_step)) ;
-  template <typename C> static false_type test(...);
-public:
-  enum { value = sizeof(test<System>(0)) == sizeof(true_type) };
+concept Replayable = requires(System s, int stage) {
+  s.record_stage(stage);     // per RK stage: record a field value, when values are kept
+  s.record_ode_step();       // per accepted ODE step: commit the node positions
+  s.replay_step();           // per step on the replay pass: restore this step's record
+  { s.has_recorded_field() } -> std::convertible_to<bool>;  // are field values recorded?
 };
 
 // The recursive interface
@@ -123,8 +134,8 @@ set_ode_state(T& obj, const StateType& y, double /* time */) {
 }
 
 template <typename T, typename StateType>
-typename std::enable_if<has_cache<T>::value, void>::type
-set_ode_state(T& obj, const StateType& y, int index) {
+  requires Replayable<T>
+void set_ode_state(T& obj, const StateType& y, int index) {
   obj.set_ode_state(y.begin(), index);
 }
 }
@@ -138,28 +149,22 @@ void derivs(T& obj, const StateType& y, StateType& dydt,
   obj.ode_rates(dydt.begin());
 }
 
-// for ODE stepping
+// ODE stepping. A Replayable System that has recorded field values reads the field
+// for this RK stage by index; otherwise it sets state at the current time and
+// recomputes (the second branch also covers every non-Replayable System). The choice
+// compiles away for a System that isn't Replayable. See the Replayable concept above.
 template <typename T, typename StateType>
-typename std::enable_if<!has_cache<T>::value, void>::type
-derivs(T& obj, const StateType& y, StateType& dydt,
-            const double time, const int /* index */) {
-
-  internal::set_ode_state(obj, y, time);
-  obj.ode_rates(dydt.begin());
-}
-
-// for mutants or ODE stepping
-template <typename T, typename StateType>
-typename std::enable_if<has_cache<T>::value, void>::type
-derivs(T& obj, const StateType& y, StateType& dydt,
+void derivs(T& obj, const StateType& y, StateType& dydt,
             const double time, const int index) {
-
-    if(obj.use_cached_environment) {
+  if constexpr (Replayable<T>) {
+    if (obj.has_recorded_field()) {
       internal::set_ode_state(obj, y, index);
     } else {
       internal::set_ode_state(obj, y, time);
     }
-  
+  } else {
+    internal::set_ode_state(obj, y, time);
+  }
   obj.ode_rates(dydt.begin());
 }
 

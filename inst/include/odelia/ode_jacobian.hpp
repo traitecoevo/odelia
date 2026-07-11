@@ -14,10 +14,10 @@
 // adjoint fit -- the tangent layer never contends with the outer tape.
 //
 // Obtaining the twin requires the System to expose
-//     template <class U> System<U> rebind() const;
+//     template <class U> rebind<U> rebind_from() const;
 // which returns a copy of itself with the scalar type swapped to U (parameters
-// carried over via xad::value + U(...)). This is the one concept extension the
-// implicit stepper adds; a clear error fires below if it is missing.
+// carried over via xad::value + U(...)). This is the same double->AD lift the
+// gradient driver uses; a clear error fires below if it is missing.
 
 #include <vector>
 #include <cstddef>
@@ -29,25 +29,25 @@
 namespace odelia {
 namespace ode {
 
-// Detect `template<class U> ... rebind()` on a System, probed at the System's own
-// scalar type (every system can at least rebind to itself).
+// Detect `template<class U> ... rebind_from()` on a System, probed at the System's
+// own scalar type (every system can at least rebind to itself).
 template <typename S, typename = void>
-struct has_rebind : std::false_type {};
+struct has_rebind_from : std::false_type {};
 
 template <typename S>
-struct has_rebind<
+struct has_rebind_from<
     S, std::void_t<decltype(std::declval<const S>()
-                                .template rebind<typename S::value_type>())>>
+                                .template rebind_from<typename S::value_type>())>>
     : std::true_type {};
 
-// The System type rebound to scalar U, i.e. decltype(system.rebind<U>()). When
-// the System has no rebind() the type is not evaluated (a harmless placeholder
-// is used instead), so that Jacobian<System> can still be *class*-instantiated
-// for systems that will never use the implicit stepper -- the actual use is
-// gated on `supported` below.
-template <typename S, typename U, bool = has_rebind<S>::value>
+// The System type rebound to scalar U, i.e. decltype(system.rebind_from<U>()).
+// When the System has no rebind_from() the type is not evaluated (a harmless
+// placeholder is used instead), so that Jacobian<System> can still be
+// *class*-instantiated for systems that will never use the implicit stepper --
+// the actual use is gated on `supported` below.
+template <typename S, typename U, bool = has_rebind_from<S>::value>
 struct rebound_system {
-  using type = decltype(std::declval<const S>().template rebind<U>());
+  using type = decltype(std::declval<const S>().template rebind_from<U>());
 };
 template <typename S, typename U>
 struct rebound_system<S, U, false> {
@@ -65,13 +65,13 @@ public:
   using twin_type = typename rebound_system<System, tangent_type>::type;
 
   // Whether the forward-AD Jacobian is instantiable and usable for this System.
-  // Requires (a) a rebind() hook and (b) that the tangent twin can be built from
+  // Requires (a) a rebind_from() hook and (b) that the tangent twin can be built from
   // the current scalar type. (b) is currently false when value_type is itself an
   // active AD type (nested tangent-over-adjoint, e.g. FReal<AReal<double>>, is
   // not yet wired up -- see issue #35). Callers gate on this, so Jacobian can be
   // class-instantiated even for systems that never use the implicit stepper.
   static constexpr bool supported =
-      has_rebind<System>::value &&
+      has_rebind_from<System>::value &&
       std::is_constructible<tangent_type, value_type>::value;
 
   void resize(size_t size_) {
@@ -88,7 +88,7 @@ public:
     // Refresh the twin from the live system each call so current parameters are
     // reflected (cheap: a small value copy). The twin's scalar is the tangent
     // type; its parameters carry zero derivative.
-    twin_type twin = system.template rebind<tangent_type>();
+    twin_type twin = system.template rebind_from<tangent_type>();
 
     for (size_t j = 0; j < size; ++j) {
       v[j] = tangent_type(y[j]);

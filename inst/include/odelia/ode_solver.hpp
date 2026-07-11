@@ -2,10 +2,27 @@
 #define ODELIA_ODE_SOLVER_HPP_
 
 #include <odelia/ode_solver_internal.hpp>
+#include <XAD/XAD.hpp>
 #include <XAD/Tape.hpp>
+#include <memory>
+#include <type_traits>
 
 namespace odelia {
 namespace ode {
+
+// AD is opt-in: a System is differentiable only if it provides `rebind` (the double
+// -> active mould). For a plain double System that never takes a gradient, resolve
+// the active twin's type to the System itself -- a harmless placeholder that is
+// declared but never constructed -- so `Solver<System>` compiles without forcing
+// every System to carry AD scaffolding.
+namespace detail {
+template <class S, class Scalar, class = void>
+struct rebind_or_self { using type = S; };
+template <class S, class Scalar>
+struct rebind_or_self<S, Scalar, std::void_t<typename S::template rebind<Scalar>>> {
+  using type = typename S::template rebind<Scalar>;
+};
+}
 
 // This is a wrapper class that is meant to simplify the
 // difficuly of ownership semantics around the solver and system.
@@ -22,18 +39,32 @@ template <typename System>
 class Solver
 {
 public:
+  using value_type = typename System::value_type;
+
   Solver(System sys_, OdeControl control, Method method = Method::rkck)
-    : system(sys_), solver(system, control, method)
+    : system(sys_), control_(control), solver(system, control, method)
   {
     collect = true;
   }
 
-  // destructor to delete XAD tape
-  ~Solver() {
-    if (tape) {
-      delete tape;
-    }
+  // Copyable: the tape and cached active twin are rebuildable amortization scratch
+  // (RIF-3), not part of the Solver's value, so a copy starts with them empty and
+  // rebuilds them lazily on its first gradient. plant copies Solvers on the non-AD
+  // path (SCM snapshots, RcppR6 bindings), where that scratch is irrelevant; the
+  // implicit copy ctor is deleted only because of the unique_ptr<Tape> member.
+  Solver(const Solver& o)
+    : collect(o.collect), system(o.system), control_(o.control_),
+      solver(o.solver), replay_schedule_(o.replay_schedule_) {
+    history = o.history;
   }
+  Solver& operator=(const Solver& o) {
+    collect = o.collect; system = o.system; control_ = o.control_;
+    solver = o.solver; replay_schedule_ = o.replay_schedule_; history = o.history;
+    tape.reset(); active_solver.reset();
+    return *this;
+  }
+  Solver(Solver&&) = default;
+  Solver& operator=(Solver&&) = default;
 
   // TODO: solver.reset() will set time within the solver to zero.
   // However, there is no other current way of setting the time within
@@ -54,6 +85,10 @@ public:
 
   System get_system() const { return system; }
   System& get_system_ref() { return system; }
+
+  // The control this solver was built with, so a driver builds the active solver
+  // with the same integration settings.
+  OdeControl get_control() const { return control_; }
 
   // Synchronize internal ODE buffers from the current system state without
   // resetting solver history/step-size state.
@@ -175,72 +210,51 @@ public:
 
   System get_history_step(std::size_t i) const { return history.at(i); }
 
-  // Fit configuration methods
-  void set_target(const std::vector<double>& times, 
-                  const std::vector<std::vector<double>>& targets,
-                  const std::vector<size_t>& obs_indices) {
-      fit_times_ = times;
-      targets_ = targets;
-      obs_indices_ = obs_indices;
-    }
-  // Advance solver and return states only at observation times
-std::vector<std::vector<typename System::value_type>> advance_target() {
-    // Check that target has been set
-    if (fit_times_.empty()) {
-      util::stop("Must call set_target() before advance_target()");
-    }
-    
-    // Check starting time matches
-    if (!util::identical(fit_times_[0], time())) {
-      util::stop("First element in fit_times must be same as current time");
-    }
-    
-    // Vector to store states at observation times
-    std::vector<std::vector<typename System::value_type>> observations;
-    observations.reserve(obs_indices_.size());
-    
-    // Track which observation we're looking for
-    size_t obs_idx = 0;
-    
-    // Check if initial time is an observation
-    if (obs_idx < obs_indices_.size() && obs_indices_[obs_idx] == 0) {
-      observations.push_back(state());
-      obs_idx++;
-    }
-    
-      // Step through times
-      for (size_t i = 1; i < fit_times_.size(); ++i) {
-        solver.step_to(system, fit_times_[i]);
-      
-      // Check if this time index is an observation point
-      while (obs_idx < obs_indices_.size() && obs_indices_[obs_idx] == i) {
-        observations.push_back(state());
-        obs_idx++;
-      }
-    }
-    
-    return observations;
-  }
-  const std::vector<double>& fit_times() const { return fit_times_; }
-  const std::vector<std::vector<double>>& targets() const { return targets_; }
-  const std::vector<size_t>& obs_indices() const { return obs_indices_; }
+  // The read-only surface behind the "forgot to record" guard: whether an adaptive
+  // pass has resolved a schedule on this solver, and what it is. The schedule is the
+  // grid a replay-gradient advances over (advance_fixed).
+  bool has_recording() const { return times().size() > 1; }
+  std::vector<double> recorded_steps() const { return times(); }
 
-  // Persistent tape for AD gradient computation
-  xad::Tape<double>* tape = nullptr;
+  // Hand the recorded replay schedule (L1) to this solver. The active twin holds no
+  // recording of its own (rebind copies values, not the schedule), so the schedule is
+  // handed over per gradient call -- the L1 analogue of the System's set_recording for
+  // L2/L3, and the reason L1 is Solver-owned state rather than a gradient-driver
+  // argument.
+  void set_schedule(std::vector<double> steps) { replay_schedule_ = std::move(steps); }
+
+  // Replay the recorded schedule with the currently-seeded system: the forward pass
+  // the gradient driver differentiates, called once per Jacobian row.
+  void run() {
+    if (replay_schedule_.empty()) {
+      util::stop("no recorded schedule to replay; run the adaptive pass first");
+    }
+    advance_fixed(replay_schedule_);
+  }
+
+  // The active (AD) version of this System, lifted via rebind. Built on the first
+  // gradient and reused, so an optimiser loop amortizes it (its own `tape` included).
+  // Cached on the object rather than an R handle, so a C++ caller that holds the
+  // solver as a plain member shares the reuse. mutable: scratch, reusable through a
+  // const solver.
+  using active_scalar      = typename xad::adj<double>::active_type;
+  using active_system_type = typename detail::rebind_or_self<System, active_scalar>::type;
+  mutable std::shared_ptr<Solver<active_system_type>> active_solver;
+
+  // Reverse-mode tape, created on the first gradient and reused (only ever exercised
+  // on the active solver).
+  std::unique_ptr<xad::Tape<double>> tape;
 
   // Should we record history at every step?
   // TODO: should this be part of ode_solver?
 std::vector<System> history;
 
-private:  
+private:
   bool collect;
   System system;
+  OdeControl control_;
   SolverInternal<System> solver;
-  
-  // Fit configuration for AD gradient computation
-  std::vector<double> fit_times_;
-  std::vector<size_t> obs_indices_;
-  std::vector<std::vector<double>> targets_;
+  std::vector<double> replay_schedule_;  // L1 recording handed over per gradient call
 
 };
 }

@@ -49,37 +49,38 @@ hist <- runner$history()
 
 # The internal solver times that coincide with stored output rows
 obs_index <- which(times %in% hist$time)
-target_vals <- as.matrix(hist[, c("x", "y", "z")])
+observation_vals <- as.matrix(hist[, c("x", "y", "z")])
 ```
 
-## Set up an AD-enabled solver
+## Set up the calibration target
 
 We move the system parameters away from the truth (this is our starting guess),
-then build a solver with `active = TRUE` to enable AD, and register the
-calibration target.
+then build a solver and register the calibration target. Gradients are computed
+on this ordinary (double) solver; the AD replay is built internally, so there is
+no separate active solver to manage.
 
 ```{r ad-setup}
 initial_guess <- c(sigma = 12.0, R = 30.0, b = 3.0)
 lz$set_params(initial_guess)
 
-ad_runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr, active = TRUE)
-ad_runner$set_target(times, target_vals, obs_index)
+ad_runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
+ad_runner$set_observations(times, observation_vals, obs_index)
 ```
 
-The `$fit()` method solves the system for a given parameter vector and returns
-both the loss and its exact gradient:
+The `$value_and_gradient()` method solves the system for a given parameter
+vector and returns both the loss and its exact gradient:
 
 ```{r fit-once}
-res0 <- ad_runner$fit(params = initial_guess)
-res0$loss
+res0 <- ad_runner$value_and_gradient(params = initial_guess)
+res0$value
 res0$gradient
 ```
 
 ## Optimise
 
-Because each `$fit()` call returns both loss and gradient, we cache the most
-recent result so the optimiser does not have to re-run the solver to obtain the
-gradient separately.
+Because each `$value_and_gradient()` call returns both loss and gradient, we
+cache the most recent result so the optimiser does not have to re-run the solver
+to obtain the gradient separately.
 
 ```{r memoise}
 memoise_fit <- function(runner) {
@@ -87,9 +88,9 @@ memoise_fit <- function(runner) {
   cache_res <- NULL
 
   fn <- function(p) {
-    cache_res <<- runner$fit(params = p)
+    cache_res <<- runner$value_and_gradient(params = p)
     cache_p <<- p
-    cache_res$loss
+    cache_res$value
   }
   gr <- function(p) {
     if (!identical(p, cache_p)) fn(p) # populate cache if stale

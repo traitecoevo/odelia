@@ -36,5 +36,5 @@ Encoding: UTF-8
 License: AGPL (>= 3)
 URL: https://github.com/traitecoevo/odelia, https://traitecoevo.github.io/odelia/
 BugReports: https://github.com/traitecoevo/odelia/issues
-RoxygenNote: 7.3.3
 Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0

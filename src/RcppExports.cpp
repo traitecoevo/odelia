@@ -10,6 +10,81 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// Canopy_new
+SEXP Canopy_new(double gain, double y0);
+RcppExport SEXP _odelia_Canopy_new(SEXP gainSEXP, SEXP y0SEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type gain(gainSEXP);
+    Rcpp::traits::input_parameter< double >::type y0(y0SEXP);
+    rcpp_result_gen = Rcpp::wrap(Canopy_new(gain, y0));
+    return rcpp_result_gen;
+END_RCPP
+}
+// Canopy_adaptive_final
+double Canopy_adaptive_final(SEXP system_xp, SEXP control_xp, double Tmax);
+RcppExport SEXP _odelia_Canopy_adaptive_final(SEXP system_xpSEXP, SEXP control_xpSEXP, SEXP TmaxSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type system_xp(system_xpSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type control_xp(control_xpSEXP);
+    Rcpp::traits::input_parameter< double >::type Tmax(TmaxSEXP);
+    rcpp_result_gen = Rcpp::wrap(Canopy_adaptive_final(system_xp, control_xp, Tmax));
+    return rcpp_result_gen;
+END_RCPP
+}
+// Canopy_record_replay_gradient
+Rcpp::List Canopy_record_replay_gradient(SEXP system_xp, SEXP control_xp, double Tmax, bool reuse_light);
+RcppExport SEXP _odelia_Canopy_record_replay_gradient(SEXP system_xpSEXP, SEXP control_xpSEXP, SEXP TmaxSEXP, SEXP reuse_lightSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type system_xp(system_xpSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type control_xp(control_xpSEXP);
+    Rcpp::traits::input_parameter< double >::type Tmax(TmaxSEXP);
+    Rcpp::traits::input_parameter< bool >::type reuse_light(reuse_lightSEXP);
+    rcpp_result_gen = Rcpp::wrap(Canopy_record_replay_gradient(system_xp, control_xp, Tmax, reuse_light));
+    return rcpp_result_gen;
+END_RCPP
+}
+// Canopy_Solver_new
+SEXP Canopy_Solver_new(SEXP system_xp, SEXP control_xp);
+RcppExport SEXP _odelia_Canopy_Solver_new(SEXP system_xpSEXP, SEXP control_xpSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type system_xp(system_xpSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type control_xp(control_xpSEXP);
+    rcpp_result_gen = Rcpp::wrap(Canopy_Solver_new(system_xp, control_xp));
+    return rcpp_result_gen;
+END_RCPP
+}
+// Canopy_record
+int Canopy_record(SEXP solver_xp, double Tmax);
+RcppExport SEXP _odelia_Canopy_record(SEXP solver_xpSEXP, SEXP TmaxSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
+    Rcpp::traits::input_parameter< double >::type Tmax(TmaxSEXP);
+    rcpp_result_gen = Rcpp::wrap(Canopy_record(solver_xp, Tmax));
+    return rcpp_result_gen;
+END_RCPP
+}
+// Canopy_replay_gradient
+Rcpp::List Canopy_replay_gradient(SEXP solver_xp, bool reuse_light);
+RcppExport SEXP _odelia_Canopy_replay_gradient(SEXP solver_xpSEXP, SEXP reuse_lightSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
+    Rcpp::traits::input_parameter< bool >::type reuse_light(reuse_lightSEXP);
+    rcpp_result_gen = Rcpp::wrap(Canopy_replay_gradient(solver_xp, reuse_light));
+    return rcpp_result_gen;
+END_RCPP
+}
 // System_new
 SEXP System_new(double sigma, double R, double b);
 RcppExport SEXP _odelia_System_new(SEXP sigmaSEXP, SEXP RSEXP, SEXP bSEXP) {
@@ -102,211 +177,211 @@ BEGIN_RCPP
 END_RCPP
 }
 // Solver_new
-SEXP Solver_new(SEXP system_xp, SEXP control_xp, bool active, std::string method);
-RcppExport SEXP _odelia_Solver_new(SEXP system_xpSEXP, SEXP control_xpSEXP, SEXP activeSEXP, SEXP methodSEXP) {
+SEXP Solver_new(SEXP system_xp, SEXP control_xp, std::string method);
+RcppExport SEXP _odelia_Solver_new(SEXP system_xpSEXP, SEXP control_xpSEXP, SEXP methodSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type system_xp(system_xpSEXP);
     Rcpp::traits::input_parameter< SEXP >::type control_xp(control_xpSEXP);
-    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
     Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
-    rcpp_result_gen = Rcpp::wrap(Solver_new(system_xp, control_xp, active, method));
+    rcpp_result_gen = Rcpp::wrap(Solver_new(system_xp, control_xp, method));
     return rcpp_result_gen;
 END_RCPP
 }
 // Solver_reset
-void Solver_reset(SEXP solver_xp, bool active);
-RcppExport SEXP _odelia_Solver_reset(SEXP solver_xpSEXP, SEXP activeSEXP) {
+void Solver_reset(SEXP solver_xp);
+RcppExport SEXP _odelia_Solver_reset(SEXP solver_xpSEXP) {
 BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
-    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
-    Solver_reset(solver_xp, active);
+    Solver_reset(solver_xp);
     return R_NilValue;
 END_RCPP
 }
 // Solver_time
-double Solver_time(SEXP solver_xp, bool active);
-RcppExport SEXP _odelia_Solver_time(SEXP solver_xpSEXP, SEXP activeSEXP) {
+double Solver_time(SEXP solver_xp);
+RcppExport SEXP _odelia_Solver_time(SEXP solver_xpSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
-    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
-    rcpp_result_gen = Rcpp::wrap(Solver_time(solver_xp, active));
+    rcpp_result_gen = Rcpp::wrap(Solver_time(solver_xp));
     return rcpp_result_gen;
 END_RCPP
 }
 // Solver_state
-Rcpp::NumericVector Solver_state(SEXP solver_xp, bool active);
-RcppExport SEXP _odelia_Solver_state(SEXP solver_xpSEXP, SEXP activeSEXP) {
+Rcpp::NumericVector Solver_state(SEXP solver_xp);
+RcppExport SEXP _odelia_Solver_state(SEXP solver_xpSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
-    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
-    rcpp_result_gen = Rcpp::wrap(Solver_state(solver_xp, active));
+    rcpp_result_gen = Rcpp::wrap(Solver_state(solver_xp));
     return rcpp_result_gen;
 END_RCPP
 }
 // Solver_times
-Rcpp::NumericVector Solver_times(SEXP solver_xp, bool active);
-RcppExport SEXP _odelia_Solver_times(SEXP solver_xpSEXP, SEXP activeSEXP) {
+Rcpp::NumericVector Solver_times(SEXP solver_xp);
+RcppExport SEXP _odelia_Solver_times(SEXP solver_xpSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
-    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
-    rcpp_result_gen = Rcpp::wrap(Solver_times(solver_xp, active));
+    rcpp_result_gen = Rcpp::wrap(Solver_times(solver_xp));
     return rcpp_result_gen;
 END_RCPP
 }
 // Solver_set_state
-void Solver_set_state(SEXP solver_xp, Rcpp::NumericVector y, double time, bool active);
-RcppExport SEXP _odelia_Solver_set_state(SEXP solver_xpSEXP, SEXP ySEXP, SEXP timeSEXP, SEXP activeSEXP) {
+void Solver_set_state(SEXP solver_xp, Rcpp::NumericVector y, double time);
+RcppExport SEXP _odelia_Solver_set_state(SEXP solver_xpSEXP, SEXP ySEXP, SEXP timeSEXP) {
 BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
     Rcpp::traits::input_parameter< double >::type time(timeSEXP);
-    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
-    Solver_set_state(solver_xp, y, time, active);
+    Solver_set_state(solver_xp, y, time);
     return R_NilValue;
 END_RCPP
 }
 // Solver_advance_adaptive
-void Solver_advance_adaptive(SEXP solver_xp, Rcpp::NumericVector times, bool active);
-RcppExport SEXP _odelia_Solver_advance_adaptive(SEXP solver_xpSEXP, SEXP timesSEXP, SEXP activeSEXP) {
+void Solver_advance_adaptive(SEXP solver_xp, Rcpp::NumericVector times);
+RcppExport SEXP _odelia_Solver_advance_adaptive(SEXP solver_xpSEXP, SEXP timesSEXP) {
 BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type times(timesSEXP);
-    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
-    Solver_advance_adaptive(solver_xp, times, active);
+    Solver_advance_adaptive(solver_xp, times);
     return R_NilValue;
 END_RCPP
 }
 // Solver_advance_fixed
-void Solver_advance_fixed(SEXP solver_xp, Rcpp::NumericVector times, bool active);
-RcppExport SEXP _odelia_Solver_advance_fixed(SEXP solver_xpSEXP, SEXP timesSEXP, SEXP activeSEXP) {
+void Solver_advance_fixed(SEXP solver_xp, Rcpp::NumericVector times);
+RcppExport SEXP _odelia_Solver_advance_fixed(SEXP solver_xpSEXP, SEXP timesSEXP) {
 BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type times(timesSEXP);
-    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
-    Solver_advance_fixed(solver_xp, times, active);
+    Solver_advance_fixed(solver_xp, times);
     return R_NilValue;
 END_RCPP
 }
 // Solver_advance_euler
-void Solver_advance_euler(SEXP solver_xp, Rcpp::NumericVector times, bool active);
-RcppExport SEXP _odelia_Solver_advance_euler(SEXP solver_xpSEXP, SEXP timesSEXP, SEXP activeSEXP) {
+void Solver_advance_euler(SEXP solver_xp, Rcpp::NumericVector times);
+RcppExport SEXP _odelia_Solver_advance_euler(SEXP solver_xpSEXP, SEXP timesSEXP) {
 BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type times(timesSEXP);
-    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
-    Solver_advance_euler(solver_xp, times, active);
+    Solver_advance_euler(solver_xp, times);
     return R_NilValue;
 END_RCPP
 }
 // Solver_step
-void Solver_step(SEXP solver_xp, bool active);
-RcppExport SEXP _odelia_Solver_step(SEXP solver_xpSEXP, SEXP activeSEXP) {
+void Solver_step(SEXP solver_xp);
+RcppExport SEXP _odelia_Solver_step(SEXP solver_xpSEXP) {
 BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
-    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
-    Solver_step(solver_xp, active);
+    Solver_step(solver_xp);
     return R_NilValue;
 END_RCPP
 }
 // Solver_get_collect
-bool Solver_get_collect(SEXP solver_xp, bool active);
-RcppExport SEXP _odelia_Solver_get_collect(SEXP solver_xpSEXP, SEXP activeSEXP) {
+bool Solver_get_collect(SEXP solver_xp);
+RcppExport SEXP _odelia_Solver_get_collect(SEXP solver_xpSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
-    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
-    rcpp_result_gen = Rcpp::wrap(Solver_get_collect(solver_xp, active));
+    rcpp_result_gen = Rcpp::wrap(Solver_get_collect(solver_xp));
     return rcpp_result_gen;
 END_RCPP
 }
 // Solver_set_collect
-void Solver_set_collect(SEXP solver_xp, bool x, bool active);
-RcppExport SEXP _odelia_Solver_set_collect(SEXP solver_xpSEXP, SEXP xSEXP, SEXP activeSEXP) {
+void Solver_set_collect(SEXP solver_xp, bool x);
+RcppExport SEXP _odelia_Solver_set_collect(SEXP solver_xpSEXP, SEXP xSEXP) {
 BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
     Rcpp::traits::input_parameter< bool >::type x(xSEXP);
-    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
-    Solver_set_collect(solver_xp, x, active);
+    Solver_set_collect(solver_xp, x);
     return R_NilValue;
 END_RCPP
 }
 // Solver_get_history_size
-std::size_t Solver_get_history_size(SEXP solver_xp, bool active);
-RcppExport SEXP _odelia_Solver_get_history_size(SEXP solver_xpSEXP, SEXP activeSEXP) {
+std::size_t Solver_get_history_size(SEXP solver_xp);
+RcppExport SEXP _odelia_Solver_get_history_size(SEXP solver_xpSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
-    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
-    rcpp_result_gen = Rcpp::wrap(Solver_get_history_size(solver_xp, active));
+    rcpp_result_gen = Rcpp::wrap(Solver_get_history_size(solver_xp));
     return rcpp_result_gen;
 END_RCPP
 }
 // Solver_get_history_step
-Rcpp::DataFrame Solver_get_history_step(SEXP solver_xp, std::size_t i, bool active);
-RcppExport SEXP _odelia_Solver_get_history_step(SEXP solver_xpSEXP, SEXP iSEXP, SEXP activeSEXP) {
+Rcpp::DataFrame Solver_get_history_step(SEXP solver_xp, std::size_t i);
+RcppExport SEXP _odelia_Solver_get_history_step(SEXP solver_xpSEXP, SEXP iSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
     Rcpp::traits::input_parameter< std::size_t >::type i(iSEXP);
-    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
-    rcpp_result_gen = Rcpp::wrap(Solver_get_history_step(solver_xp, i, active));
+    rcpp_result_gen = Rcpp::wrap(Solver_get_history_step(solver_xp, i));
     return rcpp_result_gen;
 END_RCPP
 }
 // Solver_get_history
-Rcpp::List Solver_get_history(SEXP solver_xp, bool active);
-RcppExport SEXP _odelia_Solver_get_history(SEXP solver_xpSEXP, SEXP activeSEXP) {
+Rcpp::List Solver_get_history(SEXP solver_xp);
+RcppExport SEXP _odelia_Solver_get_history(SEXP solver_xpSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
-    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
-    rcpp_result_gen = Rcpp::wrap(Solver_get_history(solver_xp, active));
+    rcpp_result_gen = Rcpp::wrap(Solver_get_history(solver_xp));
     return rcpp_result_gen;
 END_RCPP
 }
-// Solver_set_target
-void Solver_set_target(SEXP solver_xp, Rcpp::NumericVector times, Rcpp::NumericMatrix target, Rcpp::IntegerVector obs_indices, bool active);
-RcppExport SEXP _odelia_Solver_set_target(SEXP solver_xpSEXP, SEXP timesSEXP, SEXP targetSEXP, SEXP obs_indicesSEXP, SEXP activeSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type times(timesSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type target(targetSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type obs_indices(obs_indicesSEXP);
-    Rcpp::traits::input_parameter< bool >::type active(activeSEXP);
-    Solver_set_target(solver_xp, times, target, obs_indices, active);
-    return R_NilValue;
-END_RCPP
-}
-// Solver_fit
-Rcpp::List Solver_fit(SEXP solver_xp, Rcpp::Nullable<Rcpp::NumericVector> ic, Rcpp::Nullable<Rcpp::NumericVector> params);
-RcppExport SEXP _odelia_Solver_fit(SEXP solver_xpSEXP, SEXP icSEXP, SEXP paramsSEXP) {
+// Solver_value_and_gradient
+Rcpp::List Solver_value_and_gradient(SEXP solver_xp, Rcpp::NumericVector times, Rcpp::NumericMatrix observations, Rcpp::IntegerVector obs_indices, Rcpp::Nullable<Rcpp::NumericVector> ic, Rcpp::Nullable<Rcpp::NumericVector> params);
+RcppExport SEXP _odelia_Solver_value_and_gradient(SEXP solver_xpSEXP, SEXP timesSEXP, SEXP observationsSEXP, SEXP obs_indicesSEXP, SEXP icSEXP, SEXP paramsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type times(timesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type observations(observationsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type obs_indices(obs_indicesSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type ic(icSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type params(paramsSEXP);
-    rcpp_result_gen = Rcpp::wrap(Solver_fit(solver_xp, ic, params));
+    rcpp_result_gen = Rcpp::wrap(Solver_value_and_gradient(solver_xp, times, observations, obs_indices, ic, params));
+    return rcpp_result_gen;
+END_RCPP
+}
+// Solver_gradient_final_state
+Rcpp::List Solver_gradient_final_state(SEXP solver_xp, Rcpp::NumericVector times, Rcpp::NumericVector params);
+RcppExport SEXP _odelia_Solver_gradient_final_state(SEXP solver_xpSEXP, SEXP timesSEXP, SEXP paramsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type times(timesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type params(paramsSEXP);
+    rcpp_result_gen = Rcpp::wrap(Solver_gradient_final_state(solver_xp, times, params));
+    return rcpp_result_gen;
+END_RCPP
+}
+// Solver_jacobian_final_state
+Rcpp::List Solver_jacobian_final_state(SEXP solver_xp, Rcpp::NumericVector times, Rcpp::NumericVector params);
+RcppExport SEXP _odelia_Solver_jacobian_final_state(SEXP solver_xpSEXP, SEXP timesSEXP, SEXP paramsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type times(timesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type params(paramsSEXP);
+    rcpp_result_gen = Rcpp::wrap(Solver_jacobian_final_state(solver_xp, times, params));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -545,6 +620,12 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_odelia_Canopy_new", (DL_FUNC) &_odelia_Canopy_new, 2},
+    {"_odelia_Canopy_adaptive_final", (DL_FUNC) &_odelia_Canopy_adaptive_final, 3},
+    {"_odelia_Canopy_record_replay_gradient", (DL_FUNC) &_odelia_Canopy_record_replay_gradient, 4},
+    {"_odelia_Canopy_Solver_new", (DL_FUNC) &_odelia_Canopy_Solver_new, 2},
+    {"_odelia_Canopy_record", (DL_FUNC) &_odelia_Canopy_record, 2},
+    {"_odelia_Canopy_replay_gradient", (DL_FUNC) &_odelia_Canopy_replay_gradient, 2},
     {"_odelia_System_new", (DL_FUNC) &_odelia_System_new, 3},
     {"_odelia_System_pars", (DL_FUNC) &_odelia_System_pars, 1},
     {"_odelia_System_set_params", (DL_FUNC) &_odelia_System_set_params, 2},
@@ -553,23 +634,24 @@ static const R_CallMethodDef CallEntries[] = {
     {"_odelia_System_set_initial_state", (DL_FUNC) &_odelia_System_set_initial_state, 3},
     {"_odelia_System_reset", (DL_FUNC) &_odelia_System_reset, 1},
     {"_odelia_System_rates", (DL_FUNC) &_odelia_System_rates, 1},
-    {"_odelia_Solver_new", (DL_FUNC) &_odelia_Solver_new, 4},
-    {"_odelia_Solver_reset", (DL_FUNC) &_odelia_Solver_reset, 2},
-    {"_odelia_Solver_time", (DL_FUNC) &_odelia_Solver_time, 2},
-    {"_odelia_Solver_state", (DL_FUNC) &_odelia_Solver_state, 2},
-    {"_odelia_Solver_times", (DL_FUNC) &_odelia_Solver_times, 2},
-    {"_odelia_Solver_set_state", (DL_FUNC) &_odelia_Solver_set_state, 4},
-    {"_odelia_Solver_advance_adaptive", (DL_FUNC) &_odelia_Solver_advance_adaptive, 3},
-    {"_odelia_Solver_advance_fixed", (DL_FUNC) &_odelia_Solver_advance_fixed, 3},
-    {"_odelia_Solver_advance_euler", (DL_FUNC) &_odelia_Solver_advance_euler, 3},
-    {"_odelia_Solver_step", (DL_FUNC) &_odelia_Solver_step, 2},
-    {"_odelia_Solver_get_collect", (DL_FUNC) &_odelia_Solver_get_collect, 2},
-    {"_odelia_Solver_set_collect", (DL_FUNC) &_odelia_Solver_set_collect, 3},
-    {"_odelia_Solver_get_history_size", (DL_FUNC) &_odelia_Solver_get_history_size, 2},
-    {"_odelia_Solver_get_history_step", (DL_FUNC) &_odelia_Solver_get_history_step, 3},
-    {"_odelia_Solver_get_history", (DL_FUNC) &_odelia_Solver_get_history, 2},
-    {"_odelia_Solver_set_target", (DL_FUNC) &_odelia_Solver_set_target, 5},
-    {"_odelia_Solver_fit", (DL_FUNC) &_odelia_Solver_fit, 3},
+    {"_odelia_Solver_new", (DL_FUNC) &_odelia_Solver_new, 3},
+    {"_odelia_Solver_reset", (DL_FUNC) &_odelia_Solver_reset, 1},
+    {"_odelia_Solver_time", (DL_FUNC) &_odelia_Solver_time, 1},
+    {"_odelia_Solver_state", (DL_FUNC) &_odelia_Solver_state, 1},
+    {"_odelia_Solver_times", (DL_FUNC) &_odelia_Solver_times, 1},
+    {"_odelia_Solver_set_state", (DL_FUNC) &_odelia_Solver_set_state, 3},
+    {"_odelia_Solver_advance_adaptive", (DL_FUNC) &_odelia_Solver_advance_adaptive, 2},
+    {"_odelia_Solver_advance_fixed", (DL_FUNC) &_odelia_Solver_advance_fixed, 2},
+    {"_odelia_Solver_advance_euler", (DL_FUNC) &_odelia_Solver_advance_euler, 2},
+    {"_odelia_Solver_step", (DL_FUNC) &_odelia_Solver_step, 1},
+    {"_odelia_Solver_get_collect", (DL_FUNC) &_odelia_Solver_get_collect, 1},
+    {"_odelia_Solver_set_collect", (DL_FUNC) &_odelia_Solver_set_collect, 2},
+    {"_odelia_Solver_get_history_size", (DL_FUNC) &_odelia_Solver_get_history_size, 1},
+    {"_odelia_Solver_get_history_step", (DL_FUNC) &_odelia_Solver_get_history_step, 2},
+    {"_odelia_Solver_get_history", (DL_FUNC) &_odelia_Solver_get_history, 1},
+    {"_odelia_Solver_value_and_gradient", (DL_FUNC) &_odelia_Solver_value_and_gradient, 6},
+    {"_odelia_Solver_gradient_final_state", (DL_FUNC) &_odelia_Solver_gradient_final_state, 3},
+    {"_odelia_Solver_jacobian_final_state", (DL_FUNC) &_odelia_Solver_jacobian_final_state, 3},
     {"_odelia_lorenz_rhs", (DL_FUNC) &_odelia_lorenz_rhs, 3},
     {"_odelia_test_param_types", (DL_FUNC) &_odelia_test_param_types, 1},
     {"_odelia_OdeControl_new", (DL_FUNC) &_odelia_OdeControl_new, 0},

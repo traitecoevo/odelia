@@ -5,7 +5,7 @@
 // implicit RODAS stepper on a genuinely stiff problem and lets the test compare
 // against deSolve. Only the passive (double) path is used here.
 
-// [[Rcpp::plugins(cpp17)]]
+// [[Rcpp::plugins(cpp20)]]
 #include <Rcpp.h>
 #include <vector>
 #include <cstddef>
@@ -17,8 +17,8 @@ using namespace odelia;
 // Van der Pol in the stiff (singular-perturbation) form:
 //   y0' = y1
 //   y1' = ((1 - y0^2) * y1 - y0) / eps
-// small eps => stiff. Single parameter eps, templated scalar type with rebind()
-// so the implicit stepper can differentiate the RHS.
+// small eps => stiff. Single parameter eps, templated scalar type with a
+// rebind_from() lift so the implicit stepper can differentiate the RHS.
 template <typename T = double>
 class VdpSystem {
 public:
@@ -71,8 +71,10 @@ public:
 
   std::vector<double> pars() const { return { xad::value(eps) }; }
 
+  template <class S2> using rebind = VdpSystem<S2>;
+
   template <typename U>
-  VdpSystem<U> rebind() const {
+  rebind<U> rebind_from() const {
     VdpSystem<U> s(U(xad::value(eps)));
     std::vector<U> init{ U(xad::value(y0_init)), U(xad::value(y1_init)) };
     s.set_initial_state(init.begin(), t0);

@@ -18,7 +18,7 @@
 // through the same adaptive loop.
 //
 // The Jacobian J = df/dy is computed exactly by forward-mode AD (ode_jacobian.hpp),
-// which requires the System to expose `template<class U> System<U> rebind()`. The
+// which requires the System to expose `template<class U> rebind<U> rebind_from()`. The
 // time derivative df/dt (only needed for non-autonomous systems) is a finite
 // difference, because the System stores time as a plain double.
 
