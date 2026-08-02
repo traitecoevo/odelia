@@ -1,0 +1,41 @@
+# Builds and runs the solver core as plain C++ on a runner with no R installed
+# and no Rcpp on the include path, so that inst/include/ stays usable outside an
+# R package (#43). See tests/standalone/.
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+      - master
+      - develop
+
+name: standalone-cpp
+
+jobs:
+  standalone-cpp:
+    runs-on: ubuntu-latest
+    name: R-free C++ core
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and run the standalone core check
+        run: make -C tests/standalone
+
+      # Belt and braces: the build above already fails if an R header is needed,
+      # but this names the offending line rather than reporting "file not found".
+      - name: Assert the core headers include no R headers
+        run: |
+          if grep -rnE '^[[:space:]]*#[[:space:]]*include[[:space:]]*[<"](Rcpp|R\.h|R_ext/|Rinternals|Rdefines)' \
+               inst/include/odelia/ \
+               --exclude=solver_interface.hpp \
+               --exclude=rcpp_interface_helpers.hpp; then
+            echo "::error::R reached the solver core; keep it in src/ and the interface headers"
+            exit 1
+          fi

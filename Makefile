@@ -27,6 +27,11 @@ test:
 test-local: all
 	Rscript -e 'testthat::test_local()'
 
+# Builds and runs the solver core as plain C++, with no R or Rcpp on the include
+# path, to keep inst/include/ usable outside an R package (#43).
+test-cpp:
+	$(MAKE) -C tests/standalone clean all
+
 install:
 	R CMD INSTALL .
 
@@ -44,4 +49,4 @@ clean:
 vignettes:
 	Rscript -e "devtools::build_vignettes()"
 
-.PHONY: all clean test test-local roxygen install build check vignettes
+.PHONY: all clean test test-local test-cpp roxygen install build check vignettes

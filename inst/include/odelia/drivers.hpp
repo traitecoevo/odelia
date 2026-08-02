@@ -1,6 +1,9 @@
 #ifndef ODELIA_DRIVERS_H
 #define ODELIA_DRIVERS_H
 
+#include <string>
+#include <unordered_map>
+#include <vector>
 #include <odelia/interpolator.hpp>
 
 namespace odelia {

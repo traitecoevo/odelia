@@ -2,42 +2,52 @@
 #ifndef ODELIA_UTIL_HPP_
 #define ODELIA_UTIL_HPP_
 
-#include <cstdint>
-#include <cstring>
+// This header, and therefore the whole solver core that includes it, is free of
+// R: `stop` throws a std::runtime_error, which Rcpp converts into an ordinary R
+// error at the package boundary, and `warning` writes to std::cerr. That is what
+// lets consumers of inst/include/ compile and run as plain C++ with no R
+// installation at all (traitecoevo/leaf_cpp#11). R belongs in src/ and in the
+// interface headers -- solver_interface.hpp, rcpp_interface_helpers.hpp -- not
+// here.
+
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <limits>
+#include <stdexcept>
+#include <string>
 #include <stddef.h> // size_t
-#include <RcppCommon.h> // as/wrap/SEXP
 
 namespace odelia {
 namespace util {
 
-struct index {
-  index(size_t x_) : x(x_) {}
-  size_t check_bounds(size_t size);
-  size_t x;
-  operator size_t() {return x;}
-};
-
-inline std::vector<index> index_vector(const std::vector<size_t> x) {
-  std::vector<index> ret;
-  ret.reserve(x.size());
-  for (size_t i : x) {
-    ret.push_back(i);
-  }
-  return ret;
-}
-
 inline bool is_finite(double x) {
   return std::isfinite(x);
+}
+
+// Throws; never returns. The attribute lets the compiler see that callers whose
+// error branches end in util::stop() do not fall through.
+[[noreturn]] inline void stop(const std::string &msg) {
+  throw std::runtime_error(msg);
+}
+
+// Not an R warning: nothing in the solver core may assume an R session exists.
+// Callers that need one should raise it from their own R-facing code. Uses
+// fprintf rather than std::cerr to keep <iostream>, and its per-translation-unit
+// static initialiser, out of a header that everything includes.
+inline void warning(const std::string &msg) {
+  std::fprintf(stderr, "odelia: %s\n", msg.c_str());
 }
 
 inline void check_length(size_t received, size_t expected)
 {
   if (expected != received)
   {
-    Rcpp::stop("Incorrect length input; expected " +
-               std::to_string(expected) + ", received " +
-               std::to_string(received));
+    stop("Incorrect length input; expected " +
+         std::to_string(expected) + ", received " +
+         std::to_string(received));
   }
 }
 
@@ -60,30 +70,6 @@ bool almost_equal(T x, T y, int ulp) {
   return std::abs(x - y) <=   std::numeric_limits<T>::epsilon()
     * std::max(std::abs(x), std::abs(y))
     * ulp;
-}
-
-// Rcpp converts size_t -> numeric, and I want to be able to preserve
-// NA values while doing base 0 to base 1 index conversion (and v.v.).
-// This should take the guesswork and remembering out, and should keep
-// NA values preserved.
-template <class T>
-T base_1_to_0(T x) {
-  return x - 1;
-}
-
-template <class T>
-T base_0_to_1(T x) {
-  return x + 1;
-}
-
-template <class T_from, class T_to>
-T_to base_1_to_0(T_from x) {
-  return static_cast<T_to>(base_1_to_0<T_from>(x));
-}
-
-template <class T_from, class T_to>
-T_to base_0_to_1(T_from x) {
-  return static_cast<T_to>(base_0_to_1<T_from>(x));
 }
 
 // Based on C++11's is_sorted
@@ -115,22 +101,12 @@ bool is_decreasing(ForwardIterator first, ForwardIterator last) {
   return true;
 }
 
-inline void stop(const std::string &msg) { Rcpp::stop(msg); }
-
-inline void warning(const std::string &msg) { Rcpp::warning(msg); }
-
 template<typename T>
 std::string to_string(T x) {
   return std::to_string(x);
 }
 
 }
-}
-
-namespace Rcpp {
-template <> SEXP wrap(const odelia::util::index&);
-template <> odelia::util::index as(SEXP);
-template <> SEXP wrap(const std::vector<odelia::util::index>&);
 }
 
 #endif

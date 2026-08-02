@@ -31,6 +31,7 @@
 #ifndef ODELIA_SPLINE_HPP
 #define ODELIA_SPLINE_HPP
 
+#include <cassert>
 #include <cstdio>
 #include <vector>
 #include <algorithm>

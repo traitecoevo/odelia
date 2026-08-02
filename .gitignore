@@ -17,3 +17,7 @@ Meta
 *.knit.md
 
 *.tar.gz
+
+# standalone C++ core check (tests/standalone)
+tests/standalone/*.o
+tests/standalone/r_free

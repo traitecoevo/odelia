@@ -2,6 +2,8 @@
 #ifndef ODELIA_ODE_INTERFACE_HPP_
 #define ODELIA_ODE_INTERFACE_HPP_
 
+#include <cstddef>
+#include <vector>
 #include <odelia/ode_util.hpp>
 
 namespace odelia {

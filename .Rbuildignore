@@ -21,3 +21,4 @@
 ^\.github/workflows/pkgdown\.yaml$
 ^vignettes/articles$
 ^tools$
+^tests/standalone$
