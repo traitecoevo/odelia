@@ -32,6 +32,9 @@ against. The next-generation `plant` core links against it.
   `src/RcppExports.cpp`, `NAMESPACE`, `man/`).
 - `make test` — run the test suite (`testthat`). `make check` —
   `R CMD check`.
+- `make test-cpp` — build and run the core as plain C++ with no R on the
+  include path (`tests/standalone/`); fast, and the guard that keeps the
+  headers R-free.
 
 ## Gotchas
 
@@ -41,6 +44,14 @@ against. The next-generation `plant` core links against it.
 - The header core is a cross-boundary artifact: changing a solver
   signature ripples to anything that `LinkingTo` it (notably the
   next-gen `plant`). Treat such changes as `cross-package` / `breaking`.
+- **The header core must stay free of R.** Everything in
+  `inst/include/odelia/` bar `solver_interface.hpp` and
+  `rcpp_interface_helpers.hpp` compiles with no R installed —
+  `util::stop` throws, it does not call `Rcpp::stop`. Consumers depend
+  on this (`leaf` runs its C++ tests without R). Keep Rcpp in `src/` and
+  the two interface headers, and remember that these headers no longer
+  get `<cassert>`, `<string>` and friends for free via R — include what
+  you use. See ARCHITECTURE.md.
 
 ## Plant family
 

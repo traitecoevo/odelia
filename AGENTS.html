@@ -63,11 +63,15 @@
 <code>make Rcpp</code> / <code>make roxygen</code> — regenerate Rcpp exports / roxygen docs (don’t hand-edit generated files: <code>R/RcppExports.R</code>, <code>src/RcppExports.cpp</code>, <code>NAMESPACE</code>, <code>man/</code>).</li>
 <li>
 <code>make test</code> — run the test suite (<code>testthat</code>). <code>make check</code> — <code>R CMD check</code>.</li>
+<li>
+<code>make test-cpp</code> — build and run the core as plain C++ with no R on the include path (<code>tests/standalone/</code>); fast, and the guard that keeps the headers R-free.</li>
 </ul></div>
 <div class="section level2">
 <h2 id="gotchas">Gotchas<a class="anchor" aria-label="anchor" href="#gotchas"></a></h2>
 <ul><li>It compiles C++ from source — a working toolchain is required, and a header change can break dependents at <strong>compile time</strong>, not just runtime.</li>
 <li>The header core is a cross-boundary artifact: changing a solver signature ripples to anything that <code>LinkingTo</code> it (notably the next-gen <code>plant</code>). Treat such changes as <code>cross-package</code> / <code>breaking</code>.</li>
+<li>
+<strong>The header core must stay free of R.</strong> Everything in <code>inst/include/odelia/</code> bar <code>solver_interface.hpp</code> and <code>rcpp_interface_helpers.hpp</code> compiles with no R installed — <code>util::stop</code> throws, it does not call <code>Rcpp::stop</code>. Consumers depend on this (<code>leaf</code> runs its C++ tests without R). Keep Rcpp in <code>src/</code> and the two interface headers, and remember that these headers no longer get <code>&lt;cassert&gt;</code>, <code>&lt;string&gt;</code> and friends for free via R — include what you use. See ARCHITECTURE.md.</li>
 </ul></div>
 <div class="section level2">
 <h2 id="plant-family">Plant family<a class="anchor" aria-label="anchor" href="#plant-family"></a></h2>

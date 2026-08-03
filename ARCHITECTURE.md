@@ -97,6 +97,31 @@ R-CMD-check.) odelia must therefore keep **exporting** these symbols
 from its DLL — do not add a restrictive `.def` or
 `-Wl,--exclude-all-symbols` to odelia’s build.
 
+## The solver core contains no R
+
+Everything in `inst/include/odelia/` **except** `solver_interface.hpp`
+and `rcpp_interface_helpers.hpp` compiles and runs with no R
+installation at all. `util::stop()` throws a `std::runtime_error`, which
+Rcpp turns into an ordinary R error at the package boundary;
+`util::warning()` writes to `std::cerr`. This is what lets non-Rcpp
+consumers use the solver, and what lets consumers that *are* Rcpp
+packages — `leaf`, for one — run their C++ test suites without an R
+session (traitecoevo/leaf_cpp#11, odelia \#43).
+
+`tests/standalone/` holds the guard: a translation unit that includes
+the whole core and integrates the Lorenz system, built by
+`make test-cpp` with `-I inst/include` and nothing else. CI runs it on a
+runner with no R. It fails loudly if an R header creeps back in, and —
+the subtler case — if a header comes to rely on a standard-library
+facility it never includes and was quietly getting from R’s headers.
+`spline.hpp` was using `assert` without `<cassert>` on exactly that
+basis.
+
+Note that the standalone build compiles `src/Tape.cpp` alongside the
+test. That is the single-`Tape`-object rule above, not an R dependency:
+any consumer that instantiates `Solver` needs the tape runtime from
+somewhere.
+
 ## Contract for `LinkingTo: odelia` consumers
 
 - Add `odelia` to `LinkingTo:` **and** `Imports:` in `DESCRIPTION`.
@@ -120,6 +145,8 @@ from its DLL — do not add a restrictive `.def` or
 - The set of symbols **exported** from `odelia.dll` on Windows — do not
   add a restrictive `.def` file or `-Wl,--exclude-all-symbols`, or
   Windows consumers can no longer link the `Tape` runtime.
+- Reaching for R from anywhere in the core headers (see the section
+  above). Consumers build against them without R.
 
 Any of these will break downstream linking/loading silently (odelia’s
 own checks will still pass). Coordinate with consumers (plant) and

@@ -89,6 +89,12 @@ PKG_LIBS = "$(ODELIA_LIBDIR)$(R_ARCH)/odelia.dll"</code></pre>
 <p>(plant uses exactly this; verified green on <code>windows-latest</code> R-CMD-check.) odelia must therefore keep <strong>exporting</strong> these symbols from its DLL — do not add a restrictive <code>.def</code> or <code>-Wl,--exclude-all-symbols</code> to odelia’s build.</p>
 </div>
 <div class="section level2">
+<h2 id="the-solver-core-contains-no-r">The solver core contains no R<a class="anchor" aria-label="anchor" href="#the-solver-core-contains-no-r"></a></h2>
+<p>Everything in <code>inst/include/odelia/</code> <strong>except</strong> <code>solver_interface.hpp</code> and <code>rcpp_interface_helpers.hpp</code> compiles and runs with no R installation at all. <code>util::stop()</code> throws a <code>std::runtime_error</code>, which Rcpp turns into an ordinary R error at the package boundary; <code>util::warning()</code> writes to <code>std::cerr</code>. This is what lets non-Rcpp consumers use the solver, and what lets consumers that <em>are</em> Rcpp packages — <code>leaf</code>, for one — run their C++ test suites without an R session (traitecoevo/leaf_cpp#11, odelia #43).</p>
+<p><code>tests/standalone/</code> holds the guard: a translation unit that includes the whole core and integrates the Lorenz system, built by <code>make test-cpp</code> with <code>-I inst/include</code> and nothing else. CI runs it on a runner with no R. It fails loudly if an R header creeps back in, and — the subtler case — if a header comes to rely on a standard-library facility it never includes and was quietly getting from R’s headers. <code>spline.hpp</code> was using <code>assert</code> without <code>&lt;cassert&gt;</code> on exactly that basis.</p>
+<p>Note that the standalone build compiles <code>src/Tape.cpp</code> alongside the test. That is the single-<code>Tape</code>-object rule above, not an R dependency: any consumer that instantiates <code>Solver</code> needs the tape runtime from somewhere.</p>
+</div>
+<div class="section level2">
 <h2 id="contract-for-linkingto-odelia-consumers">Contract for <code>LinkingTo: odelia</code> consumers<a class="anchor" aria-label="anchor" href="#contract-for-linkingto-odelia-consumers"></a></h2>
 <ul><li>Add <code>odelia</code> to <code>LinkingTo:</code> <strong>and</strong> <code>Imports:</code> in <code>DESCRIPTION</code>.</li>
 <li>Add a real NAMESPACE import from odelia (e.g. <code>@importFrom odelia odelia_load_dll</code>) so odelia’s namespace — and its global-load <code>.onLoad</code> — runs before your package’s <code>useDynLib</code>.</li>
@@ -101,6 +107,7 @@ PKG_LIBS = "$(ODELIA_LIBDIR)$(R_ARCH)/odelia.dll"</code></pre>
 <li>The set of explicit <code>Tape</code> instantiations in <code>src/Tape.cpp</code> (consumers rely on the exact instantiated types).</li>
 <li>The global-visibility load in <code>R/zzz.R</code> (<code>odelia_load_dll(local = FALSE)</code>) — needed for macOS/Linux.</li>
 <li>The set of symbols <strong>exported</strong> from <code>odelia.dll</code> on Windows — do not add a restrictive <code>.def</code> file or <code>-Wl,--exclude-all-symbols</code>, or Windows consumers can no longer link the <code>Tape</code> runtime.</li>
+<li>Reaching for R from anywhere in the core headers (see the section above). Consumers build against them without R.</li>
 </ul><p>Any of these will break downstream linking/loading silently (odelia’s own checks will still pass). Coordinate with consumers (plant) and update this document.</p>
 </div>
 </div>
