@@ -1,3 +1,41 @@
+## odelia 0.2.1
+
+A patch bump for one reason: **#46 has no version number, and a downstream needs
+one.** `d8235d1` ("Let a system compute its rates when the solver reads them", #46)
+landed *after* `3bdfcf7` bumped the version to 0.2.0, and the version has not moved
+since — so `0.2.0` names two different header sets, one with #46 and one without, and
+no `>= ` requirement can tell them apart.
+
+That is not academic. `traitecoevo/plant`'s `develop` **does not compile** against the
+released 0.2.0:
+
+```
+odelia/ode_interface.hpp:212:3: error: 'this' argument to member function 'ode_rates'
+  has type 'const plant::Patch<plant::FF16_Strategy, plant::FF16_Environment>',
+  but function is not marked const
+```
+
+plant #585 made `Patch::ode_rates` non-const; `r_ode_rates(const T& obj)` and
+`ode_solver_internal.hpp:155` both call it on a `const&`. #46 is the fix. Eight errors,
+four templated `<Strategy, Environment>` pairs × two call sites, and they surface
+*inside these headers*, which points nowhere near the cause. Confirmed pre-existing by
+syntax-checking plant's `origin/develop` unmodified.
+
+This is the same job 0.2.0 was bumped for, and the 0.2.0 entry below says so in as many
+words: it exists "to give downstream packages something to pin against ... so a build
+against an older odelia fails at dependency resolution with a clear message rather than
+at compile time". #46 needed the same courtesy and did not get it.
+
+**No header changes.** Only `DESCRIPTION`. Downstream floors after this:
+
+- `plant` -> `odelia (>= 0.2.1)`, because it links the ODE solver and needs #46.
+- `leaf` stays at `odelia (>= 0.2.0)`. Checked rather than aligned for symmetry: leaf
+  includes exactly one odelia header, `odelia/interpolator.hpp`, and never touches
+  `ode_rates` or the solver. Raising its floor would force an upgrade for a fix in a
+  header it does not include.
+
+Closes #48.
+
 ## odelia 0.2.0
 
 A minor-version bump rather than a patch, because the header core lost public
