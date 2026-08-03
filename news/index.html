@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,22 @@
       <small>Source: <a href="https://github.com/traitecoevo/odelia/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.2.1" id="odelia-021">odelia 0.2.1<a class="anchor" aria-label="anchor" href="#odelia-021"></a></h2>
+<p>A patch bump for one reason: <strong>#46 has no version number, and a downstream needs one.</strong> <code>d8235d1</code> (“Let a system compute its rates when the solver reads them”, <a href="https://github.com/traitecoevo/odelia/issues/46" class="external-link">#46</a>) landed <em>after</em> <code>3bdfcf7</code> bumped the version to 0.2.0, and the version has not moved since — so <code>0.2.0</code> names two different header sets, one with <a href="https://github.com/traitecoevo/odelia/issues/46" class="external-link">#46</a> and one without, and no <code>&gt;=</code> requirement can tell them apart.</p>
+<p>That is not academic. <code>traitecoevo/plant</code>’s <code>develop</code> <strong>does not compile</strong> against the released 0.2.0:</p>
+<pre><code>odelia/ode_interface.hpp:212:3: error: 'this' argument to member function 'ode_rates'
+  has type 'const plant::Patch&lt;plant::FF16_Strategy, plant::FF16_Environment&gt;',
+  but function is not marked const</code></pre>
+<p>plant <a href="https://github.com/traitecoevo/odelia/issues/585" class="external-link">#585</a> made <code>Patch::ode_rates</code> non-const; <code>r_ode_rates(const T&amp; obj)</code> and <code>ode_solver_internal.hpp:155</code> both call it on a <code>const&amp;</code>. <a href="https://github.com/traitecoevo/odelia/issues/46" class="external-link">#46</a> is the fix. Eight errors, four templated <code>&lt;Strategy, Environment&gt;</code> pairs × two call sites, and they surface <em>inside these headers</em>, which points nowhere near the cause. Confirmed pre-existing by syntax-checking plant’s <code>origin/develop</code> unmodified.</p>
+<p>This is the same job 0.2.0 was bumped for, and the 0.2.0 entry below says so in as many words: it exists “to give downstream packages something to pin against … so a build against an older odelia fails at dependency resolution with a clear message rather than at compile time”. <a href="https://github.com/traitecoevo/odelia/issues/46" class="external-link">#46</a> needed the same courtesy and did not get it.</p>
+<p><strong>No header changes.</strong> Only <code>DESCRIPTION</code>. Downstream floors after this:</p>
+<ul><li>
+<code>plant</code> -&gt; <code>odelia (&gt;= 0.2.1)</code>, because it links the ODE solver and needs <a href="https://github.com/traitecoevo/odelia/issues/46" class="external-link">#46</a>.</li>
+<li>
+<code>leaf</code> stays at <code>odelia (&gt;= 0.2.0)</code>. Checked rather than aligned for symmetry: leaf includes exactly one odelia header, <code>odelia/interpolator.hpp</code>, and never touches <code>ode_rates</code> or the solver. Raising its floor would force an upgrade for a fix in a header it does not include.</li>
+</ul><p>Closes <a href="https://github.com/traitecoevo/odelia/issues/48" class="external-link">#48</a>.</p>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.2.0" id="odelia-020">odelia 0.2.0<a class="anchor" aria-label="anchor" href="#odelia-020"></a></h2>
 <p>A minor-version bump rather than a patch, because the header core lost public symbols: <code>util::index</code>, <code>util::index_vector()</code> and the <code>base_1_to_0</code> / <code>base_0_to_1</code> helpers are gone, and <code>util::stop</code> / <code>util::warning</code> no longer call into Rcpp. Nothing in the family used them — <code>plant</code> has its own <code>plant::util</code> equivalents — but a consumer that did would fail to compile, which is exactly what a version number is for. It also gives downstream packages something to pin against: <code>leaf</code> now requires <code>odelia (&gt;= 0.2.0)</code>, so a build against an older odelia fails at dependency resolution with a clear message rather than at compile time with <code>RcppCommon.h: No such file or directory</code>.</p>
