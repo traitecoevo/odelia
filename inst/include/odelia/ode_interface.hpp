@@ -206,8 +206,10 @@ std::vector<double> r_ode_state(const T& obj) {
   return values;
 }
 
+// Mutable, unlike r_ode_state: a system's ode_rates may compute the rates for
+// the state it currently holds rather than return a cached vector.
 template <typename T>
-std::vector<double> r_ode_rates(const T& obj) {
+std::vector<double> r_ode_rates(T& obj) {
   std::vector<double> dydt(obj.ode_size());
   obj.ode_rates(dydt.begin());
   return dydt;

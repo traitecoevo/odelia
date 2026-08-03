@@ -25,10 +25,13 @@ public:
   using value_type = typename System::value_type;
   using state_type = std::vector<value_type>;
 
-  SolverInternal(const System &system, OdeControl control_,
+  // The system is taken by mutable reference throughout: reading its rates may
+  // require it to compute them for the state it currently holds. See
+  // set_state_from_system.
+  SolverInternal(System &system, OdeControl control_,
                  Method method_ = Method::rkck);
-  void reset(const System& system);
-  void set_state_from_system(const System& system);
+  void reset(System& system);
+  void set_state_from_system(System& system);
 
   state_type get_state() const {return y;}
   double get_time() const {return time;}
@@ -107,7 +110,7 @@ private:
 // NOTE I'm setting the initial system size to 0 here, but some
 // systems are self-initialising.
 template <class System>
-SolverInternal<System>::SolverInternal(const System &system, OdeControl control_,
+SolverInternal<System>::SolverInternal(System &system, OdeControl control_,
                                        Method method_)
   : control(control_), method(method_) {
   reset(system);
@@ -115,7 +118,7 @@ SolverInternal<System>::SolverInternal(const System &system, OdeControl control_
 
 // NOTE: This resets *everything* to basically a recreated object.
 template <class System>
-void SolverInternal<System>::reset(const System& system) {
+void SolverInternal<System>::reset(System& system) {
   prev_times.clear();
   step_size_last = control.step_size_initial;
   time_max = std::numeric_limits<double>::infinity();
@@ -147,8 +150,15 @@ template <typename System>
 typename std::enable_if<!has_cache<System>::value, void>::type
 load(System& system) {}
 
+// Seed y and dydt_in from whatever state the system currently holds. The system
+// is mutable because `ode_rates` is allowed to compute: a system that reaches a
+// state by a route of its own (widening it, reloading it) can then hand back the
+// derivative *of that state* rather than a cached one belonging to an earlier
+// one. Marking dydt_in clean here is only sound because of that -- with a const
+// system the rates were whatever the system last happened to store, and under
+// first-same-as-last they became k1 of the next step.
 template <class System>
-void SolverInternal<System>::set_state_from_system(const System& system) {
+void SolverInternal<System>::set_state_from_system(System& system) {
   set_time(ode::ode_time(system));
   resize(system.ode_size());
   system.ode_state(y.begin());
@@ -348,9 +358,10 @@ void SolverInternal<System>::resize(size_t size_) {
 template <class System>
 void SolverInternal<System>::setup_dydt_in(System& system) {
   if (stepper_can_use_dydt_in() && !dydt_in_is_clean) {
-    // TODO: Not clear that this is the right thing here; should just
-    // be able to look up the correct dydt rates because we've already
-    // set state?
+    // The full derivs() -- set the state, then read the rates -- rather than
+    // reading the rates alone. y is the solver's own state and need not be the
+    // one the system currently holds, so the state has to be re-established
+    // before the rates mean anything.
     ode::derivs(system, y, dydt_in, time);
     dydt_in_is_clean = true;
   }
