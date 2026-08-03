@@ -1,11 +1,17 @@
 # Changelog
 
-## Odelia 0.0.0.9000
+## odelia 0.2.0
 
-Odelia is a new package, arsising out of
-<https://github.com/traitecoevo/plant/>. In that project, Rich FitzJohn
-built a custom ODE solver, using Runge-Kutta4-5 method, in C++. I’m
-spinning that code out into a package, as I want to use it elsewhere.
+A minor-version bump rather than a patch, because the header core lost
+public symbols: `util::index`, `util::index_vector()` and the
+`base_1_to_0` / `base_0_to_1` helpers are gone, and `util::stop` /
+`util::warning` no longer call into Rcpp. Nothing in the family used
+them — `plant` has its own `plant::util` equivalents — but a consumer
+that did would fail to compile, which is exactly what a version number
+is for. It also gives downstream packages something to pin against:
+`leaf` now requires `odelia (>= 0.2.0)`, so a build against an older
+odelia fails at dependency resolution with a clear message rather than
+at compile time with `RcppCommon.h: No such file or directory`.
 
 - The **header-only solver core is now free of R**
   ([\#43](https://github.com/traitecoevo/odelia/issues/43)).
@@ -24,6 +30,13 @@ spinning that code out into a package, as I want to use it elsewhere.
   `util::index_vector()` and the `base_1_to_0`/`base_0_to_1` helpers are
   removed — `plant` has its own. R remains where it belongs, in `src/`
   and in `solver_interface.hpp` / `rcpp_interface_helpers.hpp`.
+
+## odelia 0.1.0
+
+Odelia is a new package, arising out of
+<https://github.com/traitecoevo/plant/>. In that project, Rich FitzJohn
+built a custom ODE solver, using a Runge-Kutta 4-5 method, in C++. I’m
+spinning that code out into a package, as I want to use it elsewhere.
 
 - New implicit, adaptive-step **RODAS4(3)** Rosenbrock stepper for stiff
   systems, selectable via `method = "rodas"` when constructing a solver
