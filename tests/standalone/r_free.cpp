@@ -109,6 +109,148 @@ void test_solver_runs() {
   check(worst < 1e-4, "the two tolerances agree on the trajectory");
 }
 
+// A non-finite error estimate means the step left the model's valid domain, and
+// must be rejected. It used to be *accepted*: NaN compares false against
+// everything, so `rmax > 1.1` and `rmax < 0.5` were both false and control fell
+// through to the branch that reports a successful step (odelia#52).
+void test_control_rejects_nonfinite_error() {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double inf = std::numeric_limits<double>::infinity();
+  const std::vector<double> y{0.2, 0.2, 0.2};
+  const std::vector<double> dydt{0.0, 0.0, 0.0};
+  const double h = 1e-3;
+
+  // tol_abs, tol_rel, a_y, a_dydt, h_min, h_max, h_init
+  auto control = [] {
+    return odelia::ode::OdeControl(1e-4, 1e-4, 1.0, 0.0, 1e-6, 5.0, 1e-6);
+  };
+
+  {
+    // Position used to matter, which is why this went unnoticed. The reduction
+    // was `rmax = std::max(r, rmax)`, and std::max(a, b) is `(a < b) ? b : a`:
+    // with a = NaN it returns NaN, but on the *next* element a finite r returns
+    // r, wiping the NaN. So a NaN only reached the branch if it survived to the
+    // end of the loop -- last element, or all of them. In plant that is exactly
+    // the case that bites: Patch chains the environment state *after* the
+    // species, so the soil block sits in the trailing indices.
+    odelia::ode::OdeControl c = control();
+    const std::vector<double> yerr{1e-3, 1e-3, nan};   // NaN last: the real bug
+    const double next = c.adjust_step_size(y.size(), 5, h, y, yerr, dydt);
+    check(c.step_size_shrank(), "a trailing NaN error estimate rejects the step");
+    check(next < h, "a trailing NaN error estimate shrinks the step");
+  }
+  {
+    // A NaN anywhere must reject, not just where the reduction happened to
+    // preserve it. Passed before the fix too, but for the wrong reason -- the
+    // trailing finite element rejected on its own magnitude.
+    odelia::ode::OdeControl c = control();
+    const std::vector<double> yerr{1e-3, nan, 1e-3};
+    c.adjust_step_size(y.size(), 5, h, y, yerr, dydt);
+    check(c.step_size_shrank(), "an interior NaN error estimate rejects the step");
+  }
+  {
+    // The sharpest form: a NaN alongside errors that would otherwise be
+    // comfortably *accepted*. Before the fix the NaN was wiped and the step
+    // grew.
+    odelia::ode::OdeControl c = control();
+    const std::vector<double> yerr{nan, 1e-12, 1e-12};
+    const double next = c.adjust_step_size(y.size(), 5, h, y, yerr, dydt);
+    check(c.step_size_shrank() && next < h,
+          "a NaN masked by small finite errors still rejects");
+  }
+  {
+    odelia::ode::OdeControl c = control();
+    const std::vector<double> yerr{1e-3, inf, 1e-3};
+    c.adjust_step_size(y.size(), 5, h, y, yerr, dydt);
+    check(c.step_size_shrank(), "an Inf error estimate rejects the step");
+  }
+  {
+    // A NaN in the *state* poisons errlevel, so it arrives as a NaN ratio too.
+    odelia::ode::OdeControl c = control();
+    const std::vector<double> y_bad{0.2, nan, 0.2};
+    const std::vector<double> yerr{1e-3, 1e-3, 1e-3};
+    c.adjust_step_size(y_bad.size(), 5, h, y_bad, yerr, dydt);
+    check(c.step_size_shrank(), "a NaN state rejects the step");
+  }
+  {
+    // Already at the floor: cannot decrease, but must still report the shrink
+    // so the caller raises rather than committing the non-finite state.
+    odelia::ode::OdeControl c = control();
+    const std::vector<double> yerr{nan, nan, nan};
+    const double next = c.adjust_step_size(y.size(), 5, 1e-6, y, yerr, dydt);
+    check(c.step_size_shrank() && next == 1e-6,
+          "at step_size_min a NaN still reports a shrink");
+  }
+
+  // Regressions: finite behaviour must be untouched.
+  {
+    odelia::ode::OdeControl c = control();
+    const std::vector<double> yerr{1e-3, 1e-3, 1e-3};
+    const double next = c.adjust_step_size(y.size(), 5, h, y, yerr, dydt);
+    check(c.step_size_shrank() && next < h, "a large finite error still rejects");
+  }
+  {
+    odelia::ode::OdeControl c = control();
+    const std::vector<double> yerr{1e-12, 1e-12, 1e-12};
+    const double next = c.adjust_step_size(y.size(), 5, h, y, yerr, dydt);
+    check(!c.step_size_shrank() && next > h, "a small finite error still grows");
+  }
+}
+
+// End to end: a system whose derivatives go non-finite outside a bounded range
+// must fail loudly rather than integrate on with a poisoned state.
+namespace {
+struct BoundedSystem {
+  using value_type = double;
+  double y = 0.5, dydt = 0.0, time = 0.0;
+
+  size_t ode_size() const { return 1; }
+  double ode_time() const { return time; }
+
+  template <typename Iterator> Iterator set_ode_state(Iterator it, double t) {
+    y = *it++;
+    time = t;
+    // Valid only on [0, 1]; outside it the model has nothing to say.
+    dydt = (y >= 0.0 && y <= 1.0)
+               ? 50.0
+               : std::numeric_limits<double>::quiet_NaN();
+    return it;
+  }
+  template <typename Iterator> Iterator ode_state(Iterator it) const {
+    *it++ = y;
+    return it;
+  }
+  template <typename Iterator> Iterator ode_rates(Iterator it) const {
+    *it++ = dydt;
+    return it;
+  }
+  template <typename Iterator> Iterator ode_aux(Iterator it) const { return it; }
+};
+} // namespace
+
+void test_solver_refuses_nonfinite_state() {
+  BoundedSystem sys;
+  odelia::ode::OdeControl control(1e-4, 1e-4, 1.0, 0.0, 1e-6, 5.0, 1.0);
+  odelia::ode::Solver<BoundedSystem> solver(sys, control);
+
+  bool threw = false;
+  std::string msg;
+  try {
+    // One step of h = 1 at dydt = 50 lands far outside [0, 1].
+    solver.advance_adaptive(std::vector<double>{0.0, 1.0});
+  } catch (const std::runtime_error &e) {
+    threw = true;
+    msg = e.what();
+  }
+
+  const auto state = solver.state();
+  const bool finite = state.empty() || std::isfinite(state[0]);
+  check(threw || finite, "the solver never commits a non-finite state");
+  if (threw) {
+    std::printf("       (raised: %s)\n", msg.c_str());
+  }
+}
+
 } // namespace
 
 int main() {
@@ -116,6 +258,8 @@ int main() {
   test_stop_throws();
   test_interpolator();
   test_solver_runs();
+  test_control_rejects_nonfinite_error();
+  test_solver_refuses_nonfinite_state();
   if (failures == 0) {
     std::printf("all checks passed\n");
     return 0;

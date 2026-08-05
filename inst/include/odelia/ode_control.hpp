@@ -3,6 +3,8 @@
 
 #include <vector>
 #include <cstddef>
+#include <cmath>
+#include <limits>
 #include <odelia/ode_util.hpp>
 
 namespace odelia {
@@ -73,16 +75,61 @@ struct OdeControl {
   {
     double rmax = std::numeric_limits<double>::min();
     const double S = 0.9;
+    bool nonfinite = false;
 
     for (size_t i = 0; i < dim; i++)
     {
       const double D0 = errlevel(y[i], dydt[i], step_size);
       using std::abs;
       const double r = abs(yerr[i]) / abs(D0);
+      // A non-finite ratio means the step left the model's valid domain: yerr
+      // or y is NaN (a NaN y poisons D0, so it arrives here too). Such a step
+      // must be rejected, and it has to be caught here rather than left to the
+      // comparisons below, because the reduction does not propagate
+      // non-finiteness. `std::max(a, b)` is `(a < b) ? b : a` and NaN compares
+      // false against everything, so it yields NaN for a = NaN -- but on the
+      // next element a finite a yields that instead, *wiping* the NaN. The NaN
+      // component is then never accounted for at all, and the step is accepted
+      // one of two ways (odelia#52):
+      //
+      //   (a) the NaN survives to the end of the loop (last element, or all of
+      //       them): rmax stays NaN, both `rmax > 1.1` and `rmax < 0.5` are
+      //       false, and control falls through to the final else, reporting no
+      //       shrink;
+      //   (b) the NaN is wiped by finite elements whose own ratios are small:
+      //       rmax is finite and passes, so the step is accepted *carrying* a
+      //       NaN.
+      //
+      // The caller branches solely on step_size_shrank(), so either way the
+      // diverging step is committed. (b) is the mode coupled systems hit in
+      // practice. Breaking on the first non-finite ratio removes the positional
+      // dependence that made this so easy to miss.
+      //
+      // Inf already rejected via `> 1.1`; folding it in costs nothing and
+      // states the intent once.
+      if (!std::isfinite(r))
+      {
+        nonfinite = true;
+        break;
+      }
       rmax = std::max(r, rmax);
     }
 
-    if (rmax > 1.1)
+    if (nonfinite)
+    {
+      // Shrink hardest (the same floor the finite branch clamps to) and always
+      // report the shrink, even when already at step_size_min and so unable to
+      // decrease. That makes the caller raise "Cannot achieve the desired
+      // accuracy" rather than commit a non-finite state.
+      double new_step = step_size * 0.2;
+      if (new_step < step_size_min)
+      {
+        new_step = step_size_min;
+      }
+      step_size = new_step;
+      last_step_size_shrank = true;
+    }
+    else if (rmax > 1.1)
     {
       // decrease step, no more than factor of 5
       double r = S / pow(rmax, 1.0 / ord);
