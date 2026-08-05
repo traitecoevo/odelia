@@ -15,6 +15,14 @@ on:
 
 name: R-CMD-check
 
+# Supersede in-flight runs on the same ref. Without this, every intermediate push
+# to a PR branch ran its whole matrix to completion alongside its successor. This
+# matrix is Windows + macOS, which bill at 2x and 10x against Linux's 1x, so it is
+# the most expensive workflow in the repo to run redundantly.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   R-CMD-check:
     runs-on: ${{ matrix.config.os }}

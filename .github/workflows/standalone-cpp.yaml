@@ -16,6 +16,11 @@ on:
 
 name: standalone-cpp
 
+# Supersede in-flight runs on the same ref -- see the note in R-CMD-check.yaml.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   standalone-cpp:
     runs-on: ubuntu-latest
