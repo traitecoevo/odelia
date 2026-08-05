@@ -1,3 +1,35 @@
+## odelia 0.2.2
+
+**An out-of-domain interpolator lookup now says which point, how far out, and what
+the domain was.** `Interpolator::eval()` had all three in hand — `u`, `min()`
+and `max()` — and reported none of them:
+
+```
+Extrapolation disabled and evaluation point outside of interpolated domain.
+```
+
+That sentence is the same whichever spline threw it, so a consumer holding several
+of them learns nothing about which one, and nothing about whether the point missed
+the near end or the far end. It cost real time downstream: localising
+[traitecoevo/plant#576](https://github.com/traitecoevo/plant/issues/576) meant
+instrumenting four call sites by hand to discover which spline was being asked and
+at what value, and the answer — the **lower** end, not past the far end as everyone
+had assumed — inverted the fix. Now:
+
+```
+Extrapolation disabled and evaluation point outside of interpolated domain:
+u = -0.0023 lies 0.0023 beyond the lower end of [0, 6.8918].
+```
+
+Which spline, and which caller, is the one thing this layer cannot know; consumers
+that build several should catch and add it. A patch bump so downstreams can pin
+against the message.
+
+Behaviour is otherwise unchanged. In particular the guard is still written
+`u < min() || u > max()` rather than the negation of an in-range test, because every
+comparison against NaN is false and a non-finite `u` must keep falling through to the
+spline — plant relies on that.
+
 ## odelia 0.2.1
 
 A patch bump for one reason: **#46 has no version number, and a downstream needs

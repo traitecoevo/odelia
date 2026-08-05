@@ -41,6 +41,19 @@ inline void warning(const std::string &msg) {
   std::fprintf(stderr, "odelia: %s\n", msg.c_str());
 }
 
+// A double in an error message. std::to_string is fixed-point with six decimals,
+// so it renders a flux of 1e-22 as "0.000000" and a domain endpoint of 1e8 with
+// eight useless digits -- in both cases erasing the number the reader needed.
+// Six significant figures, matching plant's util::format_double so the family
+// renders numbers the same way; enough to identify a value, and short enough that
+// 6.8918 does not arrive as 6.8917999999999999. Deliberately NOT round-trip
+// precision: these strings are for reading, not for reconstructing a double.
+inline std::string format_double(double x) {
+  char buf[32];
+  std::snprintf(buf, sizeof(buf), "%.6g", x);
+  return std::string(buf);
+}
+
 inline void check_length(size_t received, size_t expected)
 {
   if (expected != received)

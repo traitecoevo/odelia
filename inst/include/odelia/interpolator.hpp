@@ -70,9 +70,29 @@ public:
   // Compute the value of the interpolated function at point `x=u`
   S eval(double u) const {
     check_active();
+    // ⚠️ Do NOT "tidy" this into `not (u >= min() and u <= max())`. Every
+    // comparison against NaN is false, so as written a non-finite `u` falls
+    // *through* to the spline and comes back non-finite -- which callers rely on
+    // (traitecoevo/plant#576 documents a `profit_psi_stem_TF(NA, .) -> NA`
+    // contract built on it). Negating an in-range test turns that into a throw:
+    // it reads as a tightening and is a behaviour change.
     if (not extrapolate and (u < min() or u > max()))
     {
-      util::stop("Extrapolation disabled and evaluation point outside of interpolated domain.");
+      const bool below = u < min();
+      // The point, how far out it fell, and the domain. Reporting none of the
+      // three used to make an out-of-domain failure a bisect rather than a read:
+      // localising plant#576 meant instrumenting four call sites by hand to
+      // discover which spline was being asked and at what value, and the answer
+      // (the LOWER end, not past the far end as everyone assumed) inverted the
+      // fix. The caller's own identity is the one thing this layer cannot know --
+      // consumers that build several splines should catch and say which.
+      util::stop(std::string("Extrapolation disabled and evaluation point "
+                             "outside of interpolated domain: u = ") +
+                 util::format_double(u) + " lies " +
+                 util::format_double(below ? min() - u : u - max()) +
+                 " beyond the " + (below ? "lower" : "upper") + " end of [" +
+                 util::format_double(min()) + ", " +
+                 util::format_double(max()) + "].");
     }
     return spline(u);
   }
