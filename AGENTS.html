@@ -35,7 +35,7 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>odelia — developer guide for agents</h1>
-      <small class="dont-index">Source: <a href="https://github.com/traitecoevo/odelia/blob/v0.2.1/AGENTS.md" class="external-link"><code>AGENTS.md</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/traitecoevo/odelia/blob/master/AGENTS.md" class="external-link"><code>AGENTS.md</code></a></small>
     </div>
 
 <div id="odelia--developer-guide-for-agents" class="section level1">
@@ -83,6 +83,8 @@
 <strong>Cross-package orientation</strong> — how the family fits together (who depends on whom, source-of-truth rules, cross-repo gotchas) lives in <a href="https://github.com/traitecoevo/plant-meta" class="external-link"><code>plant-meta</code></a>; start with its <a href="https://github.com/traitecoevo/plant-meta/blob/main/AGENTS.md" class="external-link"><code>AGENTS.md</code></a>. Keep family-wide concerns there, not here.</li>
 <li>
 <strong>Issues &amp; board</strong> — follow the <a href="https://github.com/traitecoevo/plant-meta/blob/main/governance/issue-guide.md" class="external-link">issue guide</a>; work is tracked on <a href="https://github.com/orgs/traitecoevo/projects/5" class="external-link">board #5</a> (new issues auto-add with no Status = the triage queue). Labels: <code>bug</code> / <code>task</code> / <code>epic</code> plus <code>blocked</code>, <code>needs-info</code>, <code>cross-package</code>, <code>breaking</code>, <code>question</code>.</li>
+<li>
+<strong>Commit messages</strong> — the repo squash-merges, so a PR’s title and body are copied verbatim into permanent history. Keep them short and durable, and put the working detail (measurements, alternatives rejected, what you tried first) in the first PR comment instead — see <a href="https://github.com/traitecoevo/plant-meta/blob/main/governance/commit-messages.md" class="external-link"><code>commit-messages.md</code></a>.</li>
 </ul></div>
 </div>
 

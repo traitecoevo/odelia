@@ -76,3 +76,8 @@ trait-structured forest model.
   auto-add with no Status = the triage queue). Labels: `bug` / `task` /
   `epic` plus `blocked`, `needs-info`, `cross-package`, `breaking`,
   `question`.
+- **Commit messages** — the repo squash-merges, so a PR’s title and body
+  are copied verbatim into permanent history. Keep them short and
+  durable, and put the working detail (measurements, alternatives
+  rejected, what you tried first) in the first PR comment instead — see
+  [`commit-messages.md`](https://github.com/traitecoevo/plant-meta/blob/main/governance/commit-messages.md).
