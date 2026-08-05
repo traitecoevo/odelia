@@ -8,6 +8,7 @@
 #include <odelia/ode_step_rodas.hpp>
 
 #include <limits>
+#include <string>
 #include <vector>
 #include <cstddef>
 
@@ -285,11 +286,44 @@ void SolverInternal<System>::step(System& system) {
       step_size = time_remaining;
     }
 
-    stepper_step(system, time, step_size, y, yerr, dydt_in, dydt_out);
+    // Beyond being inaccurate, a step can be *invalid* in two ways, and both are
+    // rejections rather than failures: y_orig is right here, and a smaller step
+    // usually lands inside the domain (#55).
+    //
+    //   1. A stage throws util::DomainError. This is how a model normally reports
+    //      an out-of-domain state, and until now such a throw escaped this
+    //      function and killed the whole solve.
+    //   2. The completed step lands on a state the system's optional
+    //      ode_state_valid() refuses.
+    //
+    // Only DomainError is caught. Anything else -- util::stop(), std::bad_alloc,
+    // a logic error -- still propagates, so a bug stays a bug instead of becoming
+    // "Cannot achieve the desired accuracy".
+    bool invalid = false;
+    std::string invalid_reason;
+    try {
+      stepper_step(system, time, step_size, y, yerr, dydt_in, dydt_out);
+    } catch (const util::DomainError& e) {
+      invalid = true;
+      invalid_reason = e.what();
+    }
 
-    const double step_size_next =
-      control.adjust_step_size(size, stepper_order(), step_size,
-			       y, yerr, dydt_out);
+    double step_size_next;
+    if (invalid) {
+      // yerr and dydt_out were never completed, so there is no error estimate to
+      // form: reject on the strength of the throw alone.
+      step_size_next = control.reject_step(step_size);
+    } else {
+      step_size_next =
+        control.adjust_step_size(size, stepper_order(), step_size,
+			         y, yerr, dydt_out);
+      if (!state_valid(system, y)) {
+        invalid = true;
+        invalid_reason = "ode_state_valid() refused the state after the step";
+        // Overrides whatever the error estimate concluded, including "accept".
+        step_size_next = control.reject_step(step_size);
+      }
+    }
 
     if (control.step_size_shrank()) {
         // GSL checks that the step size is actually decreased.
@@ -303,9 +337,33 @@ void SolverInternal<System>::step(System& system) {
       	y         = y_orig;
       	time      = time_orig;
       	step_size = step_size_next;
+        if (invalid) {
+          // Put the system back on the restored state explicitly. After a caught
+          // DomainError it is left holding whichever intermediate stage threw, and
+          // if the retry goes on to raise at the minimum step size we would exit
+          // with the system and y disagreeing -- the pattern behind the stale-state
+          // bugs (plant#585, plant#589).
+          //
+          // Deliberately not done on an accuracy rejection: there the system sits
+          // on the completed step's final state, the retry's stage 2 overwrites it
+          // before anything reads it, and that has always been the behaviour. Doing
+          // it unconditionally would add a state-set -- for plant, an environment
+          // rebuild -- to every rejected step, for systems that gain nothing from
+          // this feature.
+          internal::set_ode_state(system, y, time);
+        }
       } else {
       	// We've reached limits of machine accuracy in differences of
       	// step sizes or time (or both).
+        if (invalid) {
+          // Not an accuracy problem: the smallest step we are allowed to take
+          // still leaves the domain. Name the reason, because it came from the
+          // system and is the only description of what is actually wrong.
+          util::stop("Cannot leave an invalid state at t = " +
+                     util::to_string_g(time_orig) + ": " + invalid_reason +
+                     " (step size " + util::to_string_g(step_size) +
+                     " is already at the minimum)");
+        }
         util::stop("Cannot achieve the desired accuracy");
       }
     } else {

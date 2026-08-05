@@ -251,6 +251,208 @@ void test_solver_refuses_nonfinite_state() {
   }
 }
 
+// --- Invariant-aware step rejection (#55) ----------------------------------
+//
+// The logistic flow dy/dt = k*y*(1-y) keeps the exact solution inside (0, 1) for
+// any y0 in (0, 1), but a finite explicit step from y ~ 1/2 with k large lands
+// well outside it. So the *discretisation* violates a bound the model itself
+// respects, which is precisely the case this feature exists for -- and note that
+// the rate stays perfectly finite out there, so nothing about it is visible to
+// the non-finite check added for #52.
+//
+// OnLeave picks how the system reports having left [0, 1].
+namespace {
+
+enum class OnLeave { nothing, throw_domain, throw_bug };
+
+template <OnLeave on_leave>
+struct Logistic {
+  using value_type = double;
+  static constexpr double k = 50.0;
+  double y = 0.5, dydt = 0.0, time = 0.0;
+
+  size_t ode_size() const { return 1; }
+  double ode_time() const { return time; }
+
+  template <typename Iterator> Iterator set_ode_state(Iterator it, double t) {
+    y = *it++;
+    time = t;
+    if (y < 0.0 || y > 1.0) {
+      if (on_leave == OnLeave::throw_domain) {
+        odelia::util::stop_domain("y = " + odelia::util::to_string(y) +
+                                  " is outside [0, 1]");
+      } else if (on_leave == OnLeave::throw_bug) {
+        odelia::util::stop("bug-shaped failure, must not be absorbed");
+      }
+    }
+    dydt = k * y * (1.0 - y);
+    return it;
+  }
+  template <typename Iterator> Iterator ode_state(Iterator it) const {
+    *it++ = y;
+    return it;
+  }
+  template <typename Iterator> Iterator ode_rates(Iterator it) const {
+    *it++ = dydt;
+    return it;
+  }
+  template <typename Iterator> Iterator ode_aux(Iterator it) const { return it; }
+};
+
+// Same dynamics, but declaring the domain. Inherited rather than switched on a
+// template parameter so that the silent twin genuinely lacks the method and
+// has_state_check<> resolves to false for it -- an `if constexpr` inside one
+// struct would still leave the member there for the trait to find.
+struct LogisticChecked : Logistic<OnLeave::nothing> {
+  static int refusals;
+  bool ode_state_valid(const std::vector<double>& state) const {
+    const bool ok = state[0] >= 0.0 && state[0] <= 1.0;
+    if (!ok) {
+      ++refusals;
+    }
+    return ok;
+  }
+};
+int LogisticChecked::refusals = 0;
+
+// Loose enough that the error estimate alone is content to accept a step that
+// leaves the domain, with a first step large enough to do so.
+odelia::ode::OdeControl loose_control() {
+  return odelia::ode::OdeControl(1e-2, 1e-2, 1.0, 0.0, 1e-8, 10.0, 1.0);
+}
+
+} // namespace
+
+// A declared domain must be enforced on the committed state.
+void test_predicate_rejects_out_of_domain_step() {
+  check(odelia::ode::has_state_check<LogisticChecked>::value,
+        "has_state_check finds a declared ode_state_valid");
+  check(!odelia::ode::has_state_check<Logistic<OnLeave::nothing>>::value,
+        "and does not invent one that is absent");
+
+  Logistic<OnLeave::nothing> unguarded;
+  odelia::ode::Solver<Logistic<OnLeave::nothing>> s0(unguarded, loose_control());
+  s0.advance_adaptive(std::vector<double>{0.0, 1.0});
+
+  LogisticChecked::refusals = 0;
+  LogisticChecked guarded;
+  odelia::ode::Solver<LogisticChecked> s1(guarded, loose_control());
+  s1.advance_adaptive(std::vector<double>{0.0, 1.0});
+  const double y = s1.state()[0];
+
+  check(LogisticChecked::refusals > 0,
+        "the predicate actually refused at least one step (test is not vacuous)");
+  check(y >= 0.0 && y <= 1.0, "the committed state stays inside [0, 1]");
+  check(s1.time() == 1.0, "and the solve still reaches the requested time");
+  std::printf("       (%d refusal(s); unguarded twin finished at y = %g)\n",
+              LogisticChecked::refusals, s0.state()[0]);
+}
+
+// The usual way a model reports an impossible state is to throw. That must cost
+// the step, not the solve.
+void test_domain_error_becomes_a_rejection() {
+  Logistic<OnLeave::throw_domain> sys;
+  odelia::ode::Solver<Logistic<OnLeave::throw_domain>> s(sys, loose_control());
+
+  bool threw = false;
+  std::string msg;
+  try {
+    s.advance_adaptive(std::vector<double>{0.0, 1.0});
+  } catch (const std::runtime_error& e) {
+    threw = true;
+    msg = e.what();
+  }
+
+  check(!threw, "a DomainError from a stage is a rejection, not a fatal");
+  if (threw) {
+    std::printf("       (raised: %s)\n", msg.c_str());
+  } else {
+    const double y = s.state()[0];
+    check(y >= 0.0 && y <= 1.0, "and the solve finishes inside the domain");
+    check(s.time() == 1.0, "and reaches the requested time");
+  }
+}
+
+// The other half of that bargain: only DomainError is absorbed. A plain
+// util::stop() is how the core reports a bug, and turning one into step-shrinking
+// would hide it behind an accuracy complaint.
+void test_non_domain_throw_is_not_absorbed() {
+  Logistic<OnLeave::throw_bug> sys;
+  odelia::ode::Solver<Logistic<OnLeave::throw_bug>> s(sys, loose_control());
+
+  bool threw = false;
+  std::string msg;
+  try {
+    s.advance_adaptive(std::vector<double>{0.0, 1.0});
+  } catch (const std::runtime_error& e) {
+    threw = true;
+    msg = e.what();
+  }
+
+  check(threw, "a util::stop() from a stage still ends the solve");
+  check(msg.find("bug-shaped") != std::string::npos,
+        "and arrives with its own message, not an accuracy complaint");
+}
+
+namespace {
+// dy/dt = 1 under a ceiling of y <= 1, started at 0.9 and asked to advance a full
+// unit of time: the *exact* flow leaves the domain, so no step size helps. Linear,
+// so the RKCK error estimate is essentially zero and the accuracy controller never
+// interferes -- the predicate is the only thing that can reject.
+struct RampToCeiling {
+  using value_type = double;
+  double y = 0.9, dydt = 1.0, time = 0.0;
+
+  size_t ode_size() const { return 1; }
+  double ode_time() const { return time; }
+
+  template <typename Iterator> Iterator set_ode_state(Iterator it, double t) {
+    y = *it++;
+    time = t;
+    dydt = 1.0;
+    return it;
+  }
+  template <typename Iterator> Iterator ode_state(Iterator it) const {
+    *it++ = y;
+    return it;
+  }
+  template <typename Iterator> Iterator ode_rates(Iterator it) const {
+    *it++ = dydt;
+    return it;
+  }
+  template <typename Iterator> Iterator ode_aux(Iterator it) const { return it; }
+
+  bool ode_state_valid(const std::vector<double>& state) const {
+    return state[0] <= 1.0;
+  }
+};
+} // namespace
+
+// Rejection cannot rescue a model whose exact flow leaves its domain -- it can
+// only detect it. It must then fail saying so, rather than blaming accuracy.
+void test_unreachable_domain_fails_with_a_reason() {
+  RampToCeiling sys;
+  odelia::ode::OdeControl control(1e-6, 1e-6, 1.0, 0.0, 1e-8, 1.0, 0.5);
+  odelia::ode::Solver<RampToCeiling> s(sys, control);
+
+  bool threw = false;
+  std::string msg;
+  try {
+    s.advance_adaptive(std::vector<double>{0.0, 1.0});
+  } catch (const std::runtime_error& e) {
+    threw = true;
+    msg = e.what();
+  }
+
+  check(threw, "a domain the exact flow leaves cannot be integrated");
+  check(msg.find("invalid state") != std::string::npos &&
+            msg.find("ode_state_valid") != std::string::npos,
+        "and the failure names the reason rather than blaming accuracy");
+  if (threw) {
+    std::printf("       (raised: %s)\n", msg.c_str());
+  }
+}
+
 } // namespace
 
 int main() {
@@ -260,6 +462,10 @@ int main() {
   test_solver_runs();
   test_control_rejects_nonfinite_error();
   test_solver_refuses_nonfinite_state();
+  test_predicate_rejects_out_of_domain_step();
+  test_domain_error_becomes_a_rejection();
+  test_non_domain_throw_is_not_absorbed();
+  test_unreachable_domain_fails_with_a_reason();
   if (failures == 0) {
     std::printf("all checks passed\n");
     return 0;

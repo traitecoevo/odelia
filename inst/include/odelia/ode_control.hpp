@@ -117,17 +117,7 @@ struct OdeControl {
 
     if (nonfinite)
     {
-      // Shrink hardest (the same floor the finite branch clamps to) and always
-      // report the shrink, even when already at step_size_min and so unable to
-      // decrease. That makes the caller raise "Cannot achieve the desired
-      // accuracy" rather than commit a non-finite state.
-      double new_step = step_size * 0.2;
-      if (new_step < step_size_min)
-      {
-        new_step = step_size_min;
-      }
-      step_size = new_step;
-      last_step_size_shrank = true;
+      step_size = reject_step(step_size);
     }
     else if (rmax > 1.1)
     {
@@ -174,6 +164,26 @@ struct OdeControl {
     }
 
     return step_size;
+  }
+
+  // Reject the current step outright: not merely inaccurate but *invalid* -- a
+  // non-finite error estimate (odelia#52), or a state the system refuses (#55).
+  //
+  // Shrink hardest (the same floor the accuracy branch clamps to) and always
+  // report the shrink, even when already at step_size_min and so unable to
+  // decrease. That makes the caller raise rather than commit the state, and it is
+  // deliberately unlike the `rmax > 1.1` branch above, which reports no shrink
+  // once it cannot decrease further and so lets an inaccurate step through at the
+  // floor. That trade is defensible for accuracy and never for validity.
+  double reject_step(double step_size)
+  {
+    double new_step = step_size * 0.2;
+    if (new_step < step_size_min)
+    {
+      new_step = step_size_min;
+    }
+    last_step_size_shrank = true;
+    return new_step;
   }
 
   double errlevel(double y, double dydt, double h) const

@@ -38,6 +38,41 @@ public:
   enum { value = sizeof(test<System>(0)) == sizeof(true_type) };
 };
 
+// Opt-in domain check (#55). A system may declare
+//
+//   bool ode_state_valid(const state_type& y) const;
+//
+// and the adaptive stepper will reject any step landing on a state it refuses,
+// shrinking and retrying instead of committing it. Systems that do not declare it
+// are unaffected: state_valid() below resolves to the constant-true overload, so
+// nothing is called and nothing costs anything.
+//
+// The predicate is handed the state *vector* rather than reading the system. The
+// stepper's final derivs() does leave the system sitting on y, so either would
+// work, but a predicate over a vector is testable without constructing a system
+// and is honest about what it is judging.
+template <typename System>
+class has_state_check {
+  typedef char true_type;
+  typedef long false_type;
+  template <typename C> static true_type test(decltype(&C::ode_state_valid)) ;
+  template <typename C> static false_type test(...);
+public:
+  enum { value = sizeof(test<System>(0)) == sizeof(true_type) };
+};
+
+template <typename System, typename StateType>
+typename std::enable_if<has_state_check<System>::value, bool>::type
+state_valid(const System& system, const StateType& y) {
+  return system.ode_state_valid(y);
+}
+
+template <typename System, typename StateType>
+typename std::enable_if<!has_state_check<System>::value, bool>::type
+state_valid(const System& /* system */, const StateType& /* y */) {
+  return true;
+}
+
 // The recursive interface
 template <typename ForwardIterator>
 size_t ode_size(ForwardIterator first, ForwardIterator last) {
