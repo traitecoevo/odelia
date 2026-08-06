@@ -109,6 +109,34 @@ test_param_types <- function(system_xp) {
     .Call(`_odelia_test_param_types`, system_xp)
 }
 
+two_rate_mri <- function(k, n_slow, table, macro_times, tol) {
+    .Call(`_odelia_two_rate_mri`, k, n_slow, table, macro_times, tol)
+}
+
+two_rate_solver <- function(k, n_slow, method, times, tol) {
+    .Call(`_odelia_two_rate_solver`, k, n_slow, method, times, tol)
+}
+
+two_rate_reference <- function(k, n_slow, times, tol) {
+    .Call(`_odelia_two_rate_reference`, k, n_slow, times, tol)
+}
+
+drainage_mri <- function(c, n_fast, n_slow, split, table, macro_times, tol) {
+    .Call(`_odelia_drainage_mri`, c, n_fast, n_slow, split, table, macro_times, tol)
+}
+
+drainage_reference <- function(c, n_fast, n_slow, times, tol) {
+    .Call(`_odelia_drainage_reference`, c, n_fast, n_slow, times, tol)
+}
+
+two_rate_gradient <- function(k, n_slow, table, macro_times, tol, eps_fd) {
+    .Call(`_odelia_two_rate_gradient`, k, n_slow, table, macro_times, tol, eps_fd)
+}
+
+drainage_gradient_split <- function(c, n_fast, n_slow, table, macro_times, tol, eps_fd) {
+    .Call(`_odelia_drainage_gradient_split`, c, n_fast, n_slow, table, macro_times, tol, eps_fd)
+}
+
 OdeControl_new <- function() {
     .Call(`_odelia_OdeControl_new`)
 }

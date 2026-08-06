@@ -111,6 +111,79 @@ private:
   std::vector<tangent_type> dydt_ad;
 };
 
+// Block finite-difference Jacobian for the IMEX stepper: fills only the L x L
+// diagonal block corresponding to the System's *fast* partition (the soil block,
+// laid out last: indices [slow_size, n)), leaving every other entry of the n x n
+// J at zero. Feeding this to the RODAS Rosenbrock stepper makes it implicit on
+// the fast block and explicit everywhere else (a J-zero row reduces that
+// component's stage solve to the underlying explicit Rosenbrock update) -- i.e.
+// a single-step IMEX method, no sub-cycling.
+//
+// The columns are finite-differenced through the *full* RHS (ode::derivs), so a
+// perturbation of a fast-block state propagates through the genuine, O(N)
+// state-dependent coupling (root uptake a(theta)): the block therefore captures
+// d(uptake)/d(theta), which is where the stiffness lives. This is the whole point
+// of IMEX-B over a soil-self-only ("A") Jacobian.
+//
+// Unlike the forward-AD Jacobian above this needs no rebind<U>() hook and no
+// active scalar -- only the passive value_type and the slow_size()/fast_size()
+// partition. So it runs on the real coupled Patch, which the AD Jacobian cannot.
+// Detect the fast/slow partition (slow_size()) the block-FD Jacobian needs to
+// locate the implicit block. Systems without it (the plain rkck-only path)
+// therefore report the IMEX stepper as unsupported and never instantiate its
+// step body.
+template <typename S, typename = void>
+struct has_partition : std::false_type {};
+template <typename S>
+struct has_partition<S, std::void_t<decltype(std::declval<S&>().slow_size())>>
+    : std::true_type {};
+
+template <typename System>
+class BlockFdJacobian {
+public:
+  using value_type = typename System::value_type;
+
+  // Instantiable whenever the System exposes the partition; needs no AD twin and
+  // no rebind, so unlike the AD Jacobian it works with any (even active) scalar.
+  static constexpr bool supported = has_partition<System>::value;
+
+  void resize(size_t size_) {
+    size = size_;
+    f0.assign(size, value_type(0.0));
+    f1.assign(size, value_type(0.0));
+    yp.assign(size, value_type(0.0));
+  }
+
+  // J[row*n+col] = d f_row / d y_col, non-zero only for row,col in the fast
+  // block [ns, n). One-sided differences: f0 once, then one full RHS eval per
+  // fast-block column (L+1 evaluations of the O(N) coupling per step).
+  void compute(System& system, const std::vector<value_type>& y,
+               double t, std::vector<value_type>& J) {
+    const size_t n = size;
+    const size_t ns = system.slow_size();  // fast block is [ns, n)
+    J.assign(n * n, value_type(0.0));
+
+    ode::derivs(system, y, f0, t);
+    yp = y;
+    for (size_t col = ns; col < n; ++col) {
+      // Scaled step: relative to the state, with an absolute floor so it stays
+      // meaningful near theta_res where y_col is small.
+      const double yc = std::abs(static_cast<double>(y[col]));
+      const value_type h = value_type(1e-7 * (yc + 1e-3));
+      yp[col] = y[col] + h;
+      ode::derivs(system, yp, f1, t);
+      yp[col] = y[col];
+      for (size_t row = ns; row < n; ++row) {
+        J[row * n + col] = (f1[row] - f0[row]) / h;
+      }
+    }
+  }
+
+private:
+  size_t size = 0;
+  std::vector<value_type> f0, f1, yp;
+};
+
 // Finite-difference partial derivative of the RHS with respect to time,
 // d f / d t at (y, t). The System stores time as a plain double (not the scalar
 // type), so this term cannot be seeded through the twin; a one-sided difference

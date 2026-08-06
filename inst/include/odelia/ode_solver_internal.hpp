@@ -6,6 +6,8 @@
 #include <odelia/ode_control.hpp>
 #include <odelia/ode_step.hpp>
 #include <odelia/ode_step_rodas.hpp>
+#include <odelia/ode_step_imex.hpp>
+#include <odelia/ode_step_mri.hpp>
 
 #include <limits>
 #include <string>
@@ -15,9 +17,10 @@
 namespace odelia {
 namespace ode {
 
-// Integration method: the explicit Cash-Karp RKCK 4(5) stepper (default) or the
-// implicit RODAS4(3) Rosenbrock stepper for stiff systems.
-enum class Method { rkck, rodas };
+// Integration method: the explicit Cash-Karp RKCK 4(5) stepper (default), the
+// implicit RODAS4(3) Rosenbrock stepper for stiff systems, or the MRI-GARK
+// multirate stepper for a System that declares a fast/slow split.
+enum class Method { rkck, rodas, imex, mri };
 
 template <class System>
 class SolverInternal {
@@ -73,26 +76,55 @@ private:
                    "(needs a rebind() hook and a non-active scalar); "
                    "use method='rkck'.");
       }
+    } else if (method == Method::imex) {
+      if constexpr (ImexStep<System>::supported) {
+        imex_stepper.step(system, time_, step_size, y_, yerr_, dydt_in_,
+                          dydt_out_);
+      } else {
+        // IMEX needs the fast/slow partition (slow_size/fast_size) to locate the
+        // implicit soil block; the block-FD Jacobian itself needs no rebind.
+        util::stop("method='imex' is not available for this system "
+                   "(needs a fast/slow partition); use method='rkck'.");
+      }
+    } else if (method == Method::mri) {
+      if constexpr (MriStep<System>::supported) {
+        mri_stepper.step(system, time_, step_size, y_, yerr_, dydt_in_, dydt_out_);
+      } else {
+        // MRI needs a System that declares a fast/slow split (fast_size etc.) and
+        // the passive double scalar (gradients go through the record->replay path).
+        util::stop("method='mri' is not available for this system/scalar type "
+                   "(needs a multirate fast/slow split and a non-active scalar); "
+                   "use method='rkck'.");
+      }
     } else {
       stepper.step(system, time_, step_size, y_, yerr_, dydt_in_, dydt_out_);
     }
   }
   size_t stepper_order() const {
-    return method == Method::rodas ? rodas_stepper.order() : stepper.order();
+    if (method == Method::rodas) return rodas_stepper.order();
+    if (method == Method::imex) return imex_stepper.order();
+    if (method == Method::mri) return mri_stepper.order();
+    return stepper.order();
   }
   bool stepper_can_use_dydt_in() const {
-    return method == Method::rodas ? RodasStep<System>::can_use_dydt_in
-                                   : Step<System>::can_use_dydt_in;
+    if (method == Method::rodas) return RodasStep<System>::can_use_dydt_in;
+    if (method == Method::imex) return ImexStep<System>::can_use_dydt_in;
+    if (method == Method::mri) return MriStep<System>::can_use_dydt_in;
+    return Step<System>::can_use_dydt_in;
   }
   bool stepper_first_same_as_last() const {
-    return method == Method::rodas ? RodasStep<System>::first_same_as_last
-                                   : Step<System>::first_same_as_last;
+    if (method == Method::rodas) return RodasStep<System>::first_same_as_last;
+    if (method == Method::imex) return ImexStep<System>::first_same_as_last;
+    if (method == Method::mri) return MriStep<System>::first_same_as_last;
+    return Step<System>::first_same_as_last;
   }
 
   OdeControl control;
   Method method;
   Step<System> stepper;
   RodasStep<System> rodas_stepper;
+  ImexStep<System> imex_stepper;
+  MriStep<System> mri_stepper;
 
   double step_size_last; // Size of last successful step (or suggestion)
 
@@ -411,6 +443,8 @@ void SolverInternal<System>::resize(size_t size_) {
   dydt_out.resize(size_);
   stepper.resize(size_);
   rodas_stepper.resize(size_);
+  imex_stepper.resize(size_);
+  mri_stepper.resize(size_);
 }
 
 template <class System>

@@ -31,15 +31,21 @@
 namespace odelia {
 namespace ode {
 
-template <class System>
+// The Jacobian source is a policy so the same Rosenbrock machinery serves two
+// steppers: the default forward-AD `Jacobian<System>` (full N x N, exact, needs
+// rebind) gives RODAS; a `BlockFdJacobian<System>` (L x L soil block, finite
+// difference, no rebind) gives the single-step IMEX method (ode_step_imex.hpp).
+// The default keeps every existing RodasStep<System> instantiation unchanged.
+template <class System, class JacPolicy = Jacobian<System>>
 class RodasStep {
 public:
   using value_type = typename System::value_type;
   using state_type = std::vector<value_type>;
 
-  // True when the exact-AD Jacobian is instantiable for this scalar type (the
-  // passive double solver). False for nested AD types until that path lands.
-  static constexpr bool supported = Jacobian<System>::supported;
+  // True when the chosen Jacobian policy is instantiable for this System/scalar.
+  // For the AD policy: needs rebind() and a passive scalar. For the block-FD
+  // policy: always true.
+  static constexpr bool supported = JacPolicy::supported;
 
   void resize(size_t size_) {
     size = size_;
@@ -168,7 +174,7 @@ private:
   static const int n_stages = 6;
 
   size_t size = 0;
-  Jacobian<System> jac;
+  JacPolicy jac;
   std::vector<value_type> J;   // row-major n*n, df/dy
   std::vector<value_type> W;   // row-major n*n, (1/(h*gamma)) I - J
   std::vector<size_t> piv;
