@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,14 @@
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.3.1" id="odelia-031">odelia 0.3.1<a class="anchor" aria-label="anchor" href="#odelia-031"></a></h2>
+<p><strong>Removes <code>util::to_string_g()</code>, added in 0.3.0 an hour earlier as a duplicate of <code>util::format_double()</code>.</strong> Both formatted a double for an error message with six significant figures — <code>"%g"</code> and <code>"%.6g"</code> are the same format string, since <code>%g</code>’s default precision is 6 — and they were byte-identical on every value tried. The one call site, in the invariant-rejection failure message, now uses <code>format_double</code>; its output is unchanged.</p>
+<p>The duplicate arose because <a href="https://github.com/traitecoevo/odelia/issues/55" class="external-link">#55</a> was developed on a branch stacked below the 0.2.2 work that introduced <code>format_double</code>. Worth recording as a hazard rather than a review miss: two helpers with <em>different names</em> in different parts of the same file merge with no textual conflict, so neither the rebase nor the diff had anything to show.</p>
+<p>A <strong>patch</strong> bump, although the header core lost a public symbol — the situation that earned 0.2.0 a minor one. The difference is what a version number can usefully say. 0.2.0’s removals had been reachable across released versions, so the bump warned of a break a consumer could actually hit. <code>to_string_g</code> never left this repository: <strong>0.3.0 was never tagged</strong> — <code>v0.2.1</code> remains the only tag and the only release — and both consumers are still on <code>odelia (&gt;= 0.2.x)</code> with <code>@v0.2.1</code> remotes. Nothing can have compiled against it, so a minor bump would announce an incompatibility that has no possible victim, and spend the signal for nothing.</p>
+<p>Downstream floors are deliberately <strong>not</strong> raised. Neither <code>plant</code> nor <code>phylloptim</code> uses <code>ode_state_valid()</code> yet, and per the precedent set for <code>leaf</code> in 0.2.1 — checked rather than aligned for symmetry — raising a floor forces an upgrade for a change the consumer does not use. They should move to <code>odelia (&gt;= 0.3.0)</code> when plant#609 or plant#599 actually adopts the domain check; 0.3.0 is the version that introduced it, and this release does not change it.</p>
+<p>The 0.3.0 entry below has been corrected accordingly; it advertised a function that no longer exists.</p>
+</div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.3.0" id="odelia-030">odelia 0.3.0<a class="anchor" aria-label="anchor" href="#odelia-030"></a></h2>
 <p><strong>Invariant-aware step rejection (<a href="https://github.com/traitecoevo/odelia/issues/55" class="external-link">#55</a>).</strong> A system may now declare the domain its state lives in, and the adaptive stepper will refuse to commit a step that leaves it. Two ways to say so, both opt-in:</p>
 <ul><li>an optional <code>bool ode_state_valid(const state_type&amp;) const</code> on the system, checked after each completed step;</li>
@@ -48,7 +56,7 @@
 <p>Only <code>DomainError</code> is caught. <code>util::stop()</code> and everything else still propagate, which is the point: absorbing them would turn a programming error into step-shrinking until “Cannot achieve the desired accuracy”, a diagnostic that points at the solver instead of at the bug.</p>
 <p>This matters for bounded quantities that a finite RK step can overshoot even when the exact flow cannot — a carbon pool at zero, soil water at saturation, a probability at one. It is a discretisation guard, <strong>not</strong> a way to fix a model whose exact flow leaves its domain: that case shrinks to the minimum step and raises, now naming the reason and the location rather than blaming accuracy.</p>
 <p>Version bumped so downstreams can pin against the capability (<code>odelia (&gt;= 0.3.0)</code>); systems declaring neither hook are unaffected, and a Lorenz trajectory over 4127 steps is bit-identical across the change.</p>
-<p>Also adds <code>util::to_string_g()</code>, which formats a double with <code>%g</code> — <code>std::to_string</code> renders a <code>1e-8</code> step size as <code>"0.000000"</code>, exactly where a diagnostic needs the magnitude.</p>
+<p>Numbers in that message are rendered with <code>util::format_double()</code>, so a step size at its floor reads <code>1e-08</code> rather than the <code>"0.000000"</code> <code>std::to_string</code> would give.</p>
 </div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.2.2" id="odelia-022">odelia 0.2.2<a class="anchor" aria-label="anchor" href="#odelia-022"></a></h2>
