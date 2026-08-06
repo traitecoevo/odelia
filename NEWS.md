@@ -1,3 +1,36 @@
+## odelia 0.3.1
+
+**Removes `util::to_string_g()`, added in 0.3.0 an hour earlier as a duplicate of
+`util::format_double()`.** Both formatted a double for an error message with six
+significant figures — `"%g"` and `"%.6g"` are the same format string, since `%g`'s
+default precision is 6 — and they were byte-identical on every value tried. The one
+call site, in the invariant-rejection failure message, now uses `format_double`; its
+output is unchanged.
+
+The duplicate arose because #55 was developed on a branch stacked below the 0.2.2 work
+that introduced `format_double`. Worth recording as a hazard rather than a review miss:
+two helpers with *different names* in different parts of the same file merge with no
+textual conflict, so neither the rebase nor the diff had anything to show.
+
+A **patch** bump, although the header core lost a public symbol — the situation that
+earned 0.2.0 a minor one. The difference is what a version number can usefully say.
+0.2.0's removals had been reachable across released versions, so the bump warned of a
+break a consumer could actually hit. `to_string_g` never left this repository:
+**0.3.0 was never tagged** — `v0.2.1` remains the only tag and the only release — and
+both consumers are still on `odelia (>= 0.2.x)` with `@v0.2.1` remotes. Nothing can
+have compiled against it, so a minor bump would announce an incompatibility that has
+no possible victim, and spend the signal for nothing.
+
+Downstream floors are deliberately **not** raised. Neither `plant` nor `phylloptim`
+uses `ode_state_valid()` yet, and per the precedent set for `leaf` in 0.2.1 — checked
+rather than aligned for symmetry — raising a floor forces an upgrade for a change the
+consumer does not use. They should move to `odelia (>= 0.3.0)` when plant#609 or
+plant#599 actually adopts the domain check; 0.3.0 is the version that introduced it,
+and this release does not change it.
+
+The 0.3.0 entry below has been corrected accordingly; it advertised a function that
+no longer exists.
+
 ## odelia 0.3.0
 
 **Invariant-aware step rejection (#55).** A system may now declare the domain its
@@ -29,9 +62,8 @@ Version bumped so downstreams can pin against the capability
 (`odelia (>= 0.3.0)`); systems declaring neither hook are unaffected, and a Lorenz
 trajectory over 4127 steps is bit-identical across the change.
 
-Also adds `util::to_string_g()`, which formats a double with `%g` — `std::to_string`
-renders a `1e-8` step size as `"0.000000"`, exactly where a diagnostic needs the
-magnitude.
+Numbers in that message are rendered with `util::format_double()`, so a step size at
+its floor reads `1e-08` rather than the `"0.000000"` `std::to_string` would give.
 
 
 ## odelia 0.2.2

@@ -360,8 +360,8 @@ void SolverInternal<System>::step(System& system) {
           // still leaves the domain. Name the reason, because it came from the
           // system and is the only description of what is actually wrong.
           util::stop("Cannot leave an invalid state at t = " +
-                     util::to_string_g(time_orig) + ": " + invalid_reason +
-                     " (step size " + util::to_string_g(step_size) +
+                     util::format_double(time_orig) + ": " + invalid_reason +
+                     " (step size " + util::format_double(step_size) +
                      " is already at the minimum)");
         }
         util::stop("Cannot achieve the desired accuracy");

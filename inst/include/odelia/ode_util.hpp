@@ -144,16 +144,6 @@ std::string to_string(T x) {
   return std::to_string(x);
 }
 
-// std::to_string on a double is "%f" with six decimals, so it renders 1e-8 as
-// "0.000000" -- useless in precisely the diagnostics that need to report a small
-// number, such as a step size at its floor. "%g" keeps the magnitude. snprintf
-// rather than ostringstream to keep <sstream> out of a header everything includes.
-inline std::string to_string_g(double x) {
-  char buf[32];
-  std::snprintf(buf, sizeof(buf), "%g", x);
-  return std::string(buf);
-}
-
 }
 }
 
