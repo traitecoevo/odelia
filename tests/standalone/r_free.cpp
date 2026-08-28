@@ -453,6 +453,171 @@ void test_unreachable_domain_fails_with_a_reason() {
   }
 }
 
+// --- The same bargain on the pinned path (plant#642) ------------------------
+//
+// advance_fixed() steps exactly to a caller-supplied set of times, which is how
+// a replay reproduces a trajectory recorded earlier. Its endpoints cannot move,
+// so #55's answer to an invalid step -- take a smaller one -- has to become
+// "take several smaller ones to the same endpoint". Until it did, advance_fixed
+// called the stepper bare and the first refusal killed the solve.
+
+namespace {
+// The grid below is coarse enough that a single RKCK step from y = 0.5 leaves
+// [0, 1], so every one of these tests exercises the subdivision rather than
+// merely passing through it.
+std::vector<double> coarse_grid() {
+  return std::vector<double>{0.0, 0.25, 0.5, 0.75, 1.0};
+}
+} // namespace
+
+void test_pinned_step_domain_error_is_a_rejection() {
+  Logistic<OnLeave::throw_domain> sys;
+  odelia::ode::Solver<Logistic<OnLeave::throw_domain>> s(sys, loose_control());
+
+  bool threw = false;
+  std::string msg;
+  try {
+    s.advance_fixed(coarse_grid());
+  } catch (const std::runtime_error& e) {
+    threw = true;
+    msg = e.what();
+  }
+
+  check(!threw, "a DomainError under advance_fixed costs the step, not the solve");
+  if (threw) {
+    std::printf("       (raised: %s)\n", msg.c_str());
+    return;
+  }
+  const double y = s.state()[0];
+  check(y >= 0.0 && y <= 1.0, "and the solve finishes inside the domain");
+  // The whole point of the pinned path: subdividing must not move the endpoint,
+  // because the caller matches these times against its own record.
+  check(s.time() == coarse_grid().back(),
+        "and lands exactly on the last requested time");
+}
+
+// The predicate is the other way #55 lets a system refuse a state, and it must
+// be enforced here too -- otherwise it would go silently unchecked whenever the
+// integration happened to be pinned.
+void test_pinned_step_predicate_is_enforced() {
+  LogisticChecked sys;
+  odelia::ode::Solver<LogisticChecked> s(sys, loose_control());
+
+  const int refusals_before = LogisticChecked::refusals;
+  bool threw = false;
+  try {
+    s.advance_fixed(coarse_grid());
+  } catch (const std::runtime_error&) {
+    threw = true;
+  }
+
+  check(!threw, "a refused state under advance_fixed is a rejection, not a fatal");
+  check(LogisticChecked::refusals > refusals_before,
+        "and ode_state_valid() was actually consulted on the pinned path");
+  if (!threw) {
+    const double y = s.state()[0];
+    check(y >= 0.0 && y <= 1.0, "the committed state stays inside [0, 1]");
+    check(s.time() == coarse_grid().back(),
+          "and the endpoint is still hit exactly");
+  }
+}
+
+// Only DomainError is absorbed here, exactly as on the adaptive path.
+void test_pinned_step_non_domain_throw_is_not_absorbed() {
+  Logistic<OnLeave::throw_bug> sys;
+  odelia::ode::Solver<Logistic<OnLeave::throw_bug>> s(sys, loose_control());
+
+  bool threw = false;
+  std::string msg;
+  try {
+    s.advance_fixed(coarse_grid());
+  } catch (const std::runtime_error& e) {
+    threw = true;
+    msg = e.what();
+  }
+
+  check(threw, "a util::stop() from a stage still ends a pinned solve");
+  check(msg.find("bug-shaped") != std::string::npos,
+        "and arrives with its own message, not a subdivision complaint");
+}
+
+// Subdivision detects an unreachable domain; it cannot rescue one. Saying so is
+// the difference between a diagnosis and an infinite loop.
+void test_pinned_step_unreachable_domain_fails_with_a_reason() {
+  RampToCeiling sys;
+  odelia::ode::OdeControl control(1e-6, 1e-6, 1.0, 0.0, 1e-8, 1.0, 0.5);
+  odelia::ode::Solver<RampToCeiling> s(sys, control);
+
+  bool threw = false;
+  std::string msg;
+  try {
+    s.advance_fixed(std::vector<double>{0.0, 0.5, 1.0});
+  } catch (const std::runtime_error& e) {
+    threw = true;
+    msg = e.what();
+  }
+
+  check(threw, "a domain the exact flow leaves cannot be integrated pinned either");
+  check(msg.find("invalid state") != std::string::npos &&
+            msg.find("ode_state_valid") != std::string::npos,
+        "and the failure names the reason and the sub-step it gave up at");
+  if (threw) {
+    std::printf("       (raised: %s)\n", msg.c_str());
+  }
+}
+
+namespace {
+// Counts derivative evaluations, to show that a system raising no objection is
+// stepped exactly as it was before subdivision existed.
+struct CountingLinear {
+  using value_type = double;
+  static int derivs;
+  double y = 1.0, dydt = 1.0, time = 0.0;
+
+  size_t ode_size() const { return 1; }
+  double ode_time() const { return time; }
+
+  template <typename Iterator> Iterator set_ode_state(Iterator it, double t) {
+    y = *it++;
+    time = t;
+    dydt = 1.0;
+    ++derivs;
+    return it;
+  }
+  template <typename Iterator> Iterator ode_state(Iterator it) const {
+    *it++ = y;
+    return it;
+  }
+  template <typename Iterator> Iterator ode_rates(Iterator it) const {
+    *it++ = dydt;
+    return it;
+  }
+  template <typename Iterator> Iterator ode_aux(Iterator it) const { return it; }
+};
+int CountingLinear::derivs = 0;
+} // namespace
+
+// The cost of the new machinery on the ordinary path must be nothing: one RKCK
+// step per interval, the same six stage evaluations, the same endpoints.
+void test_pinned_step_unchanged_when_nothing_objects() {
+  CountingLinear sys;
+  odelia::ode::Solver<CountingLinear> s(sys, loose_control());
+
+  const std::vector<double> times{0.0, 0.25, 0.5, 0.75, 1.0};
+  CountingLinear::derivs = 0;
+  s.advance_fixed(times);
+
+  // Four intervals, six stage evaluations each. setup_dydt_in() adds none: the
+  // solver starts with a clean dydt_in and FSAL keeps it clean thereafter.
+  check(CountingLinear::derivs == 24,
+        "an unobjecting system still takes exactly one step per interval");
+  check(s.time() == 1.0, "and reaches the requested time");
+  // dy/dt = 1 from y = 1 over one unit of time, integrated exactly by RKCK.
+  check(std::abs(s.state()[0] - 2.0) < 1e-12, "with the exact trajectory");
+  std::printf("       (%d derivative evaluation(s) over %zu intervals)\n",
+              CountingLinear::derivs, times.size() - 1);
+}
+
 } // namespace
 
 int main() {
@@ -466,6 +631,11 @@ int main() {
   test_domain_error_becomes_a_rejection();
   test_non_domain_throw_is_not_absorbed();
   test_unreachable_domain_fails_with_a_reason();
+  test_pinned_step_domain_error_is_a_rejection();
+  test_pinned_step_predicate_is_enforced();
+  test_pinned_step_non_domain_throw_is_not_absorbed();
+  test_pinned_step_unreachable_domain_fails_with_a_reason();
+  test_pinned_step_unchanged_when_nothing_objects();
   if (failures == 0) {
     std::printf("all checks passed\n");
     return 0;

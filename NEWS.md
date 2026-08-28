@@ -1,3 +1,17 @@
+## odelia 0.4.0
+
+**Step rejection now works when the integration is pinned to fixed times (plant#642).** `advance_fixed()` steps exactly to a caller-supplied set of times — how a replay reproduces a trajectory recorded earlier. It called the stepper bare, so both of the ways #55 gave a system to refuse a state were unreachable from it: a `util::DomainError` from a stage killed the solve, and a declared `ode_state_valid()` was never consulted at all.
+
+The endpoints of a pinned step are the caller's and cannot be moved, so #55's answer — take a smaller step — becomes *take several smaller ones to the same endpoint*. On a refusal the sub-step shrinks through `control.reject_step()`, the same rule and the same `step_size_min` floor as the adaptive path, and the walk continues to the original time. That time is still hit exactly, so the times a caller records are unchanged. A system that raises no objection is stepped exactly as before: one RKCK step per interval, six stage evaluations, asserted in `tests/standalone/`.
+
+An unreachable domain still fails, and now says where it gave up and why, rather than surfacing as whatever the offending stage happened to throw.
+
+This was not a rare corner. `plant`'s mutant replay pins the stepper to a resident's recorded times, and its TF24 model reports an empty carbon pool this way as a matter of routine — ~480 rejections in a resident run that goes on to complete normally — so a replay was near-certain to meet one and die. Invasion-fitness analysis was impossible for that model, not merely slow.
+
+One caveat for systems that cache per-stage data through `cache(system, rk_step)`: the stage indices restart at 0 on each sub-step, so a subdivided interval leaves the system holding the last sub-step's stages rather than stages spanning the whole interval. A consumer recording such a cache for later replay gets a coarser record of a subdivided step than of a plain one.
+
+A **minor** bump, so downstreams can pin against the capability (`odelia (>= 0.4.0)`). Systems that never refuse a state are unaffected.
+
 ## odelia 0.3.1
 
 **Removes `util::to_string_g()`, added in 0.3.0 an hour earlier as a duplicate of

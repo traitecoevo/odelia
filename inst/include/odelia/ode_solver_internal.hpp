@@ -390,13 +390,99 @@ void SolverInternal<System>::step(System& system) {
 
 // This takes a step up to time "time_max_", regardless of what the
 // integration error says.  This is used by advance_fixed
+//
+// The step is not error-controlled, but it can still be *invalid*, in the two
+// ways #55 defines: a stage throws util::DomainError, or the completed step lands
+// on a state ode_state_valid() refuses. step() answers either by rejecting the
+// step and retrying it smaller. Here the endpoint is given by the caller and
+// cannot be moved, so the interval is subdivided instead -- shrink the sub-step
+// and walk to the same endpoint in several. The endpoint is still hit exactly, so
+// the times the caller records are unchanged, and an interval that raises neither
+// objection takes exactly one step, as before.
+//
+// Without this, the rejection added in #55 was reachable only from the adaptive
+// path: advance_fixed called the stepper bare, so the first throw killed the
+// solve. That made a whole class of run impossible rather than slow -- plant's
+// mutant replay pins the stepper to a resident's recorded times, and its TF24
+// model throws here as a matter of routine (~480 rejections in a resident run
+// that goes on to complete), so a replay was near-certain to meet one
+// (plant#642).
+//
+// One caveat for systems that cache per-stage data (`cache(system, rk_step)`):
+// the stage indices restart at 0 on each sub-step, so a subdivided interval
+// leaves the system holding the *last* sub-step's stages rather than stages
+// spanning the whole interval. Consumers that record such a cache for later
+// replay get a coarser record of a subdivided step than of a plain one.
 template <class System>
 void SolverInternal<System>::step_to(System& system, double time_max_) {
   set_time_max(time_max_);
   load(system); // option to load pre-calculated states in mutant runs
   setup_dydt_in(system);
-  stepper_step(system, time, time_max - time, y, yerr, dydt_in, dydt_out);
-  save_dydt_out_as_in();
+
+  // Sub-step size. Starts as the whole interval, so the common case is one step.
+  double step_size = time_max - time;
+  // Held across iterations so a retry reuses the buffer rather than allocating.
+  state_type y_orig;
+
+  while (true) {
+    // Take the endpoint from time_max rather than accumulating step_size, so the
+    // caller's time is reproduced bit-for-bit however the interval was cut. A
+    // zero-length interval lands here immediately and steps once, as before.
+    const bool final_sub_step = !(time + step_size < time_max);
+    const double time_next = final_sub_step ? time_max : time + step_size;
+
+    y_orig = y;
+    bool invalid = false;
+    std::string invalid_reason;
+    try {
+      // dydt_in is read, not written, so only y needs saving to retry.
+      stepper_step(system, time, time_next - time, y, yerr, dydt_in, dydt_out);
+    } catch (const util::DomainError& e) {
+      invalid = true;
+      invalid_reason = e.what();
+    }
+    // The other half of the #55 contract. Both ways of refusing a state apply
+    // here for the same reason they apply on the adaptive path; honouring only
+    // the throw would leave the predicate silently unenforced whenever the
+    // integration happens to be pinned.
+    if (!invalid && !state_valid(system, y)) {
+      invalid = true;
+      invalid_reason = "ode_state_valid() refused the state after the step";
+    }
+
+    if (!invalid) {
+      save_dydt_out_as_in();
+      time = time_next;
+      if (final_sub_step) {
+        break;
+      }
+      continue;
+    }
+
+    // Undo the failed sub-step. The system is left holding whichever stage threw,
+    // so put it back on the restored state explicitly -- otherwise a give-up below
+    // would exit with the system and y disagreeing, the pattern behind the
+    // stale-state bugs (plant#585, plant#589).
+    y = y_orig;
+    internal::set_ode_state(system, y, time);
+
+    // Shrink the same way an invalid step shrinks on the adaptive path, and stop
+    // at the same floor: one rule for how hard the solver retries a state a system
+    // refused, and one knob (step_size_min) controlling it.
+    const double step_size_next = control.reject_step(step_size);
+    if (!(step_size_next < step_size) || !(time + step_size_next > time)) {
+      // The smallest sub-step we are allowed to take still leaves the domain (or
+      // is too small to advance the clock at all). Name the reason, because it came
+      // from the system and is the only description of what is actually wrong.
+      util::stop("Cannot leave an invalid state at t = " +
+                 util::format_double(time) + " stepping to " +
+                 util::format_double(time_max) + ": " + invalid_reason +
+                 " (sub-step size " + util::format_double(step_size) +
+                 " is already at the minimum)");
+    }
+    step_size = step_size_next;
+  }
+
   cache(system);
 
   time = time_max;
