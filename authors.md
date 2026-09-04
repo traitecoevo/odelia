@@ -12,16 +12,16 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/traitecoevo/odelia/blob/v0.3.1/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/traitecoevo/odelia/blob/master/DESCRIPTION)
 
 Falster D, FitzJohn R, O'Reilly-Nugent A (2026). *odelia: ODE Solver
 with Automatic Differentiation, in C++ Header Files*. R package version
-0.3.1, <https://github.com/traitecoevo/odelia>.
+0.4.0, <https://github.com/traitecoevo/odelia>.
 
     @Manual{,
       title = {odelia: ODE Solver with Automatic Differentiation, in C++ Header Files},
       author = {Daniel Falster and Richard FitzJohn and Andrew O'Reilly-Nugent},
       year = {2026},
-      note = {R package version 0.3.1},
+      note = {R package version 0.4.0},
       url = {https://github.com/traitecoevo/odelia},
     }

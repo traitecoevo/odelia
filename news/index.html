@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.4.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -35,9 +35,18 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/traitecoevo/odelia/blob/v0.3.1/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/traitecoevo/odelia/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.4.0" id="odelia-040">odelia 0.4.0<a class="anchor" aria-label="anchor" href="#odelia-040"></a></h2>
+<p><strong>Step rejection now works when the integration is pinned to fixed times (plant#642).</strong> <code>advance_fixed()</code> steps exactly to a caller-supplied set of times — how a replay reproduces a trajectory recorded earlier. It called the stepper bare, so both of the ways <a href="https://github.com/traitecoevo/odelia/issues/55" class="external-link">#55</a> gave a system to refuse a state were unreachable from it: a <code>util::DomainError</code> from a stage killed the solve, and a declared <code>ode_state_valid()</code> was never consulted at all.</p>
+<p>The endpoints of a pinned step are the caller’s and cannot be moved, so <a href="https://github.com/traitecoevo/odelia/issues/55" class="external-link">#55</a>’s answer — take a smaller step — becomes <em>take several smaller ones to the same endpoint</em>. On a refusal the sub-step shrinks through <code>control.reject_step()</code>, the same rule and the same <code>step_size_min</code> floor as the adaptive path, and the walk continues to the original time. That time is still hit exactly, so the times a caller records are unchanged. A system that raises no objection is stepped exactly as before: one RKCK step per interval, six stage evaluations, asserted in <code>tests/standalone/</code>.</p>
+<p>An unreachable domain still fails, and now says where it gave up and why, rather than surfacing as whatever the offending stage happened to throw.</p>
+<p>This was not a rare corner. <code>plant</code>’s mutant replay pins the stepper to a resident’s recorded times, and its TF24 model reports an empty carbon pool this way as a matter of routine — ~480 rejections in a resident run that goes on to complete normally — so a replay was near-certain to meet one and die. Invasion-fitness analysis was impossible for that model, not merely slow.</p>
+<p>One caveat for systems that cache per-stage data through <code>cache(system, rk_step)</code>: the stage indices restart at 0 on each sub-step, so a subdivided interval leaves the system holding the last sub-step’s stages rather than stages spanning the whole interval. A consumer recording such a cache for later replay gets a coarser record of a subdivided step than of a plain one.</p>
+<p>A <strong>minor</strong> bump, so downstreams can pin against the capability (<code>odelia (&gt;= 0.4.0)</code>). Systems that never refuse a state are unaffected.</p>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.3.1" id="odelia-031">odelia 0.3.1<a class="anchor" aria-label="anchor" href="#odelia-031"></a></h2>
 <p><strong>Removes <code>util::to_string_g()</code>, added in 0.3.0 an hour earlier as a duplicate of <code>util::format_double()</code>.</strong> Both formatted a double for an error message with six significant figures — <code>"%g"</code> and <code>"%.6g"</code> are the same format string, since <code>%g</code>’s default precision is 6 — and they were byte-identical on every value tried. The one call site, in the invariant-rejection failure message, now uses <code>format_double</code>; its output is unchanged.</p>
