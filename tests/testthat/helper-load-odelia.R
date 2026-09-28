@@ -1,6 +1,7 @@
 .odelia_test_cache <- new.env(parent = emptyenv())
 .odelia_test_cache$ode_loaded <- FALSE
 .odelia_test_cache$leaf_loaded <- FALSE
+.odelia_test_cache$ss_loaded <- FALSE
 .odelia_test_cache$odelia_so <- NA_character_
 
 resolve_test_path <- function(installed_rel, source_rel) {
