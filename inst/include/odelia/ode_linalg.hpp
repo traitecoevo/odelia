@@ -8,7 +8,7 @@
 // works unchanged for `double` and for XAD active types (AReal/FReal). The
 // arithmetic is plain operator use, so under an active scalar every operation is
 // recorded on the tape and gradients flow through the solve. Pivot *selection*
-// compares magnitudes of the underlying numeric values via `xad::value(...)`, so
+// compares magnitudes of the underlying numeric values via `util::to_passive`, so
 // the choice of pivot never itself becomes a taped/differentiated quantity.
 //
 // Matrices are stored row-major in a flat std::vector: A(i, j) == a[i * n + j].
@@ -38,9 +38,9 @@ void lu_decompose(std::vector<T>& a, size_t n, std::vector<size_t>& piv) {
   for (size_t k = 0; k < n; ++k) {
     // Find pivot row: largest |a(i,k)| for i >= k, comparing numeric values.
     size_t pivot_row = k;
-    double best = std::abs(xad::value(a[k * n + k]));
+    double best = std::abs(util::to_passive(a[k * n + k]));
     for (size_t i = k + 1; i < n; ++i) {
-      const double v = std::abs(xad::value(a[i * n + k]));
+      const double v = std::abs(util::to_passive(a[i * n + k]));
       if (v > best) {
         best = v;
         pivot_row = i;

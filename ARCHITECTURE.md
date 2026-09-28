@@ -6,6 +6,12 @@
 > failures in downstream packages (e.g. plant) that do not show up in odelia's
 > own checks.
 
+> For **automatic differentiation**, the contract a System implements to be
+> differentiable is the set of concepts in `inst/include/odelia/ode_interface.hpp`,
+> which the compiler checks; how the pieces fit together for one worked consumer is
+> in `plant-dev`'s `docs/design/reverse-mode.md`. This document is only about how
+> the `Tape` runtime compiles and links.
+
 ## Why there is compiled code at all
 
 odelia is *almost* header-only — the ODE `Solver`, interpolator, and ODE

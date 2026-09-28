@@ -20,7 +20,7 @@ compile_spline_ad_interface <- function() {
   } else {
     Sys.getenv("PKG_LIBS", unset = "")
   }
-  withr::local_envvar(PKG_CPPFLAGS = paste0("-I", shQuote(include_dir)),
+  withr::local_envvar(PKG_CPPFLAGS = odelia_cppflags(include_dir),
                       PKG_LIBS = pkg_libs)
 
   res <- tryCatch({

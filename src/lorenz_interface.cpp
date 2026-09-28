@@ -11,16 +11,13 @@
 #include <Rcpp.h>
 #include <XAD/XAD.hpp>
 #include <odelia/ode_solver.hpp>
-#include <odelia/ode_fit.hpp>
 #include <odelia/solver_interface.hpp>
 #include <examples/lorenz_system.hpp>
 
 using namespace Rcpp;
 using namespace odelia;
 
-// Define types for Lorenz system
 typedef LorenzSystem<double> SystemType;
-typedef LorenzSystem<xad::adj<double>::active_type> ActiveSystemType;
 
 // Helper to get system pointer
 inline Rcpp::XPtr<SystemType> get_system(SEXP xp) {
@@ -104,136 +101,102 @@ static ode::Method parse_method(const std::string& method) {
   Rcpp::stop("Unknown method '" + method + "'. Use 'rkck' or 'rodas'.");
 }
 
-// Solver creation - Lorenz-specific (must know LorenzSystem type)
+// Solver creation - Lorenz-specific (must know LorenzSystem type). R only ever
+// holds the double solver; gradients build the active replay internally. The
+// stiff `rodas` stepper is a double-path option; the active replay stays rkck
+// (the Rosenbrock linear solve is not available for the AD scalar type).
 // [[Rcpp::export]]
-SEXP Solver_new(SEXP system_xp, SEXP control_xp, bool active = false,
-                std::string method = "rkck") {
+SEXP Solver_new(SEXP system_xp, SEXP control_xp, std::string method = "rkck") {
   Rcpp::XPtr<SystemType> sys(system_xp);
   Rcpp::XPtr<ode::OdeControl> ctrl(control_xp);
-  const ode::Method m = parse_method(method);
-
-  if (active) {
-    // Initialize new AD compatible system
-    auto params = sys->pars();
-
-    std::vector<double> initial_state(sys->ode_size());
-    sys->ode_initial_state(initial_state.begin());
-    auto t0 = sys->ode_t0();
-
-    ActiveSystemType sys_active(params[0], params[1], params[2]);
-    sys_active.set_initial_state(initial_state.begin(), t0);
-
-    auto* solver = new ode::Solver<ActiveSystemType>(sys_active, *ctrl, m);
-
-    return Rcpp::XPtr<ode::Solver<ActiveSystemType>>(solver, true);
-  } else {
-    // Create regular solver
-    SystemType sys_copy(*sys);
-    auto* solver = new ode::Solver<SystemType>(sys_copy, *ctrl, m);
-
-    return Rcpp::XPtr<ode::Solver<SystemType>>(solver, true);
-  }
+  SystemType sys_copy(*sys);
+  auto* solver = new ode::Solver<SystemType>(sys_copy, *ctrl, parse_method(method));
+  return Rcpp::XPtr<ode::Solver<SystemType>>(solver, true);
 }
 
-// All other Solver functions call generic templates with LorenzSystem types
+// All other Solver functions call the generic (double-only) templates.
 
 // [[Rcpp::export]]
-void Solver_reset(SEXP solver_xp, bool active = false) {
-  odelia::solver::Solver_reset_impl<SystemType, ActiveSystemType>(solver_xp, active);
+void Solver_reset(SEXP solver_xp) {
+  odelia::solver::Solver_reset_impl<SystemType>(solver_xp);
 }
 
 // [[Rcpp::export]]
-double Solver_time(SEXP solver_xp, bool active = false) {
-  return odelia::solver::Solver_time_impl<SystemType, ActiveSystemType>(solver_xp, active);
+double Solver_time(SEXP solver_xp) {
+  return odelia::solver::Solver_time_impl<SystemType>(solver_xp);
 }
 
 // [[Rcpp::export]]
-Rcpp::NumericVector Solver_state(SEXP solver_xp, bool active = false) {
-  return odelia::solver::Solver_state_impl<SystemType, ActiveSystemType>(solver_xp, active);
+Rcpp::NumericVector Solver_state(SEXP solver_xp) {
+  return odelia::solver::Solver_state_impl<SystemType>(solver_xp);
 }
 
 // [[Rcpp::export]]
-Rcpp::NumericVector Solver_times(SEXP solver_xp, bool active = false) {
-  return odelia::solver::Solver_times_impl<SystemType, ActiveSystemType>(solver_xp, active);
+Rcpp::NumericVector Solver_times(SEXP solver_xp) {
+  return odelia::solver::Solver_times_impl<SystemType>(solver_xp);
 }
 
 // [[Rcpp::export]]
-void Solver_set_state(SEXP solver_xp, Rcpp::NumericVector y, double time, bool active = false) {
-  odelia::solver::Solver_set_state_impl<SystemType, ActiveSystemType>(solver_xp, y, time, active);
+void Solver_set_state(SEXP solver_xp, Rcpp::NumericVector y, double time) {
+  odelia::solver::Solver_set_state_impl<SystemType>(solver_xp, y, time);
 }
 
 // [[Rcpp::export]]
-void Solver_advance_adaptive(SEXP solver_xp, Rcpp::NumericVector times, bool active = false) {
-  odelia::solver::Solver_advance_adaptive_impl<SystemType, ActiveSystemType>(solver_xp, times, active);
+void Solver_advance_adaptive(SEXP solver_xp, Rcpp::NumericVector times) {
+  odelia::solver::Solver_advance_adaptive_impl<SystemType>(solver_xp, times);
 }
 
 // [[Rcpp::export]]
-void Solver_advance_fixed(SEXP solver_xp, Rcpp::NumericVector times, bool active = false) {
-  odelia::solver::Solver_advance_fixed_impl<SystemType, ActiveSystemType>(solver_xp, times, active);
+void Solver_advance_fixed(SEXP solver_xp, Rcpp::NumericVector times) {
+  odelia::solver::Solver_advance_fixed_impl<SystemType>(solver_xp, times);
 }
 
 // [[Rcpp::export]]
-void Solver_advance_euler(SEXP solver_xp, Rcpp::NumericVector times, bool active = false) {
-  odelia::solver::Solver_advance_euler_impl<SystemType, ActiveSystemType>(solver_xp, times, active);
+void Solver_advance_euler(SEXP solver_xp, Rcpp::NumericVector times) {
+  odelia::solver::Solver_advance_euler_impl<SystemType>(solver_xp, times);
 }
 
 // [[Rcpp::export]]
-void Solver_step(SEXP solver_xp, bool active = false) {
-  odelia::solver::Solver_step_impl<SystemType, ActiveSystemType>(solver_xp, active);
+void Solver_step(SEXP solver_xp) {
+  odelia::solver::Solver_step_impl<SystemType>(solver_xp);
 }
 
 // [[Rcpp::export]]
-bool Solver_get_collect(SEXP solver_xp, bool active = false) {
-  return odelia::solver::Solver_get_collect_impl<SystemType, ActiveSystemType>(solver_xp, active);
+bool Solver_get_collect(SEXP solver_xp) {
+  return odelia::solver::Solver_get_collect_impl<SystemType>(solver_xp);
 }
 
 // [[Rcpp::export]]
-void Solver_set_collect(SEXP solver_xp, bool x, bool active = false) {
-  odelia::solver::Solver_set_collect_impl<SystemType, ActiveSystemType>(solver_xp, x, active);
+void Solver_set_collect(SEXP solver_xp, bool x) {
+  odelia::solver::Solver_set_collect_impl<SystemType>(solver_xp, x);
 }
 
 // [[Rcpp::export]]
-std::size_t Solver_get_history_size(SEXP solver_xp, bool active = false) {
-  return odelia::solver::Solver_get_history_size_impl<SystemType, ActiveSystemType>(solver_xp, active);
-}
-
-// Helper to get column names (Lorenz-specific)
-CharacterVector get_column_names() {
-  return CharacterVector::create("time", "x", "y", "z", "dxdt", "dydt", "dzdt");
+std::size_t Solver_get_history_size(SEXP solver_xp) {
+  return odelia::solver::Solver_get_history_size_impl<SystemType>(solver_xp);
 }
 
 // [[Rcpp::export]]
-Rcpp::DataFrame Solver_get_history_step(SEXP solver_xp, std::size_t i, bool active = false) {
-  return odelia::solver::Solver_get_history_step_impl<SystemType, ActiveSystemType>(
-    solver_xp, i, get_column_names(), active
+Rcpp::DataFrame Solver_get_history_step(SEXP solver_xp, std::size_t i) {
+  return odelia::solver::Solver_get_history_step_impl<SystemType>(solver_xp, i);
+}
+
+// [[Rcpp::export]]
+Rcpp::List Solver_get_history(SEXP solver_xp) {
+  return odelia::solver::Solver_get_history_impl<SystemType>(
+    solver_xp
   );
 }
 
+// Least-squares loss against observed states and its gradient by reverse mode;
+// Solver_fit_impl says what is replayed and in what order the gradient comes.
 // [[Rcpp::export]]
-Rcpp::List Solver_get_history(SEXP solver_xp, bool active = false) {
-  return odelia::solver::Solver_get_history_impl<SystemType, ActiveSystemType>(
-    solver_xp, get_column_names(), active
-  );
-}
-
-// [[Rcpp::export]]
-void Solver_set_target(SEXP solver_xp, 
-                      Rcpp::NumericVector times,
-                      Rcpp::NumericMatrix target,
-                      Rcpp::IntegerVector obs_indices,
-                      bool active = false) {
-  odelia::solver::Solver_set_target_impl<SystemType, ActiveSystemType>(
-    solver_xp, times, target, obs_indices, active
-  );
-}
-
-// [[Rcpp::export]]
-Rcpp::List Solver_fit(SEXP solver_xp,
-                     Rcpp::Nullable<Rcpp::NumericVector> ic = R_NilValue,
-                     Rcpp::Nullable<Rcpp::NumericVector> params = R_NilValue) {
-  return odelia::solver::Solver_fit_impl<SystemType, ActiveSystemType>(
-    solver_xp, ic, params
-  );
+Rcpp::List Solver_fit(SEXP solver_xp, Rcpp::NumericVector times,
+                      Rcpp::NumericMatrix target, Rcpp::IntegerVector obs_indices,
+                      Rcpp::Nullable<Rcpp::NumericVector> ic = R_NilValue,
+                      Rcpp::Nullable<Rcpp::NumericVector> params = R_NilValue) {
+  return odelia::solver::Solver_fit_impl<SystemType>(solver_xp, times, target,
+                                                     obs_indices, ic, params);
 }
 
 //-------------------------------------------------------------------------

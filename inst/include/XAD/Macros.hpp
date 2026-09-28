@@ -39,7 +39,11 @@ void ignore_unused_variable(const T&)
 
 #define XAD_UNUSED_VARIABLE(x) ::xad::detail::ignore_unused_variable(x)
 
-#ifdef _WIN32
+// _MSC_VER, not _WIN32: MinGW's g++ (what R uses on Windows) has no
+// __forceinline, and with XAD_USE_STRONG_INLINE defined it reads "does not
+// name a type" on every AReal constructor. GCC and clang take the attribute
+// form on every platform.
+#if defined(_MSC_VER)
 #define XAD_FORCE_INLINE __forceinline
 #define XAD_NEVER_INLINE __declspec(noinline)
 #else

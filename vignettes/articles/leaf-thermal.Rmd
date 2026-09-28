@@ -64,8 +64,8 @@ public:
 };
 ```
 
-Templating on `T` is what makes the system **AD-ready** — see the
-[parameter-fitting vignette](../articles/parameter-fitting.html).
+Templating on `T` is what makes the system **AD-ready**: the same code runs at
+`double` and at an active scalar.
 
 ### Drivers
 
@@ -189,5 +189,3 @@ closer to — or below — air temperature at the hottest part of the day.
 - The full, copy-able sources are in
   `system.file("examples/leaf_thermal", package = "odelia")` — start there when
   building your own model.
-- To calibrate a model's parameters against data using exact gradients, see the
-  [parameter-fitting vignette](../articles/parameter-fitting.html).

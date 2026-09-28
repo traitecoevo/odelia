@@ -8,8 +8,8 @@
 //
 // It also catches the subtler version of the same bug: a header using a
 // standard-library facility (`assert`, `std::string`, ...) that it never
-// includes and only receives by accident from R's headers. That is exactly how
-// spline.hpp came to use `assert` without <cassert>.
+// includes and only receives by accident from R's headers. A retired spline
+// header came to use `assert` without <cassert>, which is how.
 //
 // The R interface headers -- solver_interface.hpp, rcpp_interface_helpers.hpp
 // -- are deliberately NOT listed here. They are meant to depend on Rcpp.
@@ -20,7 +20,6 @@
 // an R one.
 
 #include <odelia/ode_util.hpp>
-#include <odelia/spline.hpp>
 #include <odelia/interpolator.hpp>
 #include <odelia/drivers.hpp>
 #include <odelia/ode_control.hpp>
@@ -29,13 +28,16 @@
 #include <odelia/ode_step_rodas.hpp>
 #include <odelia/ode_solver_internal.hpp>
 #include <odelia/ode_solver.hpp>
-#include <odelia/ode_fit.hpp>
+#include <odelia/sweep.hpp>
+#include <odelia/implicit_node.hpp>
+#include <odelia/tangent.hpp>
 #include <examples/lorenz_system.hpp>
 
 #include <cmath>
 #include <cstdio>
 #include <stdexcept>
 #include <string>
+#include <span>
 #include <vector>
 
 namespace {
@@ -66,18 +68,42 @@ void test_stop_throws() {
 
 // The interpolator is the part of the core most downstream consumers touch.
 void test_interpolator() {
-  odelia::interpolator::Interpolator in;
-  in.init({0.0, 1.0, 2.0, 3.0}, {0.0, 1.0, 4.0, 9.0});
+  odelia::interpolator::hermite_interpolator<double> in;
+  // x^2 with its own slope at every knot, which a cubic reproduces exactly.
+  in.init({0.0, 1.0, 2.0, 3.0}, {0.0, 1.0, 4.0, 9.0}, {0.0, 2.0, 4.0, 6.0});
   check(std::abs(in.eval(2.0) - 4.0) < 1e-12, "interpolator hits its knots");
+  check(std::abs(in.eval(1.5) - 2.25) < 1e-12, "and the quadratic between them");
+  check(std::abs(in.slope(1.5) - 3.0) < 1e-12, "with the slope of the same curve");
 
   bool threw = false;
   try {
-    odelia::interpolator::Interpolator too_short;
-    too_short.init({0.0, 1.0}, {0.0, 1.0});
+    odelia::interpolator::hermite_interpolator<double> one_knot;
+    one_knot.init({0.0}, {0.0}, {0.0});
   } catch (const std::runtime_error &) {
     threw = true;
   }
-  check(threw, "interpolator rejects fewer than three points");
+  check(threw, "interpolator rejects a knot set with no span");
+}
+
+// A driver given as values alone: natural by default, monotone on request. An
+// intermittent non-negative series is the case the choice exists for -- a single
+// wet day between dry ones pulls a natural spline below zero beside it.
+void test_driver_slopes() {
+  const std::vector<double> x{0, 1, 2, 3, 4, 5, 6};
+  const std::vector<double> y{0, 0, 0, 8, 0, 0, 0};
+  odelia::drivers::Drivers d;
+  d.set_variable("natural", x, y);
+  d.set_variable("monotone", x, y, odelia::drivers::Slopes::monotone);
+  double lo_nat = 0.0, lo_mono = 0.0, hi_mono = 0.0;
+  for (double u = 0.0; u <= 6.0; u += 0.01) {
+    lo_nat = std::min(lo_nat, d.evaluate("natural", u));
+    lo_mono = std::min(lo_mono, d.evaluate("monotone", u));
+    hi_mono = std::max(hi_mono, d.evaluate("monotone", u));
+  }
+  check(lo_nat < 0.0, "a natural driver dips below an intermittent series");
+  check(lo_mono >= 0.0 && hi_mono <= 8.0,
+        "a monotone driver stays inside the values bracketing each span");
+  check(d.evaluate("monotone", 3.0) == 8.0, "and still hits its knots");
 }
 
 // Integrating a real system with no R session anywhere is the whole point.
@@ -300,9 +326,9 @@ struct Logistic {
 };
 
 // Same dynamics, but declaring the domain. Inherited rather than switched on a
-// template parameter so that the silent twin genuinely lacks the method and
-// has_state_check<> resolves to false for it -- an `if constexpr` inside one
-// struct would still leave the member there for the trait to find.
+// template parameter so that the silent copy genuinely lacks the method and
+// ChecksState resolves to false for it -- an `if constexpr` inside one
+// struct would still leave the member there for the concept to find.
 struct LogisticChecked : Logistic<OnLeave::nothing> {
   static int refusals;
   bool ode_state_valid(const std::vector<double>& state) const {
@@ -325,9 +351,10 @@ odelia::ode::OdeControl loose_control() {
 
 // A declared domain must be enforced on the committed state.
 void test_predicate_rejects_out_of_domain_step() {
-  check(odelia::ode::has_state_check<LogisticChecked>::value,
-        "has_state_check finds a declared ode_state_valid");
-  check(!odelia::ode::has_state_check<Logistic<OnLeave::nothing>>::value,
+  using domain = std::vector<double>;
+  check(odelia::ode::ChecksState<LogisticChecked, domain>,
+        "ChecksState finds a declared ode_state_valid");
+  check(!odelia::ode::ChecksState<Logistic<OnLeave::nothing>, domain>,
         "and does not invent one that is absent");
 
   Logistic<OnLeave::nothing> unguarded;
@@ -344,7 +371,7 @@ void test_predicate_rejects_out_of_domain_step() {
         "the predicate actually refused at least one step (test is not vacuous)");
   check(y >= 0.0 && y <= 1.0, "the committed state stays inside [0, 1]");
   check(s1.time() == 1.0, "and the solve still reaches the requested time");
-  std::printf("       (%d refusal(s); unguarded twin finished at y = %g)\n",
+  std::printf("       (%d refusal(s); unguarded copy finished at y = %g)\n",
               LogisticChecked::refusals, s0.state()[0]);
 }
 
@@ -451,6 +478,232 @@ void test_unreachable_domain_fails_with_a_reason() {
   if (threw) {
     std::printf("       (raised: %s)\n", msg.c_str());
   }
+}
+
+
+// A supplied row set is ONE statement, whatever the row count, and the rows it
+// carries are the ones it was handed. The count is the guard: written as a sum of
+// `out += d * (x - to_passive(x))` the same call is one recorded assignment per
+// row, which is how a submodel's whole arithmetic reaches a consumer's tape.
+void test_supplied_rows_cost_one_statement() {
+  using A = odelia::ode::active_scalar<double>;
+  using Tape = odelia::ode::adjoint_tape<double>;
+
+  for (int n : {1, 5, 31}) {
+    Tape tape;
+    std::vector<A> x(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) {
+      x[static_cast<std::size_t>(i)] = 1.0 + 0.25 * double(i);
+    }
+    // Never registered, so it holds no slot: its row must be dropped rather than
+    // pushed, and the sweep must survive it.
+    const A unregistered = 9.0;
+    tape.registerInputs(x.begin(), x.end());
+    tape.newRecording();
+
+    std::vector<odelia::input_and_derivative<A>> against;
+    for (int i = 0; i < n; ++i) {
+      against.push_back({x[static_cast<std::size_t>(i)], 1.0 / (double(i) + 2.0)});
+    }
+    against.push_back({unregistered, 4.0});
+    against.push_back({x[0], 0.0});
+
+    const std::size_t s0 = tape.getNumStatements();
+    A out;
+    const odelia::record_report report =
+        odelia::record_with_derivatives<A>(7.5, against, out);
+    const std::size_t statements = tape.getNumStatements() - s0;
+
+    tape.registerOutput(out);
+    xad::derivative(out) = 1.0;
+    tape.computeAdjoints();
+
+    double worst = std::fabs(xad::value(out) - 7.5);
+    for (int i = 0; i < n; ++i) {
+      worst = std::fmax(worst, std::fabs(xad::derivative(x[static_cast<std::size_t>(i)]) -
+                                         1.0 / (double(i) + 2.0)));
+    }
+    const std::string at = " (" + std::to_string(n) + " rows)";
+    check(report.whole, "every row is recorded" + at);
+    check(statements == 1, "one statement" + at);
+    check(worst < 1e-15, "the value and every row are the ones supplied" + at);
+  }
+}
+
+// The same call at a direction, which has no tape to hold a statement: the rows
+// are the arithmetic there, and dropping them would be silent.
+void test_supplied_rows_carry_a_direction() {
+  using T = odelia::ode::tangent_scalar<double>;
+  T x = 2.0;
+  odelia::ode::seed_direction(x, 1.0);
+  std::vector<odelia::input_and_derivative<T>> against{{x, 0.25}};
+  T out;
+  const odelia::record_report report =
+      odelia::record_with_derivatives<T>(7.5, against, out);
+  check(report.whole, "a direction records its rows");
+  check(std::fabs(odelia::util::to_passive(out) - 7.5) < 1e-15,
+        "the value is untouched at a direction");
+  check(std::fabs(odelia::ode::derivative_along(out) - 0.25) < 1e-15,
+        "and the direction carries the supplied row");
+}
+
+
+// A residual taken off the caller's tape gives the same rows as one left on it.
+//
+// F(p) = p^2 - x*y has the root p* = sqrt(x*y), so dp*/dx = y/(2p*) and
+// dp*/dy = x/(2p*) in closed form -- which is the referee here, rather than the
+// two routes agreeing with each other.
+void test_a_preaccumulated_residual_keeps_its_rows() {
+  using A = odelia::ode::active_scalar<double>;
+  using Tape = odelia::ode::adjoint_tape<double>;
+  const double x0 = 2.0, y0 = 8.0;
+  const double root = 4.0;          // sqrt(2*8)
+  const double dFdp = 2.0 * root;   // 8
+  const double want_dx = y0 / dFdp; // 1.0
+  const double want_dy = x0 / dFdp; // 0.25
+
+  double got_dx[2], got_dy[2];
+  std::size_t statements[2];
+
+
+  for (int arm = 0; arm < 2; ++arm) {
+    Tape tape;
+    A x = x0, y = y0;
+    tape.registerInput(x);
+    tape.registerInput(y);
+    tape.newRecording();
+    auto residual = [&](const A& p) -> A { return p * p - x * y; };
+    const std::size_t s0 = tape.getNumStatements();
+    A p_star = (arm == 0)
+                   ? odelia::implicit_value<A>(root, dFdp, residual)
+                   : odelia::implicit_value<A>(root, dFdp, residual, x, y);
+    statements[arm] = tape.getNumStatements() - s0;
+    tape.registerOutput(p_star);
+    xad::derivative(p_star) = 1.0;
+    tape.computeAdjoints();
+    got_dx[arm] = xad::derivative(x);
+    got_dy[arm] = xad::derivative(y);
+    check(std::fabs(xad::value(p_star) - root) < 1e-14,
+          arm == 0 ? "the value is the root (on the tape)"
+                   : "the value is the root (preaccumulated)");
+    if (arm == 1) {
+      check(odelia::ode::count_active_slots<A>(x, y) == 2,
+            "the walk had both inputs to reach");
+    }
+  }
+
+  check(std::fabs(got_dx[0] - want_dx) < 1e-12 &&
+            std::fabs(got_dy[0] - want_dy) < 1e-12,
+        "the recorded residual gives the theorem's rows");
+  check(std::fabs(got_dx[1] - want_dx) < 1e-12 &&
+            std::fabs(got_dy[1] - want_dy) < 1e-12,
+        "and so does the preaccumulated one");
+  check(statements[1] == 1, "which costs one statement");
+  check(statements[1] < statements[0],
+        "against the whole residual left on the tape");
+  std::printf("       (on the tape %zu statements, preaccumulated %zu)\n",
+              statements[0], statements[1]);
+}
+
+// The rows accumulate, so a second solve against the same inputs must not add to
+// the first. Every number stays finite when it does, which is what makes it worth
+// a check of its own.
+void test_two_preaccumulated_solves_do_not_add_up() {
+  using A = odelia::ode::active_scalar<double>;
+  using Tape = odelia::ode::adjoint_tape<double>;
+  Tape tape;
+  A x = 2.0, y = 8.0;
+  tape.registerInput(x);
+  tape.registerInput(y);
+  tape.newRecording();
+  auto residual = [&](const A& p) -> A { return p * p - x * y; };
+  const A first = odelia::implicit_value<A>(4.0, 8.0, residual, x, y);
+  const A second = odelia::implicit_value<A>(4.0, 8.0, residual, x, y);
+  A sum = first + second;
+  tape.registerOutput(sum);
+  xad::derivative(sum) = 1.0;
+  tape.computeAdjoints();
+  // Two identical solves, so each row is twice one solve's and no more.
+  check(std::fabs(xad::derivative(x) - 2.0 * 1.0) < 1e-12 &&
+            std::fabs(xad::derivative(y) - 2.0 * 0.25) < 1e-12,
+        "two solves carry two rows, not three");
+}
+
+
+// A region with more than one output, taken off the tape and replaced by rows.
+//
+// u = x^2*y and v = x + y^3, so du/dx = 2xy, du/dy = x^2, dv/dx = 1, dv/dy = 3y^2
+// in closed form -- which is the referee, rather than the two routes agreeing.
+// Downstream reads w = 5u + 7v, so the consumer's own sweep has to carry both
+// rows onward for the answer to come out.
+void test_a_preaccumulated_region_keeps_every_output_row() {
+  using A = odelia::ode::active_scalar<double>;
+  using Tape = odelia::ode::adjoint_tape<double>;
+  const double x0 = 2.0, y0 = 3.0;
+  const double want_dx = 5.0 * (2.0 * x0 * y0) + 7.0 * (1.0 - y0 + 1.0);
+  const double want_dy = 5.0 * (x0 * x0) + 7.0 * (3.0 * y0 * y0 - x0);
+
+  double got_dx[2], got_dy[2], got_w[2];
+  std::size_t statements[2];
+  std::vector<double> scratch;
+
+
+  for (int arm = 0; arm < 2; ++arm) {
+    Tape tape;
+    A x = x0, y = y0;
+    tape.registerInput(x);
+    tape.registerInput(y);
+    tape.newRecording();
+    A u, v;
+    static A* outs[2];
+    auto region = [&]() -> std::span<A* const> {
+      // Padded so the region is bigger than its output count, which is the only
+      // shape this trade is for: multiplying by one is exact, so the padding
+      // moves neither value nor row.
+      A pad = x;
+      for (int i = 0; i < 40; ++i) {
+        pad = pad * 1.0;
+      }
+      // Both outputs read the SAME deep intermediate, which is what makes a
+      // sweep that inherits the previous output's adjoints visible here.
+      A shared = pad * y;
+      for (int i = 0; i < 10; ++i) {
+        shared = shared * 1.0;
+      }
+      u = shared * x;
+      v = shared / y + y * y * y - x * y + x;
+      outs[0] = &u;
+      outs[1] = &v;
+      return std::span<A* const>(outs, 2);
+    };
+    const std::size_t s0 = tape.getNumStatements();
+    if (arm == 0) {
+      region();
+    } else {
+      odelia::preaccumulate<A>(region, scratch, x, y);
+    }
+    statements[arm] = tape.getNumStatements() - s0;
+    A w = 5.0 * u + 7.0 * v;
+    tape.registerOutput(w);
+    xad::derivative(w) = 1.0;
+    tape.computeAdjoints();
+    got_w[arm] = xad::value(w);
+    got_dx[arm] = xad::derivative(x);
+    got_dy[arm] = xad::derivative(y);
+  }
+
+  check(std::fabs(got_w[0] - got_w[1]) < 1e-12, "the region's values are unmoved");
+  check(std::fabs(got_dx[0] - want_dx) < 1e-12 &&
+            std::fabs(got_dy[0] - want_dy) < 1e-12,
+        "the recorded region gives the closed form's rows");
+  check(std::fabs(got_dx[1] - want_dx) < 1e-12 &&
+            std::fabs(got_dy[1] - want_dy) < 1e-12,
+        "and so does the preaccumulated one");
+  check(statements[1] == 2, "which costs one statement per output");
+  check(statements[1] * 10 < statements[0],
+        "against a region an order larger left on the tape");
+  std::printf("       (on the tape %zu statements, preaccumulated %zu)\n",
+              statements[0], statements[1]);
 }
 
 // --- The same bargain on the pinned path (plant#642) ------------------------
@@ -624,6 +877,7 @@ int main() {
   std::printf("odelia solver core, standalone (no R, no Rcpp)\n");
   test_stop_throws();
   test_interpolator();
+  test_driver_slopes();
   test_solver_runs();
   test_control_rejects_nonfinite_error();
   test_solver_refuses_nonfinite_state();
@@ -631,6 +885,12 @@ int main() {
   test_domain_error_becomes_a_rejection();
   test_non_domain_throw_is_not_absorbed();
   test_unreachable_domain_fails_with_a_reason();
+  test_supplied_rows_cost_one_statement();
+  test_supplied_rows_carry_a_direction();
+  test_a_preaccumulated_residual_keeps_its_rows();
+  test_two_preaccumulated_solves_do_not_add_up();
+  test_a_preaccumulated_region_keeps_every_output_row();
+
   test_pinned_step_domain_error_is_a_rejection();
   test_pinned_step_predicate_is_enforced();
   test_pinned_step_non_domain_throw_is_not_absorbed();

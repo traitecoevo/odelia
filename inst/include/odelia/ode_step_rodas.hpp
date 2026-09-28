@@ -8,7 +8,7 @@
 //
 // A Rosenbrock (linearly-implicit) method: each stage is one RHS evaluation plus
 // one linear solve against a single matrix W = (1/(h*gamma)) I - J, factorized
-// once per step. No Newton iteration, so no convergence machinery -- the only
+// once per step. No Newton iteration, so no convergence loop to control -- the only
 // adaptivity is the existing accuracy-based step-size controller in OdeControl,
 // which consumes the embedded error estimate exactly as it does for the explicit
 // RKCK stepper.
@@ -18,7 +18,7 @@
 // through the same adaptive loop.
 //
 // The Jacobian J = df/dy is computed exactly by forward-mode AD (ode_jacobian.hpp),
-// which requires the System to expose `template<class U> System<U> rebind()`. The
+// which requires the System to expose `template<class U> Self<U> rebind_from()`. The
 // time derivative df/dt (only needed for non-autonomous systems) is a finite
 // difference, because the System stores time as a plain double.
 

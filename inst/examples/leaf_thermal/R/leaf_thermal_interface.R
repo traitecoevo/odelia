@@ -53,7 +53,26 @@ LeafThermalSolver <- R6::R6Class(
     },
     history = function() {
       LeafSolver_get_history(self$ptr)|> dplyr::bind_rows() |> dplyr::as_tibble() |> tibble::remove_rownames()
+    },
+    # The calibration target $fit() is scored against: the schedule it replays
+    # (normally a reference run's $times()), the observed states, and the rows
+    # of `times` they were observed at.
+    set_target = function(times, target, obs_indices) {
+      private$target <- list(times = as.numeric(times),
+                             target = as.matrix(target),
+                             obs_indices = as.integer(obs_indices))
+      invisible(self)
+    },
+    # Least-squares loss and its exact gradient: d(loss)/d(params), then
+    # d(loss)/d(ic), for whichever were given.
+    fit = function(ic = NULL, params = NULL) {
+      if (is.null(private$target)) stop("Must call set_target() before fit()")
+      t <- private$target
+      LeafSolver_fit(self$ptr, t$times, t$target, t$obs_indices, ic, params)
     }
+ ),
+ private = list(
+   target = NULL
  )
 )
 
@@ -70,6 +89,11 @@ LeafThermalSystem <- R6::R6Class(
     },
     initialize_drivers = function(drivers) {
       LeafThermalSystem_initialize_drivers(self$ptr, drivers$ptr)
+      invisible(self)
+    },
+    # The reset point: the state reset() returns to, and the start a fit replays from.
+    set_initial_state = function(y, t0 = 0.0) {
+      LeafThermalSystem_set_initial_state(self$ptr, y, t0)
       invisible(self)
     },
     set_state = function(y, time) {

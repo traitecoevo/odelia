@@ -1,170 +1,90 @@
-testthat::test_that("leaf thermal AD setup compiles", {
-  ensure_leaf_thermal_interfaces(rebuild = FALSE)
-})
+# $fit() on the leaf thermal example: a System read through time-varying drivers,
+# so the reverse sweep has to stand each recorded row at its own time for the
+# forcing to be right. The gradient is refereed against a central difference of
+# the loss, which shares no code with the sweep.
 
-testthat::test_that("leaf thermal set_initial_state and reset work", {
-  ensure_leaf_thermal_interfaces(rebuild = FALSE)
-
-  drv <- Drivers$new()
-  drv$set_constant("temperature", 25.0)
-
-  pars <- LeafThermalSystemPars()
-  sys <- LeafThermalSystem$new(pars, drv)
-
-  LeafThermalSystem_set_initial_state(sys$ptr, 22.0, 0.0)
-  LeafThermalSystem_reset(sys$ptr)
-
-  state <- LeafThermalSystem_state(sys$ptr)
-  expect_equal(state, 22.0)
-})
-
-testthat::test_that("leaf thermal AD solver can be created", {
+leaf_fit_setup <- function() {
   ensure_leaf_thermal_interfaces(rebuild = FALSE)
 
-  drv <- Drivers$new()
-  drv$set_constant("temperature", 25.0)
-
-  pars <- LeafThermalSystemPars()
-  sys <- LeafThermalSystem$new(pars, drv)
-  LeafThermalSystem_set_initial_state(sys$ptr, 20.0, 0.0)
-
-  ctrl <- OdeControl$new()
-  solver_ad <- LeafSolver_new(sys$ptr, ctrl$ptr, drv$ptr, active = TRUE)
-
-  expect_false(is.null(solver_ad))
-})
-
-testthat::test_that("leaf thermal AD set_target works", {
-  ensure_leaf_thermal_interfaces(rebuild = FALSE)
-
-  drv <- Drivers$new()
-  drv$set_constant("temperature", 25.0)
-
-  pars <- LeafThermalSystemPars()
-  sys <- LeafThermalSystem$new(pars, drv)
-  LeafThermalSystem_set_initial_state(sys$ptr, 20.0, 0.0)
-
-  ctrl <- OdeControl$new()
-  solver_ad <- LeafSolver_new(sys$ptr, ctrl$ptr, drv$ptr, active = TRUE)
-
-  times <- c(0.0, 1.0, 2.0)
-  target <- matrix(c(20.0, 21.0, 22.0), nrow = 3, ncol = 1)
-  obs_indices <- seq_along(times)
-
-  expect_silent(
-    LeafSolver_set_target(solver_ad, times, target, obs_indices, active = TRUE)
-  )
-})
-
-testthat::test_that("leaf thermal AD fit computes finite outputs", {
-  ensure_leaf_thermal_interfaces(rebuild = FALSE)
-
-  drv <- Drivers$new()
-  drv$set_constant("temperature", 25.0)
-
-  pars <- list(k_H = 0.5, g_tr_max = 1.0, m_tr = 0.5, T_tr_mid = 30.0)
-  sys <- LeafThermalSystem$new(pars, drv)
-  LeafThermalSystem_set_initial_state(sys$ptr, 20.0, 0.0)
-
-  ctrl <- OdeControl$new()
-  solver_ad <- LeafSolver_new(sys$ptr, ctrl$ptr, drv$ptr, active = TRUE)
-
-  times <- c(0.0, 1.0, 2.0, 3.0)
-  target <- matrix(c(20.0, 21.0, 22.0, 23.0), nrow = 4, ncol = 1)
-  obs_indices <- seq_along(times)
-
-  LeafSolver_set_target(solver_ad, times, target, obs_indices, active = TRUE)
-
-  result_ic <- LeafSolver_fit(solver_ad, ic = 20.0, params = NULL)
-  expect_true("loss" %in% names(result_ic))
-  expect_true("gradient" %in% names(result_ic))
-  expect_true(is.numeric(result_ic$loss))
-  expect_equal(length(result_ic$gradient), 1)
-
-  params_vec <- c(0.5, 1.0, 0.5, 30.0)
-  result_params <- LeafSolver_fit(solver_ad, ic = NULL, params = params_vec)
-  expect_true(is.numeric(result_params$loss))
-  expect_equal(length(result_params$gradient), 4)
-
-  expect_true(is.finite(result_ic$loss))
-  expect_true(all(is.finite(result_ic$gradient)))
-  expect_true(is.finite(result_params$loss))
-  expect_true(all(is.finite(result_params$gradient)))
-})
-
-testthat::test_that("leaf thermal AD parameter gradients are NON-ZERO", {
-  ensure_leaf_thermal_interfaces(rebuild = FALSE)
-
-  drv_true <- Drivers$new()
-  drv_true$set_constant("temperature", 30.0)
+  # Air temperature varying through the day, so the drivers matter at every step.
+  time_driver <- seq(0, 24, by = 0.25)
+  t_air <- 30 + 6 * sin(2 * pi * (time_driver - 15) / 24)
+  drivers <- Drivers$new()
+  drivers$set_variable("temperature", time_driver, t_air)
 
   pars_true <- list(k_H = 0.8, g_tr_max = 2.0, m_tr = 0.6, T_tr_mid = 28.0)
-  sys_true <- LeafThermalSystem$new(pars_true, drv_true)
-  LeafThermalSystem_set_initial_state(sys_true$ptr, 20.0, 0.0)
+  sys_true <- LeafThermalSystem$new(pars_true, drivers)
+  sys_true$set_initial_state(20.0, 0.0)
+  ctrl <- OdeControl$new()
+  runner <- LeafThermalSolver$new(sys_true$ptr, ctrl$ptr, drivers$ptr)
+  # set_initial_state moves the reset point, not the current state, so reset
+  # before the reference run: $fit() replays from the reset point.
+  runner$reset()
+  runner$advance_adaptive(seq(0, 12, by = 0.5))
+  times <- runner$times()
+  hist <- runner$history()
 
-  ctrl_true <- OdeControl$new()
-  solver_true <- LeafSolver_new(sys_true$ptr, ctrl_true$ptr, drv_true$ptr, active = FALSE)
-  LeafSolver_advance_adaptive(solver_true, seq(0, 20, by = 1), active = FALSE)
-  hist_true <- LeafSolver_get_history(solver_true, active = FALSE)
+  pars_guess <- list(k_H = 0.5, g_tr_max = 1.0, m_tr = 0.5, T_tr_mid = 30.0)
+  sys_fit <- LeafThermalSystem$new(pars_guess, drivers)
+  sys_fit$set_initial_state(20.0, 0.0)
+  fitter <- LeafThermalSolver$new(sys_fit$ptr, ctrl$ptr, drivers$ptr)
+  fitter$set_target(times, matrix(hist$T_LC, ncol = 1), match(hist$time, times))
 
-  target_times <- hist_true[[1]]
-  target_vals <- matrix(hist_true[[2]], ncol = 1)
+  list(fitter = fitter, truth = unlist(pars_true), guess = unlist(pars_guess))
+}
 
-  drv_fit <- Drivers$new()
-  drv_fit$set_constant("temperature", 30.0)
+central_difference <- function(f, x, rel = 1e-6) {
+  vapply(seq_along(x), function(i) {
+    h <- rel * max(1, abs(x[[i]]))
+    up <- x; dn <- x
+    up[[i]] <- up[[i]] + h
+    dn[[i]] <- dn[[i]] - h
+    (f(up) - f(dn)) / (2 * h)
+  }, numeric(1))
+}
 
-  pars_wrong <- list(k_H = 0.5, g_tr_max = 1.0, m_tr = 0.5, T_tr_mid = 30.0)
-  sys_fit <- LeafThermalSystem$new(pars_wrong, drv_fit)
-  LeafThermalSystem_set_initial_state(sys_fit$ptr, 20.0, 0.0)
-
-  ctrl_fit <- OdeControl$new()
-  solver_fit_ad <- LeafSolver_new(sys_fit$ptr, ctrl_fit$ptr, drv_fit$ptr, active = TRUE)
-  LeafSolver_set_target(solver_fit_ad, target_times, target_vals, seq_along(target_times), active = TRUE)
-
-  params_vec <- c(0.5, 1.0, 0.5, 30.0)
-  result <- LeafSolver_fit(solver_fit_ad, ic = NULL, params = params_vec)
-
-  expect_true(is.finite(result$loss))
-  expect_true(all(is.finite(result$gradient)))
-  expect_equal(length(result$gradient), 4)
-
-  expect_true(any(result$gradient != 0),
-    info = "Parameter gradients are all zero - AD tape not capturing parameter dependencies!"
-  )
+testthat::test_that("leaf thermal fit is zero at the parameters that made the target", {
+  s <- leaf_fit_setup()
+  res <- s$fitter$fit(params = unname(s$truth))
+  expect_lt(res$loss, 1e-20)
+  expect_equal(res$gradient, rep(0, 4), tolerance = 1e-8)
 })
 
-testthat::test_that("leaf thermal AD IC gradients are NON-ZERO", {
-  ensure_leaf_thermal_interfaces(rebuild = FALSE)
+testthat::test_that("leaf thermal parameter gradient matches a central difference", {
+  s <- leaf_fit_setup()
+  p <- unname(s$guess)
+  res <- s$fitter$fit(params = p)
+  expect_length(res$gradient, 4)
+  fd <- central_difference(function(q) s$fitter$fit(params = q)$loss, p)
+  expect_equal(res$gradient, fd, tolerance = 1e-6)
+  expect_true(all(abs(res$gradient) > 0))
+})
 
-  drv <- Drivers$new()
-  drv$set_constant("temperature", 30.0)
+testthat::test_that("leaf thermal initial-state gradient matches a central difference", {
+  s <- leaf_fit_setup()
+  p <- unname(s$guess)
+  res <- s$fitter$fit(ic = 25.0, params = p)
+  expect_length(res$gradient, 5)
+  fd <- central_difference(function(y) s$fitter$fit(ic = y, params = p)$loss, 25.0)
+  expect_equal(res$gradient[5], fd, tolerance = 1e-6)
+  # The parameter half does not depend on whether the initial state was asked for.
+  expect_equal(res$gradient[1:4],
+               s$fitter$fit(ic = 25.0, params = p)$gradient[1:4])
+})
 
-  pars <- list(k_H = 0.8, g_tr_max = 2.0, m_tr = 0.6, T_tr_mid = 28.0)
-  sys_true <- LeafThermalSystem$new(pars, drv)
-  LeafThermalSystem_set_initial_state(sys_true$ptr, 20.0, 0.0)
+testthat::test_that("fit refuses a call it cannot answer", {
+  s <- leaf_fit_setup()
+  expect_error(s$fitter$fit(), "at least one of 'ic' or 'params'")
+  expect_error(s$fitter$fit(params = c(1, 2)), "one entry per parameter")
+})
 
-  ctrl <- OdeControl$new()
-  solver_true <- LeafSolver_new(sys_true$ptr, ctrl$ptr, drv$ptr, active = FALSE)
-  LeafSolver_advance_adaptive(solver_true, seq(0, 10, by = 0.5), active = FALSE)
-  hist_true <- LeafSolver_get_history(solver_true, active = FALSE)
-
-  target_times <- hist_true[[1]]
-  target_vals <- matrix(hist_true[[2]], ncol = 1)
-
-  sys_fit <- LeafThermalSystem$new(pars, drv)
-  LeafThermalSystem_set_initial_state(sys_fit$ptr, 20.0, 0.0)
-
-  solver_fit_ad <- LeafSolver_new(sys_fit$ptr, ctrl$ptr, drv$ptr, active = TRUE)
-  LeafSolver_set_target(solver_fit_ad, target_times, target_vals, seq_along(target_times), active = TRUE)
-
-  wrong_ic <- 25.0
-  result <- LeafSolver_fit(solver_fit_ad, ic = wrong_ic, params = NULL)
-
-  expect_true(is.finite(result$loss))
-  expect_true(is.finite(result$gradient))
-  expect_equal(length(result$gradient), 1)
-
-  expect_true(result$gradient != 0,
-    info = "IC gradient is zero - AD tape not capturing IC dependencies!"
-  )
+testthat::test_that("a fit does not read the freed R system it was built from", {
+  # leaf_fit_setup() drops its R-side systems on return, so the solver's own copy
+  # must not point into them; if it does, a collection frees what it reads.
+  s <- leaf_fit_setup()
+  p <- unname(s$guess)
+  before <- s$fitter$fit(ic = 25.0, params = p)
+  invisible(gc(full = TRUE))
+  invisible(gc(full = TRUE))
+  expect_identical(s$fitter$fit(ic = 25.0, params = p), before)
 })

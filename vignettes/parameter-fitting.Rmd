@@ -52,22 +52,24 @@ obs_index <- which(times %in% hist$time)
 target_vals <- as.matrix(hist[, c("x", "y", "z")])
 ```
 
-## Set up an AD-enabled solver
+## Register the calibration target
 
 We move the system parameters away from the truth (this is our starting guess),
-then build a solver with `active = TRUE` to enable AD, and register the
-calibration target.
+build a solver, and register the calibration target. The reference run's
+`times` are the schedule every fit replays, so each evaluation takes the same
+steps and the loss is a smooth function of the parameters.
 
 ```{r ad-setup}
 initial_guess <- c(sigma = 12.0, R = 30.0, b = 3.0)
 lz$set_params(initial_guess)
 
-ad_runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr, active = TRUE)
+ad_runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
 ad_runner$set_target(times, target_vals, obs_index)
 ```
 
 The `$fit()` method solves the system for a given parameter vector and returns
-both the loss and its exact gradient:
+both the loss and its exact gradient, computed by one reverse-mode sweep over
+the recorded run:
 
 ```{r fit-once}
 res0 <- ad_runner$fit(params = initial_guess)

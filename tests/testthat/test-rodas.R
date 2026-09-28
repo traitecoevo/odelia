@@ -8,8 +8,7 @@ ensure_vdp_runner <- function() {
   }
   ensure_ode_interface_loaded()
 
-  include_dir <- dirname(dirname(resolve_test_path(
-    "include/odelia/ode_solver.hpp", "inst/include/odelia/ode_solver.hpp")))
+  include_dir <- odelia_include_dir()
   runner_cpp <- resolve_test_path(
     "tests/testthat/vanderpol_runner.cpp",
     "tests/testthat/vanderpol_runner.cpp")
@@ -23,7 +22,7 @@ ensure_vdp_runner <- function() {
     Sys.getenv("PKG_LIBS", unset = "")
   }
   withr::local_envvar(
-    PKG_CPPFLAGS = paste0("-I", include_dir),
+    PKG_CPPFLAGS = odelia_cppflags(include_dir),
     PKG_LIBS = pkg_libs
   )
 
@@ -60,8 +59,7 @@ testthat::test_that("RODAS and RKCK agree on the (non-stiff) Lorenz system", {
   run <- function(method) {
     lz <- odelia:::LorenzSystem$new(pars[["sigma"]], pars[["R"]], pars[["b"]])
     lz$set_state(c(1, 1, 1), 0.0)
-    runner <- odelia:::Lorenz_Solver$new(lz$ptr, ctrl$ptr, active = FALSE,
-                                         method = method)
+    runner <- odelia:::Lorenz_Solver$new(lz$ptr, ctrl$ptr, method = method)
     runner$advance_adaptive(times)
     runner$history()
   }
@@ -89,8 +87,7 @@ testthat::test_that("RODAS on Lorenz matches deSolve", {
   ctrl$set_tol_abs(1e-10)
   lz <- odelia:::LorenzSystem$new(pars[["sigma"]], pars[["R"]], pars[["b"]])
   lz$set_state(c(1, 1, 1), 0.0)
-  runner <- odelia:::Lorenz_Solver$new(lz$ptr, ctrl$ptr, active = FALSE,
-                                       method = "rodas")
+  runner <- odelia:::Lorenz_Solver$new(lz$ptr, ctrl$ptr, method = "rodas")
   runner$advance_adaptive(times)
   out <- runner$history()
 
@@ -141,13 +138,7 @@ testthat::test_that("RODAS takes far fewer steps than RKCK on a stiff problem", 
   expect_lt(rodas$n_steps, rkck$n_steps / 5)
 })
 
-testthat::test_that("RODAS is rejected for AD/active solvers (for now)", {
-  ensure_ode_interface_loaded()
-  ctrl <- odelia:::OdeControl$new()
-  lz <- odelia:::LorenzSystem$new(10, 28, 8 / 3)
-  lz$set_initial_state(c(1, 1, 1), 0)
-  runner <- odelia:::Lorenz_Solver$new(lz$ptr, ctrl$ptr, active = TRUE,
-                                       method = "rodas")
-  expect_error(runner$advance_fixed(seq(0, 1, by = 0.1)),
-               regexp = "rodas")
-})
+# Note: the "RODAS rejected for active/AD scalars" invariant is now enforced
+# internally (ode_solver_internal.hpp: the rodas branch needs a rebind_from()
+# hook and a non-active scalar). It is no longer reachable from R, which holds
+# only the double solver -- the active replay is built internally for gradients.

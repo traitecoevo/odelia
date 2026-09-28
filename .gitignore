@@ -21,3 +21,10 @@ Meta
 # standalone C++ core check (tests/standalone)
 tests/standalone/*.o
 tests/standalone/r_free
+tests/standalone/probe_*
+!tests/standalone/probe_*.cpp
+
+# Agent worktrees. A worktree checked out here records as a gitlink with no
+# .gitmodules entry, which clones as an empty directory nothing can populate.
+.claude/worktrees/
+tests/standalone/r_free

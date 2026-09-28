@@ -4,6 +4,7 @@
 #include <odelia/ode_solver.hpp>
 #include <odelia/drivers.hpp>
 #include <XAD/XAD.hpp>
+#include <memory>
 #include <vector>
 #include <cmath>
 #include <algorithm>
@@ -39,9 +40,24 @@ public:
     reset();
   }
 
+  // rebind + rebind_from copy this System's configuration onto another scalar, so
+  // the gradient driver can build its active (AD) version generically (see
+  // LorenzSystem for the pattern). Only values cross; the driver seeds the active
+  // inputs afterwards.
+
+  template <class S2>
+  LeafThermalSystem<S2> rebind_from() const {
+    const LeafThermalPars p{xad::value(k_H), xad::value(g_tr_max),
+                            xad::value(m_tr), xad::value(T_tr_mid)};
+    LeafThermalSystem<S2> out(p, *drivers);
+    const double ic = xad::value(T_LC_init);
+    out.set_initial_state(&ic, t0);
+    return out;
+  }
+
   void initialize_drivers(const drivers::Drivers &drv) {
-    drivers = drv;
-    temperature_fn = drivers.get_function_ptr("temperature");
+    drivers = std::make_shared<const drivers::Drivers>(drv);
+    temperature_fn = drivers->get_function_ptr("temperature");
     if (!temperature_fn)
       throw std::runtime_error("Missing driver 'temperature' for LeafThermalSystem");
   }
@@ -60,21 +76,18 @@ public:
     return it;
   }
 
+  // Stand on a state a run recorded, for a reverse sweep: the drivers are read
+  // at the recorded time. The width never changes, so this is set_ode_state.
+  void set_recorded_state(const std::vector<T>& y, double time_) {
+    set_ode_state(y.begin(), time_);
+  }
+
   // Set the initial state (reset point) - no tape registration
   template <typename Iterator>
   Iterator set_initial_state(Iterator it, double t0_ = 0.0) {
     t0 = t0_;
     T_LC_init = *it++;
     return it;
-  }
-
-  // Set the initial state and register on tape for AD gradient computation
-  template <typename Tape, typename Iterator>
-  std::vector<T*> set_initial_state(Tape& tape, Iterator it, double t0_) {
-    t0 = t0_;
-    T_LC_init = *it++;
-    tape.registerInput(T_LC_init);
-    return {&T_LC_init};
   }
 
   // Set parameters - no tape registration
@@ -87,18 +100,22 @@ public:
     return it;
   }
 
-  // Set parameters and register on tape for AD gradient computation
-  template <typename Tape, typename Iterator>
-  std::vector<T*> set_params(Tape& tape, Iterator it) {
-    k_H = *it++;
-    g_tr_max = *it++;
-    m_tr = *it++;
-    T_tr_mid = *it++;
-    tape.registerInput(k_H);
-    tape.registerInput(g_tr_max);
-    tape.registerInput(m_tr);
-    tape.registerInput(T_tr_mid);
-    return {&k_H, &g_tr_max, &m_tr, &T_tr_mid};
+  // The parameters a pass can seed active, in the order it indexes them.
+  std::vector<T*> ad_parameters() { return {&k_H, &g_tr_max, &m_tr, &T_tr_mid}; }
+
+  // Every member carrying the scalar, for a reverse sweep. ⚠️ A member left out
+  // here silently contributes nothing to the gradient; T_air is a driver value
+  // and stays double. Both overloads, because visit_active passes over a const
+  // object whose walk is non-const without saying so.
+  template <class F>
+  void for_each_active(F&& f) {
+    f(k_H); f(g_tr_max); f(m_tr); f(T_tr_mid);
+    f(T_LC_init); f(T_LC); f(dT_LC); f(S_tr);
+  }
+  template <class F>
+  void for_each_active(F&& f) const {
+    f(k_H); f(g_tr_max); f(m_tr); f(T_tr_mid);
+    f(T_LC_init); f(T_LC); f(dT_LC); f(S_tr);
   }
 
 void set_drivers() {
@@ -186,8 +203,15 @@ private:
 
   // Time and drivers (always double)
   double time;
-  drivers::Drivers drivers;
-  const drivers::Function *temperature_fn;
+  // ⚠️ SHARED, not copied, because temperature_fn points into it. A System copied
+  // with its own Drivers kept a pointer into the source's, which die with the
+  // source -- and R frees the system a solver was built from as soon as nothing
+  // holds it, after which every read was of freed memory. Shared, every copy's
+  // pointer is into one Drivers that lives as long as any copy does. Re-deriving
+  // the pointer after each copy instead measured 2x slower: the solver copies the
+  // System often.
+  std::shared_ptr<const drivers::Drivers> drivers;
+  const drivers::Function *temperature_fn = nullptr;
 
   // Auxiliary
   double T_air;

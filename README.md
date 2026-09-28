@@ -93,11 +93,11 @@ observations) with respect to the system parameters, and hand them to a
 gradient-based optimiser such as `optim()`:
 
 ```r
-# An AD-enabled runner exposes a $fit() method returning loss and gradient
-ad_runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr, active = TRUE)
-ad_runner$set_target(times, target_vals, obs_index)
+# Any runner exposes a $fit() method returning loss and gradient
+fit_runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
+fit_runner$set_target(times, target_vals, obs_index)
 
-res <- ad_runner$fit(params = c(sigma = 12, R = 30, b = 3))
+res <- fit_runner$fit(params = c(sigma = 12, R = 30, b = 3))
 res$loss      # scalar mismatch with the target trajectory
 res$gradient  # exact gradient w.r.t. each parameter
 ```

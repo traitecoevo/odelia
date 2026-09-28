@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <limits>
+#include <type_traits>
 #include <odelia/spline.hpp>
 #include <odelia/ode_util.hpp>
 
@@ -85,8 +86,17 @@ public:
   // eval() without its checks: no domain refusal and no initialisation check, so
   // reading an empty interpolator is undefined. For hot loops whose caller has
   // already bounded u, as plant's light field does per quadrature point.
-  S operator()(double u) const {
-    return base::eval_unchecked(u);
+  //
+  // ⚠️ ANY SCALAR, NOT double ONLY. plant reads its light field at an ACTIVE
+  // height, and the query's own derivative has to reach the value; the backend's
+  // eval carries it. A plain number takes the unchecked read.
+  template <typename U>
+  S operator()(const U& u) const {
+    if constexpr (std::is_arithmetic_v<U>) {
+      return base::eval_unchecked(static_cast<double>(u));
+    } else {
+      return base::eval(u);
+    }
   }
 
   // Analytic first derivative dy/du at u (exact derivative of the interpolating

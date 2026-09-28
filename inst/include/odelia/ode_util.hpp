@@ -32,16 +32,16 @@ inline bool is_finite(double x) {
 // nested FReal<AReal<double>>, where it yields AReal<double>; this recurses until
 // it bottoms out at double. `value` is found by argument-dependent lookup at the
 // point of use, so this header needs no XAD include.
+// The value of an active scalar with every derivative layer removed.
 //
-// "Passive" is the AD word for a value that carries no derivative: what is
-// left of an active scalar once every layer is stripped. The interpolant uses
-// it to place a query in its span and to compare fits during refinement, both
-// of which must happen in double whatever scalar the values carry.
-//
-// ⚠️ EVERY LAYER, NOT ONE. At a nested scalar (a tangent above a tangent) this
-// strips the inner direction as well as the outer, silently, because the
-// result is a plain double either way. A caller that needs one layer removed
-// strips it by hand.
+// ⚠️ EVERY LAYER, NOT ONE. At a nested scalar -- a tangent above a tangent, which
+// is how a curvature is taken, since tangent.hpp refuses a tangent above an
+// adjoint -- this strips the inner direction as well as the outer, and it does so
+// silently because the result is a plain double either way.
+// The correction `x - to_passive(x)` that `implicit_node.hpp` records is therefore
+// zero in value at one layer and zero in EVERY derivative at two. Measured on a
+// mixed second derivative: exactly 0.0 against a differenced 2.97e-03. A second
+// derivative that needs this has to strip one layer by hand.
 inline double to_passive(double x) { return x; }
 template <typename T>
 inline double to_passive(const T& x) { return to_passive(value(x)); }
@@ -77,6 +77,31 @@ struct DomainError : std::runtime_error {
   throw DomainError(msg);
 }
 
+// An adjoint that left the range a double can hold: neither a bug nor a state the
+// model has no meaning for, and so neither of the two above.
+//
+// ⚠️ A SWEEP IS A PRODUCT OF STEP JACOBIANS AND HAS NO ERROR CONTROL. It can pass
+// far outside the range of the answer it returns and come back: measured on a
+// stand whose gradient is order 1e+03, the descent reaches 4.99978e+281 and is
+// back to 3.69e+46 one range later. So a driver that answers does so with margin
+// rather than by staying small, and one that does not overflows on an
+// INTERMEDIATE while every number it computes is right.
+//
+// Its own type because the consumer's answer is a REFUSAL of every metric --
+// what overflowed is an intermediate of one recording spanning every cohort, so
+// nothing finer has a component to attribute it to. A consumer catching
+// runtime_error broadly would read a genuine length mismatch in the sweep the
+// same way, which is the distinction DomainError above exists to keep.
+struct AdjointRangeError : std::runtime_error {
+  explicit AdjointRangeError(const std::string &msg) : std::runtime_error(msg) {}
+};
+
+// As stop(), for a sweep that left the representable range. Prefer a message
+// naming the step, the entry and the magnitude the step above carried: the last
+// of those is what says whether the descent compounded into it or met it.
+[[noreturn]] inline void stop_adjoint_range(const std::string &msg) {
+  throw AdjointRangeError(msg);
+}
 
 // Not an R warning: nothing in the solver core may assume an R session exists.
 // Callers that need one should raise it from their own R-facing code. Uses

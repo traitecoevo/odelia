@@ -28,7 +28,7 @@ namespace odelia {
 // No includes of its own, so a header on any path can take it without taking
 // anything else with it.
 template <typename T>
-struct with_slope {
+struct value_with_slope {
   T value;
   T slope;
 
