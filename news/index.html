@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.4.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,13 @@
       <small>Source: <a href="https://github.com/traitecoevo/odelia/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.5.0" id="odelia-050">odelia 0.5.0<a class="anchor" aria-label="anchor" href="#odelia-050"></a></h2>
+<p><strong>The spline’s backend becomes a cubic Hermite that can take a slope at each knot; the front end does not change, and neither do its numbers.</strong> A model that integrates over crowns knows the derivative at each knot as well as the value, and the global natural spline had no way to accept it. <code>spline.hpp</code> now holds <code>hermite_spline&lt;S&gt;</code>, a local cubic Hermite built from a value and a slope per knot. <code>interpolator.hpp</code> keeps every call the family makes — <code>init(x, y)</code>, <code>eval</code> with its out-of-domain refusal, <code>deriv</code>, <code>min</code>/<code>max</code>, <code>set_extrapolate</code>, <code>r_eval</code> — on <code>hermite_interpolator&lt;S&gt;</code> (was <code>basic_interpolator&lt;S&gt;</code>), which derives from the backend so a caller that has slopes reaches <code>init(x, y, m)</code>, <code>value_and_slope</code>, <code>set_nodes</code>/<code>set_data</code> and <code>refine</code>.</p>
+<p>A caller with values alone gets the natural cubic spline’s own knot slopes (<code>natural_slopes</code>), and a Hermite read through those slopes is the natural spline on every span, so <code>init(x, y)</code> reads the curve it read before: <code>test-drivers.R</code> and <code>test-spline.R</code> are unchanged, and phylloptim 0.8.1 compiled against this release makes the same number of solver evaluations at the same speed (82.3 per solve, 3.0–3.1 µs, interleaved against 0.4.0), with outputs equal to rounding (worst 2e-10 absolute on its golden grid, from evaluating the same cubic in a different order). With supplied slopes the Hermite reproduces a cubic exactly and a read reaches four knots rather than all of them, which is what keeps an adjoint through it O(1). <code>monotone_slopes</code> (Fritsch–Carlson) is there for a caller that needs an interpolant that never leaves its data’s range.</p>
+<p><code>value_with_slope&lt;T&gt;</code> pairs a value with its slope so the two cannot be handed over separately and paired wrongly; <code>util::to_passive</code> strips every derivative layer from a scalar.</p>
+<p>A <strong>minor</strong> bump: breaking only for a consumer that named <code>basic_interpolator&lt;S&gt;</code> or <code>spline::basic_spline&lt;S&gt;</code> directly. Split out of the reverse-mode change (<a href="https://github.com/traitecoevo/odelia/issues/59" class="external-link">#59</a>).</p>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.4.0" id="odelia-040">odelia 0.4.0<a class="anchor" aria-label="anchor" href="#odelia-040"></a></h2>
 <p><strong>Step rejection now works when the integration is pinned to fixed times (plant#642).</strong> <code>advance_fixed()</code> steps exactly to a caller-supplied set of times — how a replay reproduces a trajectory recorded earlier. It called the stepper bare, so both of the ways <a href="https://github.com/traitecoevo/odelia/issues/55" class="external-link">#55</a> gave a system to refuse a state were unreachable from it: a <code>util::DomainError</code> from a stage killed the solve, and a declared <code>ode_state_valid()</code> was never consulted at all.</p>

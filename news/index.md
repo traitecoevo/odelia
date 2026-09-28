@@ -1,5 +1,42 @@
 # Changelog
 
+## odelia 0.5.0
+
+**The spline’s backend becomes a cubic Hermite that can take a slope at
+each knot; the front end does not change, and neither do its numbers.**
+A model that integrates over crowns knows the derivative at each knot as
+well as the value, and the global natural spline had no way to accept
+it. `spline.hpp` now holds `hermite_spline<S>`, a local cubic Hermite
+built from a value and a slope per knot. `interpolator.hpp` keeps every
+call the family makes — `init(x, y)`, `eval` with its out-of-domain
+refusal, `deriv`, `min`/`max`, `set_extrapolate`, `r_eval` — on
+`hermite_interpolator<S>` (was `basic_interpolator<S>`), which derives
+from the backend so a caller that has slopes reaches `init(x, y, m)`,
+`value_and_slope`, `set_nodes`/`set_data` and `refine`.
+
+A caller with values alone gets the natural cubic spline’s own knot
+slopes (`natural_slopes`), and a Hermite read through those slopes is
+the natural spline on every span, so `init(x, y)` reads the curve it
+read before: `test-drivers.R` and `test-spline.R` are unchanged, and
+phylloptim 0.8.1 compiled against this release makes the same number of
+solver evaluations at the same speed (82.3 per solve, 3.0–3.1 µs,
+interleaved against 0.4.0), with outputs equal to rounding (worst 2e-10
+absolute on its golden grid, from evaluating the same cubic in a
+different order). With supplied slopes the Hermite reproduces a cubic
+exactly and a read reaches four knots rather than all of them, which is
+what keeps an adjoint through it O(1). `monotone_slopes`
+(Fritsch–Carlson) is there for a caller that needs an interpolant that
+never leaves its data’s range.
+
+`value_with_slope<T>` pairs a value with its slope so the two cannot be
+handed over separately and paired wrongly; `util::to_passive` strips
+every derivative layer from a scalar.
+
+A **minor** bump: breaking only for a consumer that named
+`basic_interpolator<S>` or `spline::basic_spline<S>` directly. Split out
+of the reverse-mode change
+([\#59](https://github.com/traitecoevo/odelia/issues/59)).
+
 ## odelia 0.4.0
 
 **Step rejection now works when the integration is pinned to fixed times
