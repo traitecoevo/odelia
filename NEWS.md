@@ -1,3 +1,9 @@
+## odelia 0.5.1
+
+**The spline reads as fast as 0.4.0's again, with the same numbers.** On a graded knot grid, 0.5.0 found a query's span by binary search, where 0.4.0 guessed from the mean spacing and stepped from there (#21). plant's adaptive light field is graded and read in height order, so the search made its FF16 runs 17% slower than on 0.4.0. `hermite_spline` now uses the guess-and-step lookup again, which returns exactly the span the search did: 2.55 million reads on random graded grids, knots and their neighbouring doubles included, are bit-identical. The front end's unchecked `operator()` also skips the initialisation check, as 0.4.0's did.
+
+Against plant on 0.4.0, interleaved: FF16 full lifetime 0.106 to 0.102 s, K93 0.036 to 0.035 s, and TF24 6 years 2.35 to 2.31 s.
+
 ## odelia 0.5.0
 
 **The spline's backend becomes a cubic Hermite that can take a slope at each knot; the front end does not change, and neither do its numbers.** A model that integrates over crowns knows the derivative at each knot as well as the value, and the global natural spline had no way to accept it. `spline.hpp` now holds `hermite_spline<S>`, a local cubic Hermite built from a value and a slope per knot. `interpolator.hpp` keeps every call the family makes — `init(x, y)`, `eval` with its out-of-domain refusal, `deriv`, `min`/`max`, `set_extrapolate`, `r_eval` — on `hermite_interpolator<S>` (was `basic_interpolator<S>`), which derives from the backend so a caller that has slopes reaches `init(x, y, m)`, `value_and_slope`, `set_nodes`/`set_data` and `refine`.

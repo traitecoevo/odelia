@@ -82,9 +82,11 @@ public:
     return base::eval(u);
   }
 
-  // faster version of above
+  // eval() without its checks: no domain refusal and no initialisation check, so
+  // reading an empty interpolator is undefined. For hot loops whose caller has
+  // already bounded u, as plant's light field does per quadrature point.
   S operator()(double u) const {
-    return base::eval(u);
+    return base::eval_unchecked(u);
   }
 
   // Analytic first derivative dy/du at u (exact derivative of the interpolating

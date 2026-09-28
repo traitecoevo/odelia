@@ -97,6 +97,7 @@ public:
       }
       if (uniform) inv_h0 = 1.0 / h0;
     }
+    inv_mean_h = static_cast<double>(ns) / (x.back() - x.front());
     initialised = false;
   }
 
@@ -169,6 +170,7 @@ public:
   void clear() {
     x.clear(); y.clear(); m.clear(); spans.clear();
     inv_h0 = 0.0;
+    inv_mean_h = 0.0;
     uniform = false;
     initialised = false;
   }
@@ -214,6 +216,13 @@ public:
 
   template <typename U>
   S operator()(const U& u) const { return eval(u); }
+
+protected:
+  // eval at a double position without the initialisation check, for a front end
+  // whose own unchecked read is documented as such.
+  S eval_unchecked(double u) const { return value_at(u); }
+
+public:
 
   // dy/du at u -- the exact derivative of the polynomial eval() uses, as a value.
   //
@@ -336,9 +345,21 @@ private:
       const std::size_t k = static_cast<std::size_t>((u - x.front()) * inv_h0);
       return k < ns ? k : ns - 1;
     }
-    const std::size_t k =
-        static_cast<std::size_t>(std::upper_bound(x.begin(), x.end(), u) - x.begin());
-    return k > 0 ? k - 1 : 0;
+    // A graded grid: guess from the mean spacing, then step to the span with
+    // x[k] <= u < x[k + 1] -- the span a binary search returns, so the read is
+    // unchanged. Every caller has answered u <= x.front() and u >= x.back()
+    // already, so u is strictly inside.
+    //
+    // ⚠️ Do not replace this with std::upper_bound, and do not cap the steps with a
+    // binary-search fallback. Both were measured on plant's adaptive light field,
+    // whose queries arrive in height order: a whole-grid search made FF16 17%
+    // slower, and a 3-step cap before a search made it 50% slower. A synthetic
+    // benchmark with random queries favours the search and is the wrong test.
+    std::size_t k = static_cast<std::size_t>((u - x.front()) * inv_mean_h);
+    if (k > ns - 1) k = ns - 1;
+    while (k > 0 && x[k] > u) --k;
+    while (k + 1 < ns && x[k + 1] <= u) ++k;
+    return k;
   }
 
   void check_initialised() const {
@@ -378,6 +399,7 @@ public:
 
 private:
   double inv_h0 = 0.0;
+  double inv_mean_h = 0.0;  // spans per unit of the knot range, for the lookup's guess
   bool uniform = false;
   bool initialised = false;
 };
