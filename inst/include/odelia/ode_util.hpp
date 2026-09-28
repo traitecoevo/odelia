@@ -27,6 +27,25 @@ inline bool is_finite(double x) {
   return std::isfinite(x);
 }
 
+// Strip every AD layer off a value, down to the plain double. xad::value() peels
+// one layer, which is enough for AReal<double> or FReal<double> but not for a
+// nested FReal<AReal<double>>, where it yields AReal<double>; this recurses until
+// it bottoms out at double. `value` is found by argument-dependent lookup at the
+// point of use, so this header needs no XAD include.
+//
+// "Passive" is the AD word for a value that carries no derivative: what is
+// left of an active scalar once every layer is stripped. The interpolant uses
+// it to place a query in its span and to compare fits during refinement, both
+// of which must happen in double whatever scalar the values carry.
+//
+// ⚠️ EVERY LAYER, NOT ONE. At a nested scalar (a tangent above a tangent) this
+// strips the inner direction as well as the outer, silently, because the
+// result is a plain double either way. A caller that needs one layer removed
+// strips it by hand.
+inline double to_passive(double x) { return x; }
+template <typename T>
+inline double to_passive(const T& x) { return to_passive(value(x)); }
+
 // Throws; never returns. The attribute lets the compiler see that callers whose
 // error branches end in util::stop() do not fall through.
 [[noreturn]] inline void stop(const std::string &msg) {
@@ -57,6 +76,7 @@ struct DomainError : std::runtime_error {
 [[noreturn]] inline void stop_domain(const std::string &msg) {
   throw DomainError(msg);
 }
+
 
 // Not an R warning: nothing in the solver core may assume an R session exists.
 // Callers that need one should raise it from their own R-facing code. Uses

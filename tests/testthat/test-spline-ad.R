@@ -1,4 +1,4 @@
-# Tests for the scalar-templated spline (odelia::spline::basic_spline<S>), the
+# Tests for the scalar-templated spline (odelia::interpolator::hermite_spline<S>), the
 # differentiable-spline primitive for reverse-mode AD (#472 scope B /
 # traitecoevo/plant#537). With knot POSITIONS x frozen (double) and knot VALUES
 # active, the cubic-coefficient solve is a constant double band matrix applied to
@@ -42,9 +42,9 @@ compile_spline_ad_interface <- function() {
         std::vector<ad_t> ya(y.begin(), y.end());
         for (auto& v : ya) tape.registerInput(v);
         tape.newRecording();
-        odelia::spline::basic_spline<ad_t> s;
-        s.set_points(x, ya);
-        ad_t val = s(q);
+        odelia::interpolator::hermite_spline<ad_t> s;
+        s.init(x, ya, odelia::interpolator::natural_slopes<ad_t>(x, ya));
+        ad_t val = s.eval(q);
         tape.registerOutput(val);
         xad::derivative(val) = 1.0;
         tape.computeAdjoints();
@@ -57,9 +57,9 @@ compile_spline_ad_interface <- function() {
       // [[Rcpp::export]]
       double spline_value_double(std::vector<double> x, std::vector<double> y,
                                  double q) {
-        odelia::spline::Spline s;   // = basic_spline<double>
-        s.set_points(x, y);
-        return s(q);
+        odelia::interpolator::hermite_spline<double> s;
+        s.init(x, y, odelia::interpolator::natural_slopes<double>(x, y));
+        return s.eval(q);
       }
 
       // Same, one level up through the Interpolator wrapper (what plant uses).
@@ -73,7 +73,7 @@ compile_spline_ad_interface <- function() {
         std::vector<ad_t> ya(y.begin(), y.end());
         for (auto& v : ya) tape.registerInput(v);
         tape.newRecording();
-        odelia::interpolator::basic_interpolator<ad_t> I;
+        odelia::interpolator::hermite_interpolator<ad_t> I;
         I.init(x, ya);
         ad_t val = I.eval(q);
         tape.registerOutput(val);
@@ -87,7 +87,7 @@ compile_spline_ad_interface <- function() {
       // [[Rcpp::export]]
       double interp_value_double(std::vector<double> x, std::vector<double> y,
                                  double q) {
-        odelia::interpolator::Interpolator I;   // = basic_interpolator<double>
+        odelia::interpolator::Interpolator I;   // = hermite_interpolator<double>
         I.init(x, y);
         return I.eval(q);
       }', verbose = FALSE)
@@ -103,7 +103,7 @@ compile_spline_ad_interface <- function() {
   }
 }
 
-testthat::test_that("basic_spline<ad> knot-value gradient matches finite differences", {
+testthat::test_that("hermite_spline<ad> knot-value gradient matches finite differences", {
   testthat::skip_if(is_pkgload_dll(),
     "Skipping AD spline in pkgload load_all sessions due to native-pointer lifecycle.")
   compile_spline_ad_interface()
@@ -140,7 +140,7 @@ testthat::test_that("templated spline double alias is unchanged", {
   }
 })
 
-testthat::test_that("basic_interpolator<ad> matches FD (the wrapper plant uses)", {
+testthat::test_that("hermite_interpolator<ad> matches FD (the wrapper plant uses)", {
   testthat::skip_if(is_pkgload_dll(),
     "Skipping AD interpolator in pkgload load_all sessions.")
   compile_spline_ad_interface()

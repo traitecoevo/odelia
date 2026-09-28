@@ -26,6 +26,17 @@ resolve_test_path <- function(installed_rel, source_rel) {
   )
 }
 
+odelia_include_dir <- function() {
+  dirname(dirname(resolve_test_path(
+    "include/odelia/ode_solver.hpp", "inst/include/odelia/ode_solver.hpp")))
+}
+
+# The flags a sourceCpp snippet compiles with: the include path and the same
+# preprocessor defines as src/Makevars, which today is none. Keep them equal.
+odelia_cppflags <- function(include_dir = odelia_include_dir()) {
+  paste0("-I", shQuote(include_dir))
+}
+
 # Detect whether the currently loaded DLL came from pkgload/load_all,
 # which can behave differently from an installed package binary.
 is_pkgload_dll <- function() {

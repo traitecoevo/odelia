@@ -10,61 +10,46 @@
 namespace odelia {
 namespace interpolator {
 
-// Templated on the scalar S of the knot VALUES (knot positions x stay double).
-// `Interpolator` (alias below) pins S = double, leaving every existing caller
-// unchanged; S = an AD active type makes the interpolated value differentiable
-// w.r.t. the knot values, delegating to basic_spline<S>. (#472 scope B /
-// traitecoevo/plant#537.)
+// The front end every consumer names: hermite_spline<S> from spline.hpp with
+// the calls the family has always made on an interpolator -- init(x, y) from
+// values alone, eval with an out-of-domain refusal, deriv, min/max, r_eval --
+// added on top. init(x, y) reads the natural cubic spline, as before 0.5.0. Templated on the scalar S of the knot VALUES (knot positions
+// stay double); `Interpolator` below pins S = double. A caller that has slopes
+// to give uses init(x, y, m), or any of the base class's own calls.
 template <typename S>
-class basic_interpolator {
+class hermite_interpolator : public hermite_spline<S> {
+  using base = hermite_spline<S>;
 public:
-  // Build an interpolator out of the vectors 'x' and 'y'.
-  void init(const std::vector<double> &x_,
-            const std::vector<S> &y_) {
+  using base::init;   // init(x, y, m): a slope at each knot, supplied
+
+  // From values alone: the natural cubic spline's own knot slopes, so the
+  // interpolant is the natural cubic spline odelia has always read here.
+  void init(const std::vector<double> &x_, const std::vector<S> &y_) {
     util::check_length(y_.size(), x_.size());
     if (x_.size() < 3)
     {
       util::stop("insufficient number of points");
     }
-    x = x_;
-    y = y_;
-    initialise();
+    check_sorted(x_);
+    base::init(x_, y_, natural_slopes<S>(x_, y_));
   }
 
-  // Compute the interpolated function from the points contained in 'x' and 'y'.
-  void initialise() {
-    // https://stackoverflow.com/questions/17769114/stdis-sorted-and-strictly-less-comparison
-    if (not std::is_sorted(x.begin(), x.end(), std::less_equal<double>()))
-    {
-      util::stop("spline control points must be unique and in ascending order");
-    }
-    if (x.size() > 0)
-    {
-      spline.set_points(x, y);
-      active = true;
-    }
-  }
-
-  // Support for adding points in turn (assumes monotonic increasing in
-  // 'x', unchecked).
+  // Support for adding points in turn, then initialise(). Assumes increasing x.
   void add_point(double xi, S yi) {
-    x.push_back(xi);
-    y.push_back(yi);
+    pending_x.push_back(xi);
+    pending_y.push_back(yi);
   }
-
-  // adds point in sorted position (slower than above)
-  void add_point_sorted(double xi, S yi) {
-    auto x_upper = std::upper_bound(x.begin(), x.end(), xi); // find smallest number larger than xi
-    x.insert(x_upper, xi);                                   // add xi below that number
-    auto y_upper = std::upper_bound(y.begin(), y.end(), yi);
-    y.insert(y_upper, yi);
+  void initialise() {
+    init(pending_x, pending_y);
+    pending_x.clear();
+    pending_y.clear();
   }
 
   // Remove all the contents, being ready to be refilled.
   void clear() {
-    x.clear();
-    y.clear();
-    active = false;
+    pending_x.clear();
+    pending_y.clear();
+    *static_cast<base*>(this) = base();
   }
 
   // Compute the value of the interpolated function at point `x=u`
@@ -94,24 +79,19 @@ public:
                  util::format_double(min()) + ", " +
                  util::format_double(max()) + "].");
     }
-    return spline(u);
+    return base::eval(u);
   }
 
   // faster version of above
   S operator()(double u) const {
-    return spline(u);
+    return base::eval(u);
   }
 
   // Analytic first derivative dy/du at u (exact derivative of the interpolating
-  // polynomial; see Spline::deriv). Useful for exact/smooth gradients.
+  // polynomial). Useful for exact/smooth gradients.
   S deriv(double u) const {
     check_active();
-    return spline.deriv(u);
-  }
-
-  // Return the number of (x,y) pairs contained in the Interpolator.
-  size_t size() const {
-    return x.size();
+    return base::slope(u);
   }
 
   // These are chosen so that if a Interpolator is empty, functions
@@ -119,11 +99,13 @@ public:
   // always find they do.  This is the same principle as R's
   // range(numeric(0)) -> c(Inf, -Inf)
   double min() const {
-    return size() > 0 ? x.front() : std::numeric_limits<double>::infinity();
+    return this->size() > 0 ? this->knots().front()
+                            : std::numeric_limits<double>::infinity();
   }
 
   double max() const {
-    return size() > 0 ? x.back() : -std::numeric_limits<double>::infinity();
+    return this->size() > 0 ? this->knots().back()
+                            : -std::numeric_limits<double>::infinity();
   }
 
   void set_extrapolate(bool e) {
@@ -131,20 +113,19 @@ public:
   }
 
   std::vector<double> get_x() const {
-    return x;
+    return this->knots();
   }
 
   std::vector<S> get_y() const {
-    return y;
+    return this->values();
   }
 
   // Compute the value of the interpolated function at a vector of
   // points `x=u`, returning a vector of the same length.
-  // change to const& vec?
   std::vector<S> r_eval(std::vector<double> u) const {
     check_active();
     auto ret = std::vector<S>();
-    ret.reserve(u.size()); // fast to do this once rather than multiple times with push_back
+    ret.reserve(u.size());
     for (auto const &x : u)
     {
       ret.push_back(eval(x));
@@ -153,23 +134,29 @@ public:
   }
 
 private:
+  static void check_sorted(const std::vector<double> &x) {
+    // https://stackoverflow.com/questions/17769114/stdis-sorted-and-strictly-less-comparison
+    if (not std::is_sorted(x.begin(), x.end(), std::less_equal<double>()))
+    {
+      util::stop("spline control points must be unique and in ascending order");
+    }
+  }
+
   void check_active() const {
-    if (!active)
+    if (this->size() == 0)
     {
       util::stop("Interpolator not initialised -- cannot evaluate");
     }
   }
 
-  std::vector<double> x;
-  std::vector<S> y;
-  spline::basic_spline<S> spline;
-  bool active = false;
+  std::vector<double> pending_x;
+  std::vector<S> pending_y;
   bool extrapolate = true;
 };
 
-// Default interpolator (knot values in double): the unchanged production type
-// used by AdaptiveInterpolator, plant's ResourceSpline, the leaf model, etc.
-using Interpolator = basic_interpolator<double>;
+// Default interpolator (knot values in double): the production type used by
+// the drivers, plant's ResourceSpline, the leaf model, etc.
+using Interpolator = hermite_interpolator<double>;
 
 }
 }
