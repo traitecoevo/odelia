@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,11 @@
       <small>Source: <a href="https://github.com/traitecoevo/odelia/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.5.1" id="odelia-051">odelia 0.5.1<a class="anchor" aria-label="anchor" href="#odelia-051"></a></h2>
+<p><strong>The spline reads as fast as 0.4.0’s again, with the same numbers.</strong> On a graded knot grid, 0.5.0 found a query’s span by binary search, where 0.4.0 guessed from the mean spacing and stepped from there (<a href="https://github.com/traitecoevo/odelia/issues/21" class="external-link">#21</a>). plant’s adaptive light field is graded and read in height order, so the search made its FF16 runs 17% slower than on 0.4.0. <code>hermite_spline</code> now uses the guess-and-step lookup again, which returns exactly the span the search did: 2.55 million reads on random graded grids, knots and their neighbouring doubles included, are bit-identical. The front end’s unchecked <code>operator()</code> also skips the initialisation check, as 0.4.0’s did.</p>
+<p>Against plant on 0.4.0, interleaved: FF16 full lifetime 0.106 to 0.102 s, K93 0.036 to 0.035 s, and TF24 6 years 2.35 to 2.31 s.</p>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.5.0" id="odelia-050">odelia 0.5.0<a class="anchor" aria-label="anchor" href="#odelia-050"></a></h2>
 <p><strong>The spline’s backend becomes a cubic Hermite that can take a slope at each knot; the front end does not change, and neither do its numbers.</strong> A model that integrates over crowns knows the derivative at each knot as well as the value, and the global natural spline had no way to accept it. <code>spline.hpp</code> now holds <code>hermite_spline&lt;S&gt;</code>, a local cubic Hermite built from a value and a slope per knot. <code>interpolator.hpp</code> keeps every call the family makes — <code>init(x, y)</code>, <code>eval</code> with its out-of-domain refusal, <code>deriv</code>, <code>min</code>/<code>max</code>, <code>set_extrapolate</code>, <code>r_eval</code> — on <code>hermite_interpolator&lt;S&gt;</code> (was <code>basic_interpolator&lt;S&gt;</code>), which derives from the backend so a caller that has slopes reaches <code>init(x, y, m)</code>, <code>value_and_slope</code>, <code>set_nodes</code>/<code>set_data</code> and <code>refine</code>.</p>
