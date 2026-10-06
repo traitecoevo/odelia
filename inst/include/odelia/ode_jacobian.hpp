@@ -79,6 +79,14 @@ public:
 // with the same shape, names the parameters a reverse-mode sweep accumulates
 // adjoints for (#59), so a System declares them once. A system that omits it
 // simply cannot have its parameter sensitivity taken (gated below).
+//
+// Contract: the rates must read each named parameter *live*. The seed is placed
+// on the parameter after the twin is built, so a quantity the constructor
+// derived from it (a product, a rate scaled by it, a hyperparameter) carries no
+// tangent, and that parameter's column of df/dtheta comes back as zero with no
+// error. A System that caches such quantities must recompute them in
+// compute_rates(), or point ad_parameters() at the cached quantities instead
+// (and own the chain rule). SteadyState::check_parameters() detects a breach.
 template <typename S, typename = void>
 struct has_ad_parameters : std::false_type {};
 
@@ -201,7 +209,8 @@ public:
     }
 
     // Pointers into the twin's own parameter storage; valid for the lifetime of
-    // `twin`. Seeding a tangent here propagates through compute_rates().
+    // `twin`. Seeding a tangent here propagates through compute_rates(), and
+    // only through it: see the contract at has_ad_parameters.
     std::vector<tangent_type*> params = twin.ad_parameters();
     n_params = params.size();
     Jp.assign(size * n_params, value_type(0.0));

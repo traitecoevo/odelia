@@ -111,14 +111,17 @@ void lu_solve(const std::vector<T>& lu, size_t n,
 // (all eigenvalues of the state Jacobian df/dy have negative real part). Only
 // the *numeric* eigenvalues are needed -- the matrix is already at a converged
 // equilibrium and the stability verdict is a diagnostic, not a differentiated
-// quantity -- so the routine strips any active AD layer via xad::value and works
-// entirely in double. This deliberately does not tape: stability is not a
-// gradient target.
+// quantity -- so the routine strips any active AD layer via util::to_passive
+// and works entirely in double. This deliberately does not tape: stability is
+// not a gradient target.
 //
 // Method: Householder reduction to upper Hessenberg form, then the Francis
-// double-shift QR algorithm (eigenvalues only, no vectors). Standard dense
-// eigenvalue machinery (Golub & Van Loan, Matrix Computations, ch. 7); no
-// external linear-algebra library is required, matching the hand-rolled LU.
+// double-shift QR algorithm (eigenvalues only, no vectors), as described in
+// Golub & Van Loan, Matrix Computations, ch. 7. The code follows EISPACK's
+// orthes and hqr (Smith et al. 1976, public domain): the subdiagonal
+// deflation test, the exceptional shifts at iterations 10, 20 and 30, and the
+// three-element Householder bulge chase are theirs. No external linear-algebra
+// library is required, matching the hand-rolled LU.
 namespace detail {
 
 // Reduce a (row-major, n*n) real matrix to upper Hessenberg form in place by
@@ -338,14 +341,14 @@ inline bool hqr(std::vector<double>& a, size_t n, std::vector<double>& wr,
 } // namespace detail
 
 // Eigenvalues of a general real n*n matrix `A` (row-major, any scalar type;
-// active layers are stripped via xad::value). Real and imaginary parts are
-// written to `wr` and `wi`. Throws if the QR iteration fails to converge.
+// active layers are stripped via util::to_passive). Real and imaginary parts
+// are written to `wr` and `wi`. Throws if the QR iteration fails to converge.
 template <typename T>
 void eigenvalues(const std::vector<T>& A, size_t n, std::vector<double>& wr,
                  std::vector<double>& wi) {
   std::vector<double> h(n * n);
   for (size_t i = 0; i < n * n; ++i) {
-    h[i] = xad::value(A[i]);
+    h[i] = util::to_passive(A[i]);
   }
   detail::to_hessenberg(h, n);
   if (!detail::hqr(h, n, wr, wi)) {
