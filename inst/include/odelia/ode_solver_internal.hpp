@@ -43,10 +43,27 @@ public:
   void advance_euler(System& system, const std::vector<double>& times);
 
   void step(System& system);
+  void step(System& system, double time_max_);
   void step_to(System& system, double time_max_);
   void step_euler(System& system, double time_max_);
 
   void set_time_max(double time_max_);
+
+  // The step the controller will try next: the size of the last accepted step
+  // as adjusted by its error estimate, or the control's initial size after a
+  // reset. A consumer that re-seeds the state through set_state(), which resets
+  // this, may put a step it knows to be good back with set_step_size().
+  double get_step_size() const { return step_size_last; }
+  void set_step_size(double h) {
+    if (!util::is_finite(h) || h <= 0.0) {
+      util::stop("step size must be positive and finite");
+    }
+    step_size_last = h;
+  }
+  // Attempts the adaptive and pinned paths rejected and retried smaller, since
+  // construction. A diagnostic: with the system's own count of right-hand-side
+  // evaluations it says what a solve cost and why.
+  size_t get_n_rejections() const { return n_rejections; }
 
 private:
   void resize(size_t size_);
@@ -65,13 +82,13 @@ private:
         rodas_stepper.step(system, time_, step_size, y_, yerr_, dydt_in_,
                            dydt_out_);
       } else {
-        // RODAS is unavailable for this System: either it provides no rebind()
-        // hook for the AD Jacobian, or its scalar type is itself active (nested
-        // tangent-over-adjoint is not yet wired up -- see issue #35). The passive
-        // solver of a system with rebind() supports RODAS.
+        // RODAS is unavailable for this System: it has neither an
+        // ode_jacobian() hook nor a rebind() hook for the AD Jacobian, or its
+        // scalar type is itself active (nested tangent-over-adjoint is not yet
+        // wired up -- see issue #36).
         util::stop("method='rodas' is not available for this system/scalar type "
-                   "(needs a rebind() hook and a non-active scalar); "
-                   "use method='rkck'.");
+                   "(needs an ode_jacobian() hook, or a rebind() hook with a "
+                   "non-active scalar); use method='rkck'.");
       }
     } else {
       stepper.step(system, time_, step_size, y_, yerr_, dydt_in_, dydt_out_);
@@ -95,6 +112,7 @@ private:
   RodasStep<System> rodas_stepper;
 
   double step_size_last; // Size of last successful step (or suggestion)
+  size_t n_rejections = 0; // Rejected attempts, cumulative (not reset)
 
   double time;     // Current time
   double time_max; // Time we will not go past
@@ -337,6 +355,7 @@ void SolverInternal<System>::step(System& system) {
       	y         = y_orig;
       	time      = time_orig;
       	step_size = step_size_next;
+        ++n_rejections;
         if (invalid) {
           // Put the system back on the restored state explicitly. After a caught
           // DomainError it is left holding whichever intermediate stage threw, and
@@ -386,6 +405,25 @@ void SolverInternal<System>::step(System& system) {
       return; // This exits the infinite loop.
     }
   }
+}
+
+// One adaptive step that will not pass time_max_: the single-step form of
+// advance_adaptive(), for a caller that drives the integration itself and may
+// change the state between steps (#62). An infinite time_max_ removes the bound,
+// which is what a solver has after reset(). Stepping from time_max_ itself is
+// refused: a zero-length step is not a step, and the implicit stepper divides by
+// h.
+template <class System>
+void SolverInternal<System>::step(System& system, double time_max_) {
+  if (util::is_finite(time_max_)) {
+    set_time_max(time_max_);
+    if (!(time < time_max)) {
+      util::stop("step(): already at time_max = " + util::format_double(time_max));
+    }
+  } else {
+    time_max = std::numeric_limits<double>::infinity();
+  }
+  step(system);
 }
 
 // This takes a step up to time "time_max_", regardless of what the
@@ -481,6 +519,7 @@ void SolverInternal<System>::step_to(System& system, double time_max_) {
                  " is already at the minimum)");
     }
     step_size = step_size_next;
+    ++n_rejections;
   }
 
   cache(system);

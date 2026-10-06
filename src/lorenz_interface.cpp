@@ -93,17 +93,6 @@ Rcpp::NumericVector System_rates(SEXP system_xp) {
 //-------------------------------------------------------------------------
 // Solver interface (Lorenz-specific creation, generic operations)
 
-// Map an R-facing method string to the solver Method enum.
-static ode::Method parse_method(const std::string& method) {
-  if (method == "rodas" || method == "implicit") {
-    return ode::Method::rodas;
-  }
-  if (method == "rkck" || method == "rk45" || method == "explicit") {
-    return ode::Method::rkck;
-  }
-  Rcpp::stop("Unknown method '" + method + "'. Use 'rkck' or 'rodas'.");
-}
-
 // Solver creation - Lorenz-specific (must know LorenzSystem type)
 // [[Rcpp::export]]
 SEXP Solver_new(SEXP system_xp, SEXP control_xp, bool active = false,

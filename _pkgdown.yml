@@ -4,8 +4,14 @@ template:
   bootstrap: 5
 
 reference:
+- title: Solving a system written in R
+  desc: A right-hand side as an R function, with either stepper.
+  contents:
+  - ode_solve
+  - OdeSolver
+  - domain_error
 - title: Systems and solvers
-  desc: Define an ODE system and advance it through time.
+  desc: Define an ODE system in C++ and advance it through time.
   contents:
   - LorenzSystem
   - Lorenz_Solver

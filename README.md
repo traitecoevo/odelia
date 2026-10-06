@@ -26,6 +26,10 @@ code out so it can be used more widely.
   cubic splines and queried by the system at each step.
 - Header-only C++ core that other Rcpp packages can link against.
 - Friendly **R6** wrappers around the C++ objects.
+- A right-hand side **written in R** can be solved by the same steppers, through
+  `ode_solve()` (shaped like `deSolve::ode()`) or the step-at-a-time `OdeSolver`,
+  with genuinely adaptive Runge-Kutta stepping, the accepted steps exposed, and
+  a count of what the solve cost.
 
 ## Installation
 
@@ -48,7 +52,9 @@ interface) that the same solver then drives. See
 [Building your own model](https://traitecoevo.github.io/odelia/articles/leaf-thermal.html)
 for a complete worked example.
 
-The example below solves the bundled Lorenz system:
+The example below solves the bundled Lorenz system. (A right-hand side written
+in R can be solved without any C++ at all; see `ode_solve()` and
+`vignette("odelia")`.)
 
 ```r
 library(odelia)

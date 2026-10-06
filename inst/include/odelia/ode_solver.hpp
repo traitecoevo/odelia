@@ -165,6 +165,21 @@ public:
     }
   }
 
+  // One adaptive step that stops at time_max (Inf for no bound); see
+  // SolverInternal::step(System&, double).
+  void step(double time_max)
+  {
+    solver.step(system, time_max);
+    if (collect)
+    {
+      history.push_back(system);
+    }
+  }
+
+  double get_step_size() const { return solver.get_step_size(); }
+  void set_step_size(double h) { solver.set_step_size(h); }
+  std::size_t get_n_rejections() const { return solver.get_n_rejections(); }
+
   bool get_collect() const { return collect; }
 
   void set_collect(bool x) { collect = x; }

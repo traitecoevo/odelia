@@ -17,10 +17,12 @@
 // can_use_dydt_in / first_same_as_last traits -- so SolverInternal can drive it
 // through the same adaptive loop.
 //
-// The Jacobian J = df/dy is computed exactly by forward-mode AD (ode_jacobian.hpp),
-// which requires the System to expose `template<class U> System<U> rebind()`. The
-// time derivative df/dt (only needed for non-autonomous systems) is a finite
-// difference, because the System stores time as a plain double.
+// The Jacobian J = df/dy comes from the System's own ode_jacobian() hook when it
+// has one, else by forward-mode AD on a rebind()-able system (ode_jacobian.hpp).
+// The time derivative df/dt is a finite difference, because the System stores
+// time as a plain double; a system declaring ode_autonomous() is not asked for
+// it. Both are formed once per (t_n, y_n) and kept across a retry of the same
+// step at a smaller h -- the point has not moved, so neither has the Jacobian.
 
 #include <vector>
 #include <cstddef>
@@ -37,13 +39,19 @@ public:
   using value_type = typename System::value_type;
   using state_type = std::vector<value_type>;
 
-  // True when the exact-AD Jacobian is instantiable for this scalar type (the
-  // passive double solver). False for nested AD types until that path lands.
+  // True when a Jacobian can be had: the system's own hook, or the exact-AD
+  // route for a rebind()-able system on the passive double solver. False for
+  // nested AD types until that path lands.
   static constexpr bool supported = Jacobian<System>::supported;
 
   void resize(size_t size_) {
     size = size_;
     jac.resize(size_);
+    // A cached Jacobian belongs to a state of this size; never carry one across
+    // a resize, whatever (y, t) it was formed at.
+    jac_valid = false;
+    y_jac.assign(size, value_type(0.0));
+    t_jac = 0.0;
     J.assign(size * size, value_type(0.0));
     W.assign(size * size, value_type(0.0));
     dT.assign(size, value_type(0.0));
@@ -68,9 +76,21 @@ public:
     const double h = step_size;
 
     // J = df/dy and dT = df/dt, both at the step start (t_n, y_n). W is factored
-    // once and reused across all six stage solves.
-    jac.compute(system, y, time, J);
-    dfdt_fd(system, y, time, dT);
+    // once and reused across all six stage solves. A retry of a rejected step
+    // starts from the same (t_n, y_n) -- step() restores y by copy, so the
+    // comparison is exact -- and reuses both rather than evaluating the system
+    // another n (+1) times for the same numbers.
+    if (!(jac_valid && time == t_jac && y == y_jac)) {
+      jac.compute(system, y, time, dydt_in, J);
+      if (ode::is_autonomous(system)) {
+        dT.assign(size, value_type(0.0));
+      } else {
+        dfdt_fd(system, y, time, dydt_in, dT);
+      }
+      y_jac = y;
+      t_jac = time;
+      jac_valid = true;
+    }
 
     const value_type fac = value_type(1.0 / (h * gamma));
     for (size_t i = 0; i < size * size; ++i) {
@@ -160,9 +180,11 @@ public:
   // A single J and factorization are used for the whole step; the start-of-step
   // derivative (dydt_in) is genuinely f(t_n, y_n) and is reused for stage 1.
   static const bool can_use_dydt_in = true;
-  // RODAS is stiffly accurate but we recompute dydt_out explicitly, so we do not
-  // claim FSAL reuse of dydt_out as the next dydt_in.
-  static const bool first_same_as_last = false;
+  // dydt_out is f(t_n + h, y_{n+1}), evaluated explicitly above at the new
+  // point, which is exactly the next step's f(t_n, y_n): the solver may carry it
+  // across as dydt_in. Until #62 this was declared false and the same vector was
+  // recomputed at the start of every step.
+  static const bool first_same_as_last = true;
 
 private:
   static const int n_stages = 6;
@@ -173,6 +195,10 @@ private:
   std::vector<value_type> W;   // row-major n*n, (1/(h*gamma)) I - J
   std::vector<size_t> piv;
   std::vector<value_type> dT;  // df/dt
+  // The (t, y) that J and dT were formed at, for reuse across a retry.
+  bool jac_valid = false;
+  double t_jac = 0.0;
+  std::vector<value_type> y_jac;
   std::vector<value_type> arg; // stage argument / running solution
   std::vector<value_type> ftmp;
   std::vector<value_type> rhs;

@@ -122,6 +122,24 @@ runtime_desolve_r <- system.time({
 })
 ```
 
+Also with the same R function, but stepped by odelia's own solver through
+`ode_solve()` -- the right-hand side is still called once per stage, so this
+measures the cost of the call into R against deSolve's, not the solver's. The
+same function runs unchanged.
+
+```{r}
+runtime_odelia_r <- system.time({
+  out_odelia_r <- ode_solve(
+    lorenz_rhs_r,
+    y0 = c(x = 1, y = 1, z = 1),
+    times = internal_times_odelia,
+    parms = c(sigma = 10, rho = 28, beta = 8 / 3),
+    method = "rkck", autonomous = TRUE
+  )
+})
+attr(out_odelia_r, "counts")
+```
+
 Third run using `deSolve` and rates function defined in C++ 
 ```{r}
 runtime_desolve_cpp <- system.time({
@@ -138,15 +156,17 @@ runtime_desolve_cpp <- system.time({
 Now compare runtimes
 ```{r}
 runtime_odelia
+runtime_odelia_r
 runtime_desolve_r
 runtime_desolve_cpp
 
-c(runtime_odelia[1], runtime_desolve_r[1], runtime_desolve_cpp[1]) / runtime_odelia[1]
+c(odelia = runtime_odelia[1], odelia_r_rhs = runtime_odelia_r[1],
+  desolve_r_rhs = runtime_desolve_r[1], desolve_cpp_rhs = runtime_desolve_cpp[1]) / runtime_odelia[1]
 ```
 
 So the odelia C++ implementation is about 
 
 - 30x faster than the C++ function solved via `deSolve`, and 
-- 90x faster than the R function solvedvia `deSolve`. 
+- 90x faster than the R function solved via `deSolve`. 
 
-This shows the advantage of using compiled code for ODE systems, and also the efficiency of the odelia framework for setting up and solving ODE systems in C++.
+This shows the advantage of a system compiled against the solver, where nothing crosses into R per stage, and the efficiency of the odelia framework for setting up and solving ODE systems in C++. With an R right-hand side, odelia and deSolve both pay one call into R per stage and run at the speed of that call; odelia's steps are then genuinely adaptive, exposed through `times()`, and the solve reports what it cost.

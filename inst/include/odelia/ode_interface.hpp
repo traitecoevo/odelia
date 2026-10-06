@@ -73,6 +73,39 @@ state_valid(const System& /* system */, const StateType& /* y */) {
   return true;
 }
 
+// Opt-in declaration that the right-hand side does not depend on time (#62). A
+// system may declare
+//
+//   bool ode_autonomous() const;
+//
+// and the implicit stepper will not form the df/dt term, which it otherwise takes
+// by finite difference at the cost of one extra right-hand-side evaluation per
+// step. A runtime member rather than a compile-time trait so that one class can
+// carry systems of either kind -- the callback system is one class with a flag.
+// Systems that do not declare it are treated as time-dependent, which is the
+// safe reading and costs them exactly what they paid before.
+template <typename System>
+class has_autonomous {
+  typedef char true_type;
+  typedef long false_type;
+  template <typename C> static true_type test(decltype(&C::ode_autonomous)) ;
+  template <typename C> static false_type test(...);
+public:
+  enum { value = sizeof(test<System>(0)) == sizeof(true_type) };
+};
+
+template <typename System>
+typename std::enable_if<has_autonomous<System>::value, bool>::type
+is_autonomous(const System& system) {
+  return system.ode_autonomous();
+}
+
+template <typename System>
+typename std::enable_if<!has_autonomous<System>::value, bool>::type
+is_autonomous(const System& /* system */) {
+  return false;
+}
+
 // The recursive interface
 template <typename ForwardIterator>
 size_t ode_size(ForwardIterator first, ForwardIterator last) {

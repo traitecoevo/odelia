@@ -107,9 +107,9 @@ solver:
 - `"rkck"` (default) — an explicit adaptive Cash-Karp Runge-Kutta 4(5) method.
   Fast and accurate for **non-stiff** problems like Lorenz.
 - `"rodas"` — an implicit, adaptive RODAS4(3) Rosenbrock method for **stiff**
-  problems. Each step does one exact-Jacobian evaluation (via automatic
-  differentiation) plus a handful of linear solves, so the step size is limited
-  by accuracy rather than stability. On a stiff problem the explicit method is
+  problems. Each step forms the Jacobian once (by automatic differentiation for
+  a compiled system, or from the system's own Jacobian hook) plus a handful of
+  linear solves, so the step size is limited by accuracy rather than stability. On a stiff problem the explicit method is
   forced into tiny steps (or fails), while RODAS keeps large steps.
 
 ```{r method}
@@ -119,12 +119,98 @@ runner_stiff <- Lorenz_Solver$new(lz$ptr, ctrl$ptr, method = "rodas")
 Both steppers share the same adaptive step-size controller and `OdeControl`
 tolerances, so you can switch between them without changing anything else.
 
-To use `method = "rodas"` with your own system, the system's C++ class must
-provide a `template<class U> System<U> rebind() const` method (a one-liner that
-copies the system with its scalar type swapped) so its right-hand side can be
-differentiated for the Jacobian; see the Lorenz example. The implicit stepper
-currently runs on the passive (non-AD) solver; differentiating a fit *through*
-RODAS is planned (odelia issue #35).
+To use `method = "rodas"` with your own C++ system, give it either a
+`template<class U> System<U> rebind() const` method (a one-liner that copies the
+system with its scalar type swapped) so its right-hand side can be
+differentiated for the Jacobian, as the Lorenz example does, or an
+`ode_jacobian(y, t, dydt, J)` method that fills the Jacobian itself -- the
+header `ode_jacobian.hpp` has `fd_jacobian()` for a one-line finite-difference
+version. The implicit stepper currently runs on the passive (non-AD) solver;
+differentiating a fit *through* RODAS is planned (odelia issue #36).
+
+## Solving a system written in R
+
+Everything above drives a system compiled in C++. From 0.6.0 the same solver,
+with the same controller and both steppers, also takes a right-hand side
+written in R. There is nothing to compile: `ode_solve()` is shaped like
+`deSolve::ode()`, so a function written for deSolve runs unchanged, and returns
+a matrix with a `time` column and one column per state variable.
+
+```{r r-rhs}
+lorenz_r <- function(t, y, p) {
+  list(c(p[["sigma"]] * (y[2] - y[1]),
+         y[1] * (p[["R"]] - y[3]) - y[2],
+         y[1] * y[2] - p[["b"]] * y[3]))
+}
+pars <- c(sigma = 10, R = 28, b = 8 / 3)
+
+out_r <- ode_solve(lorenz_r, y0 = c(x = 1, y = 1, z = 1),
+                   times = seq(0, 2, by = 0.1), parms = pars,
+                   method = "rkck", autonomous = TRUE)
+head(out_r)
+```
+
+The implicit stepper needs the Jacobian of the right-hand side. Supply it as
+`jacfunc(t, y, parms)`, an n by n matrix whose column j is the derivative with
+respect to `y[j]`, or leave it out and it is formed by forward differences at
+`n` extra evaluations per step. The `"counts"` attribute says what the solve
+cost, which for a right-hand side that is itself expensive is the only number
+that matters:
+
+```{r r-rhs-rodas}
+lorenz_jac <- function(t, y, p) {
+  matrix(c(-p[["sigma"]], p[["R"]] - y[3], y[2],
+           p[["sigma"]], -1, y[1],
+           0, -y[1], -p[["b"]]), 3, 3)
+}
+out_rodas <- ode_solve(lorenz_r, y0 = c(x = 1, y = 1, z = 1),
+                       times = seq(0, 2, by = 0.1), parms = pars,
+                       jacfunc = lorenz_jac, method = "rodas", autonomous = TRUE)
+unlist(attr(out_rodas, "counts"))
+```
+
+A stiff problem is where the implicit stepper earns its keep. Van der Pol with
+a small `eps` forces the explicit stepper into thousands of tiny steps for
+stability while RODAS stays accuracy-limited:
+
+```{r r-rhs-stiff}
+vdp <- function(t, y, eps) {
+  list(c(y[2], ((1 - y[1]^2) * y[2] - y[1]) / eps))
+}
+times <- seq(0, 2, by = 0.2)
+stiff_rodas <- ode_solve(vdp, c(2, 0), times, parms = 1e-4, method = "rodas", autonomous = TRUE)
+stiff_rkck  <- ode_solve(vdp, c(2, 0), times, parms = 1e-4, method = "rkck",  autonomous = TRUE)
+c(rodas = attr(stiff_rodas, "counts")$n_steps, rkck = attr(stiff_rkck, "counts")$n_steps)
+```
+
+Underneath `ode_solve()` is the R6 class `OdeSolver`, which is driven a step
+at a time. That is what a caller with *events* needs: after each accepted step
+it can look at the state, change it, and even change its length, before the
+next step. The right-hand side here is `rhs(t, y)` returning the rates
+directly, and a callback that finds its state impossible calls
+`domain_error()` to have the step rejected and retried smaller rather than
+committed:
+
+```{r r-rhs-stepwise}
+logistic <- function(t, y) {
+  if (y[1] < 0 || y[1] > 1) domain_error("y has left [0, 1]")
+  50 * y[1] * (1 - y[1])
+}
+s <- OdeSolver$new(logistic, y0 = 0.5, method = "rkck", autonomous = TRUE)
+while (s$time() < 1) {
+  s$step(time_max = 1)
+}
+c(time = s$time(), y = s$state())
+unlist(s$counts())
+```
+
+Between steps `s$set_state(y, time)` re-seeds the state at any length and
+`s$set_step_size(h)` carries a step size across it. Each stage of a step is one
+call into R, so for a cheap right-hand side this runs at the speed of the R
+function and the call into it, much as `deSolve` does with an R function; the
+compiled route above is the fast one. For a right-hand side that is itself a
+large computation the solver's own cost is nothing, and what `counts()`
+reports is the whole cost of the integration.
 
 ## Where next
 

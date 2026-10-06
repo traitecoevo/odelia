@@ -1,7 +1,7 @@
 Package: odelia
 Type: Package
 Title: ODE Solver with Automatic Differentiation, in C++ Header Files
-Version: 0.5.1
+Version: 0.6.0
 Authors@R: c(
     person("Daniel", "Falster", , "daniel.falster@unsw.edu.au", c("aut", "cre"), 
             comment = c(ORCID = "0000-0002-9814-092X")),
@@ -14,7 +14,8 @@ Description: odelia provides an ODE solver in C++ header files, offering both
     adaptive-step RODAS4(3) Rosenbrock method for stiff systems, with an
     interface to R via Rcpp. ODE systems can be templated on their scalar type
     to support automatic differentiation, enabling exact gradients for
-    parameter fitting and exact Jacobians for the implicit solver.
+    parameter fitting and exact Jacobians for the implicit solver. A system
+    written as an R function can be solved by the same steppers.
 Depends:
     R (>= 4.2.0)
 Imports:
