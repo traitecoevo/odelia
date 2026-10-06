@@ -244,6 +244,9 @@ public:
     solver.set_state(y0d, times.front());
     solver.advance_adaptive(times);
 
+    // The solver stepped a copy. Hand it back: its evaluation counters and
+    // whatever it cached on the way are the system Newton continues from.
+    system = solver.get_system_ref();
     res = solve(system, solver.state(), opt);
     res.warmed = true;
     return res;

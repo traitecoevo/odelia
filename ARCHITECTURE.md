@@ -120,7 +120,11 @@ root, attracting or not; `solve_with_warmup()` integrates the transient when
 the root it finds is not attracting. Endpoint-only and tape-free by design: the
 transient is never differentiated, `solve()` refuses an active scalar type, and
 a consumer that needs `y*` on its own adjoint tape attaches the sensitivity
-rows as a supplied derivative rather than taping the Newton iteration.
+rows as a supplied derivative rather than taping the Newton iteration. The
+callback System reaches the same Newton through its Jacobian hook, which is
+how `ode_steady_state()` serves an R right-hand side
+(`src/r_steady_state_interface.cpp`); its parameter sensitivity is a finite
+difference through `func` done in R, since nothing differentiates R code.
 
 `ode_step_dopri.hpp` is a third stepper, Dormand-Prince 5(4), whose value over
 Cash-Karp is a free continuous extension of order 4: `SolverInternal::interpolate`

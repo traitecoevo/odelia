@@ -8,6 +8,7 @@ reference:
   desc: A right-hand side as an R function, with any of the three steppers.
   contents:
   - ode_solve
+  - ode_steady_state
   - ode_counts
   - OdeSolver
   - domain_error

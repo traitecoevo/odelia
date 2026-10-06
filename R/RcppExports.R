@@ -189,6 +189,10 @@ Drivers_clear <- function(drivers_xp) {
     invisible(.Call(`_odelia_Drivers_clear`, drivers_xp))
 }
 
+RSteadyState_solve <- function(rhs, jac, parms, y0, t0, autonomous, jac_fd_step, jac_fd_floor, tol, max_iter, line_search, min_lambda, warmup_times, control_xp, method) {
+    .Call(`_odelia_RSteadyState_solve`, rhs, jac, parms, y0, t0, autonomous, jac_fd_step, jac_fd_floor, tol, max_iter, line_search, min_lambda, warmup_times, control_xp, method)
+}
+
 RSolver_new <- function(rhs, jac, state_valid, parms, y0, t0, control_xp, method, autonomous, jac_fd_step, jac_fd_floor) {
     .Call(`_odelia_RSolver_new`, rhs, jac, state_valid, parms, y0, t0, control_xp, method, autonomous, jac_fd_step, jac_fd_floor)
 }

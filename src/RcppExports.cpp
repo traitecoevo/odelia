@@ -565,6 +565,31 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
+// RSteadyState_solve
+Rcpp::List RSteadyState_solve(Rcpp::Function rhs, Rcpp::Nullable<Rcpp::Function> jac, SEXP parms, Rcpp::NumericVector y0, double t0, bool autonomous, double jac_fd_step, double jac_fd_floor, double tol, int max_iter, bool line_search, double min_lambda, Rcpp::NumericVector warmup_times, SEXP control_xp, std::string method);
+RcppExport SEXP _odelia_RSteadyState_solve(SEXP rhsSEXP, SEXP jacSEXP, SEXP parmsSEXP, SEXP y0SEXP, SEXP t0SEXP, SEXP autonomousSEXP, SEXP jac_fd_stepSEXP, SEXP jac_fd_floorSEXP, SEXP tolSEXP, SEXP max_iterSEXP, SEXP line_searchSEXP, SEXP min_lambdaSEXP, SEXP warmup_timesSEXP, SEXP control_xpSEXP, SEXP methodSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::Function >::type rhs(rhsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::Function> >::type jac(jacSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type parms(parmsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y0(y0SEXP);
+    Rcpp::traits::input_parameter< double >::type t0(t0SEXP);
+    Rcpp::traits::input_parameter< bool >::type autonomous(autonomousSEXP);
+    Rcpp::traits::input_parameter< double >::type jac_fd_step(jac_fd_stepSEXP);
+    Rcpp::traits::input_parameter< double >::type jac_fd_floor(jac_fd_floorSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< bool >::type line_search(line_searchSEXP);
+    Rcpp::traits::input_parameter< double >::type min_lambda(min_lambdaSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type warmup_times(warmup_timesSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type control_xp(control_xpSEXP);
+    Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
+    rcpp_result_gen = Rcpp::wrap(RSteadyState_solve(rhs, jac, parms, y0, t0, autonomous, jac_fd_step, jac_fd_floor, tol, max_iter, line_search, min_lambda, warmup_times, control_xp, method));
+    return rcpp_result_gen;
+END_RCPP
+}
 // RSolver_new
 SEXP RSolver_new(Rcpp::Function rhs, Rcpp::Nullable<Rcpp::Function> jac, Rcpp::Nullable<Rcpp::Function> state_valid, SEXP parms, Rcpp::NumericVector y0, double t0, SEXP control_xp, std::string method, bool autonomous, double jac_fd_step, double jac_fd_floor);
 RcppExport SEXP _odelia_RSolver_new(SEXP rhsSEXP, SEXP jacSEXP, SEXP state_validSEXP, SEXP parmsSEXP, SEXP y0SEXP, SEXP t0SEXP, SEXP control_xpSEXP, SEXP methodSEXP, SEXP autonomousSEXP, SEXP jac_fd_stepSEXP, SEXP jac_fd_floorSEXP) {
@@ -781,6 +806,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_odelia_Drivers_evaluate_range", (DL_FUNC) &_odelia_Drivers_evaluate_range, 3},
     {"_odelia_Drivers_get_names", (DL_FUNC) &_odelia_Drivers_get_names, 1},
     {"_odelia_Drivers_clear", (DL_FUNC) &_odelia_Drivers_clear, 1},
+    {"_odelia_RSteadyState_solve", (DL_FUNC) &_odelia_RSteadyState_solve, 15},
     {"_odelia_RSolver_new", (DL_FUNC) &_odelia_RSolver_new, 11},
     {"_odelia_RSolver_step", (DL_FUNC) &_odelia_RSolver_step, 2},
     {"_odelia_RSolver_advance_adaptive", (DL_FUNC) &_odelia_RSolver_advance_adaptive, 2},
