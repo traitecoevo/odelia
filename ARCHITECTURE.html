@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -89,9 +89,15 @@ PKG_LIBS = "$(ODELIA_LIBDIR)$(R_ARCH)/odelia.dll"</code></pre>
 <p>(plant uses exactly this; verified green on <code>windows-latest</code> R-CMD-check.) odelia must therefore keep <strong>exporting</strong> these symbols from its DLL — do not add a restrictive <code>.def</code> or <code>-Wl,--exclude-all-symbols</code> to odelia’s build.</p>
 </div>
 <div class="section level2">
+<h2 id="a-right-hand-side-handed-in-at-run-time">A right-hand side handed in at run time<a class="anchor" aria-label="anchor" href="#a-right-hand-side-handed-in-at-run-time"></a></h2>
+<p><code>ode_callback_system.hpp</code> holds <code>CallbackSystem</code>, a System whose right-hand side (and optionally Jacobian and validity predicate) are <code>std::function</code>s handed in at construction, so a callable from any language is stepped by the same solver as a compiled system. It is part of the R-free core and is exercised as plain C++ in <code>tests/standalone/</code>; the R adapter in <code>src/r_system.h</code> is a few lines that wrap <code>Rcpp::Function</code>s, and a Python binding would be the same lines over a <code>py::function</code>. Two contracts the adapter relies on and the core keeps: evaluation is lazy (setting the state makes no call; reading the rates does), and the last call of an accepted step is at the accepted state.</p>
+<p>The implicit stepper takes its Jacobian from a System’s own <code>ode_jacobian()</code> hook when there is one, else by forward-mode AD on a <code>rebind()</code>-able system (<code>ode_jacobian.hpp</code>); <code>fd_jacobian()</code> there is the one-line finite-difference body for a hook. A system declaring <code>ode_autonomous()</code> is not asked for a <code>df/dt</code> term.</p>
+<p><code>ode_step_dopri.hpp</code> is a third stepper, Dormand-Prince 5(4), whose value over Cash-Karp is a free continuous extension of order 4: <code>SolverInternal::interpolate</code> reads the state anywhere inside the last accepted step from the step’s own stages, and <code>Solver::advance_collect(times, dense = true)</code> uses it to report at requested times without making a step end on each. Under the other steppers the interpolant is cubic Hermite on the step’s endpoints, one order short.</p>
+</div>
+<div class="section level2">
 <h2 id="the-solver-core-contains-no-r">The solver core contains no R<a class="anchor" aria-label="anchor" href="#the-solver-core-contains-no-r"></a></h2>
 <p>Everything in <code>inst/include/odelia/</code> <strong>except</strong> <code>solver_interface.hpp</code> and <code>rcpp_interface_helpers.hpp</code> compiles and runs with no R installation at all. <code>util::stop()</code> throws a <code>std::runtime_error</code>, which Rcpp turns into an ordinary R error at the package boundary; <code>util::warning()</code> writes to <code>std::cerr</code>. This is what lets non-Rcpp consumers use the solver, and what lets consumers that <em>are</em> Rcpp packages — <code>leaf</code>, for one — run their C++ test suites without an R session (traitecoevo/leaf_cpp#11, odelia #43).</p>
-<p><code>tests/standalone/</code> holds the guard: a translation unit that includes the whole core and integrates the Lorenz system, built by <code>make test-cpp</code> with <code>-I inst/include</code> and nothing else. CI runs it on a runner with no R. It fails loudly if an R header creeps back in, and — the subtler case — if a header comes to rely on a standard-library facility it never includes and was quietly getting from R’s headers. <code>spline.hpp</code> was using <code>assert</code> without <code>&lt;cassert&gt;</code> on exactly that basis.</p>
+<p><code>tests/standalone/</code> holds the guard: a translation unit that includes the whole core and integrates the Lorenz system (compiled, and through a callback), built by <code>make test-cpp</code> with <code>-I inst/include</code> and nothing else. CI runs it on a runner with no R. It fails loudly if an R header creeps back in, and — the subtler case — if a header comes to rely on a standard-library facility it never includes and was quietly getting from R’s headers. <code>spline.hpp</code> was using <code>assert</code> without <code>&lt;cassert&gt;</code> on exactly that basis.</p>
 <p>Note that the standalone build compiles <code>src/Tape.cpp</code> alongside the test. That is the single-<code>Tape</code>-object rule above, not an R dependency: any consumer that instantiates <code>Solver</code> needs the tape runtime from somewhere.</p>
 </div>
 <div class="section level2">

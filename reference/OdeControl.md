@@ -12,7 +12,7 @@ R6 wrapper for ODE solver control settings
 
 ### Public methods
 
-- [`OdeControl$new()`](#method-OdeControl-new)
+- [`OdeControl$new()`](#method-OdeControl-initialize)
 
 - [`OdeControl$get_controls()`](#method-OdeControl-get_controls)
 
@@ -30,13 +30,17 @@ R6 wrapper for ODE solver control settings
 
 - [`OdeControl$set_step_size_max()`](#method-OdeControl-set_step_size_max)
 
+- [`OdeControl$set_controller()`](#method-OdeControl-set_controller)
+
+- [`OdeControl$get_controller()`](#method-OdeControl-get_controller)
+
 - [`OdeControl$set_step_size_initial()`](#method-OdeControl-set_step_size_initial)
 
 - [`OdeControl$clone()`](#method-OdeControl-clone)
 
 ------------------------------------------------------------------------
 
-### Method `new()`
+### `OdeControl$new()`
 
 Initialize an \`OdeControl\` instance.
 
@@ -46,7 +50,7 @@ Initialize an \`OdeControl\` instance.
 
 ------------------------------------------------------------------------
 
-### Method `get_controls()`
+### `OdeControl$get_controls()`
 
 Get current solver control settings.
 
@@ -56,7 +60,7 @@ Get current solver control settings.
 
 ------------------------------------------------------------------------
 
-### Method `set_controls()`
+### `OdeControl$set_controls()`
 
 Set all solver control settings at once.
 
@@ -104,7 +108,7 @@ Set all solver control settings at once.
 
 ------------------------------------------------------------------------
 
-### Method `set_tol_abs()`
+### `OdeControl$set_tol_abs()`
 
 Set absolute tolerance.
 
@@ -120,7 +124,7 @@ Set absolute tolerance.
 
 ------------------------------------------------------------------------
 
-### Method `set_tol_rel()`
+### `OdeControl$set_tol_rel()`
 
 Set relative tolerance.
 
@@ -136,7 +140,7 @@ Set relative tolerance.
 
 ------------------------------------------------------------------------
 
-### Method `set_a_y()`
+### `OdeControl$set_a_y()`
 
 Set state scaling coefficient.
 
@@ -152,7 +156,7 @@ Set state scaling coefficient.
 
 ------------------------------------------------------------------------
 
-### Method `set_a_dydt()`
+### `OdeControl$set_a_dydt()`
 
 Set derivative scaling coefficient.
 
@@ -168,7 +172,7 @@ Set derivative scaling coefficient.
 
 ------------------------------------------------------------------------
 
-### Method `set_step_size_min()`
+### `OdeControl$set_step_size_min()`
 
 Set minimum step size.
 
@@ -184,7 +188,7 @@ Set minimum step size.
 
 ------------------------------------------------------------------------
 
-### Method `set_step_size_max()`
+### `OdeControl$set_step_size_max()`
 
 Set maximum step size.
 
@@ -200,7 +204,38 @@ Set maximum step size.
 
 ------------------------------------------------------------------------
 
-### Method `set_step_size_initial()`
+### `OdeControl$set_controller()`
+
+Set the step-size rule, \`"gsl"\` or \`"hairer"\`.
+
+#### Usage
+
+    OdeControl$set_controller(controller)
+
+#### Arguments
+
+- `controller`:
+
+  Which rule turns the error estimate into the next step: \`"gsl"\` (the
+  default; accept below 1.1, grow only below 0.5, otherwise keep the
+  step) or \`"hairer"\` (accept at 1, rescale after every step, as
+  \`deSolve\` and Hairer's codes do). The default is kept for continuity
+  of step sequences; \`"hairer"\` makes far fewer rejected attempts and
+  lets the step track a smoothing solution (odelia#64).
+
+------------------------------------------------------------------------
+
+### `OdeControl$get_controller()`
+
+The step-size rule in force.
+
+#### Usage
+
+    OdeControl$get_controller()
+
+------------------------------------------------------------------------
+
+### `OdeControl$set_step_size_initial()`
 
 Set initial step size.
 
@@ -216,7 +251,7 @@ Set initial step size.
 
 ------------------------------------------------------------------------
 
-### Method `clone()`
+### `OdeControl$clone()`
 
 The objects of this class are cloneable with this method.
 

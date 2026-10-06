@@ -17,8 +17,12 @@ against. The next-generation `plant` core links against it.
 ## Layout
 
 - `inst/include/` — the **header-only C++ core** (the solver; this is
-  the reusable artifact).
-- `src/` — Rcpp glue compiled into the package.
+  the reusable artifact). `ode_callback_system.hpp` is the System over a
+  run-time callable (`std::function`), the language-neutral half of
+  solving an R (or any other) right-hand side.
+- `src/` — Rcpp glue compiled into the package. `r_system.h` /
+  `r_system_interface.cpp` are the R adapter over the callback system
+  and the `OdeSolver` exports.
 - `R/` — friendly **R6** wrappers around the C++ objects.
 - `tools/`, `vendor` (XAD) — the vendored autodiff library.
 - `ARCHITECTURE.md` — read this for the C++ design; `vignettes/` for

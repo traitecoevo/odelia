@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,9 +38,46 @@
     </div>
 
     <div class="section level2">
+      <h2 id="solving-a-system-written-in-r">Solving a system written in R<a class="anchor" aria-label="anchor" href="#solving-a-system-written-in-r"></a></h2>
+
+      <div class="section-desc"><p>A right-hand side as an R function, with any of the three steppers.</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="ode_solve.html">ode_solve()</a></code>
+
+        </dt>
+        <dd>Solve an ODE given as an R function, deSolve style</dd>
+
+        <dt>
+
+          <code><a href="ode_counts.html">ode_counts()</a></code>
+
+        </dt>
+        <dd>What a solve cost</dd>
+
+        <dt>
+
+          <code><a href="OdeSolver.html">OdeSolver</a></code>
+
+        </dt>
+        <dd>An ODE solver over an R right-hand side</dd>
+
+        <dt>
+
+          <code><a href="domain_error.html">domain_error()</a></code>
+
+        </dt>
+        <dd>Signal that a state is outside the model's domain</dd>
+      </dl></div><div class="section level2">
       <h2 id="systems-and-solvers">Systems and solvers<a class="anchor" aria-label="anchor" href="#systems-and-solvers"></a></h2>
 
-      <div class="section-desc"><p>Define an ODE system and advance it through time.</p></div>
+      <div class="section-desc"><p>Define an ODE system in C++ and advance it through time.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -127,7 +164,7 @@
 
       <dl><dt>
 
-          <code><a href="low_level_wrappers.html">low_level_wrappers</a></code> <code><a href="low_level_wrappers.html">Drivers_new</a></code> <code><a href="low_level_wrappers.html">Drivers_set_constant</a></code> <code><a href="low_level_wrappers.html">Drivers_set_variable</a></code> <code><a href="low_level_wrappers.html">Drivers_set_extrapolate</a></code> <code><a href="low_level_wrappers.html">Drivers_evaluate</a></code> <code><a href="low_level_wrappers.html">Drivers_evaluate_range</a></code> <code><a href="low_level_wrappers.html">Drivers_get_names</a></code> <code><a href="low_level_wrappers.html">Drivers_clear</a></code> <code><a href="low_level_wrappers.html">OdeControl_new</a></code> <code><a href="low_level_wrappers.html">OdeControl_get_controls</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_controls</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_tol_abs</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_tol_rel</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_a_y</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_a_dydt</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_step_size_min</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_step_size_max</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_step_size_initial</a></code>
+          <code><a href="low_level_wrappers.html">low_level_wrappers</a></code> <code><a href="low_level_wrappers.html">Drivers_new</a></code> <code><a href="low_level_wrappers.html">Drivers_set_constant</a></code> <code><a href="low_level_wrappers.html">Drivers_set_variable</a></code> <code><a href="low_level_wrappers.html">Drivers_set_extrapolate</a></code> <code><a href="low_level_wrappers.html">Drivers_evaluate</a></code> <code><a href="low_level_wrappers.html">Drivers_evaluate_range</a></code> <code><a href="low_level_wrappers.html">Drivers_get_names</a></code> <code><a href="low_level_wrappers.html">Drivers_clear</a></code> <code><a href="low_level_wrappers.html">OdeControl_new</a></code> <code><a href="low_level_wrappers.html">OdeControl_get_controls</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_controls</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_tol_abs</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_tol_rel</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_a_y</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_a_dydt</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_step_size_min</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_step_size_max</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_step_size_initial</a></code> <code><a href="low_level_wrappers.html">OdeControl_set_controller</a></code> <code><a href="low_level_wrappers.html">OdeControl_get_controller</a></code>
 
         </dt>
         <dd>Low-level Drivers and OdeControl wrappers</dd>

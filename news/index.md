@@ -1,5 +1,126 @@
 # Changelog
 
+## odelia 0.6.0
+
+**A right-hand side written in R can be solved by the same steppers
+([\#62](https://github.com/traitecoevo/odelia/issues/62)).**
+[`ode_solve()`](https://traitecoevo.github.io/odelia/reference/ode_solve.md)
+is shaped like
+[`deSolve::ode()`](https://rdrr.io/pkg/deSolve/man/ode.html), so a
+function written for it runs unchanged, with any stepper, and returns a
+matrix with a `time` column; `OdeSolver` underneath is driven a step at
+a time and lets a caller change the state between steps, at a different
+length if need be, which is what a consumer with events needs.
+[`domain_error()`](https://traitecoevo.github.io/odelia/reference/domain_error.md)
+called anywhere below a callback leaves it and has the step rejected and
+retried smaller, the
+[\#55](https://github.com/traitecoevo/odelia/issues/55) bargain reached
+from R; any other error reaches R as itself.
+[`ode_counts()`](https://traitecoevo.github.io/odelia/reference/ode_counts.md)
+reports what a solve cost in right-hand-side evaluations and Jacobian
+formations, which for a right-hand side that is itself a large
+computation is the whole cost of the integration.
+
+The thing that steps a run-time callable is `CallbackSystem` in the
+R-free core (`ode_callback_system.hpp`), a System over `std::function`s,
+exercised as plain C++ in `tests/standalone/`; the R adapter in `src/`
+is the few lines that wrap `Rcpp::Function`s, and a Python binding would
+be the same lines over a `py::function`. Evaluation is lazy, so the
+three places the solver sets a state without wanting its rates cost
+nothing.
+
+**A third stepper, Dormand–Prince 5(4), with dense output of its own
+order ([\#24](https://github.com/traitecoevo/odelia/issues/24)).**
+`method = "dopri"` is the pair behind `deSolve`’s `ode45`, and what it
+has over Cash–Karp is a free fourth-order continuous extension from its
+own stages: `Solver::advance_collect(times, dense = TRUE)` (R:
+`OdeSolver$advance_collect()`, and the default in
+[`ode_solve()`](https://traitecoevo.github.io/odelia/reference/ode_solve.md)
+under `"dopri"`) lets the controller choose its steps and reads the
+requested times off the step that spans each, so ten thousand output
+rows cost the same integration as two, at the step’s own accuracy —
+asserted on a quartic, which the interpolant reproduces to rounding, and
+on Lorenz, where dense rows sit within 5e-7 of landed rows at 1e-8.
+Under the other two steppers the interpolant is cubic Hermite on the
+step’s endpoints, one order short (40–100× the integration error on
+Lorenz, measured), so with those
+[`ode_solve()`](https://traitecoevo.github.io/odelia/reference/ode_solve.md)
+defaults to `dense = FALSE`, which lands a step on every requested time
+as `ode45` does. The solver also exposes `interpolate()`,
+`get_step_size()` / `set_step_size()`, a bounded single
+`step(time_max)`, a rejection counter and a mid-step flag.
+
+**Three additions to the core open the implicit stepper to a callback
+system and cost every RODAS user less.** A System may supply its own
+Jacobian through an optional `ode_jacobian(y, t, dydt, J)` hook, taken
+in preference to the AD route when both exist (`fd_jacobian()` is the
+one-line finite-difference body for a system with no `rebind()`); a
+System may declare `ode_autonomous()` and is then not asked for a
+`df/dt` term, which was one extra evaluation per step; and the Jacobian
+and `df/dt` formed at a step’s start are kept across a retry of the same
+step rather than evaluated again for the same numbers. RODAS also now
+declares first-same-as-last, since the derivative it computes at the new
+point is exactly the next step’s start — it had been recomputed on every
+step. A singular W is a step rejection rather than a fatal. All of this
+is additive and bit-identical for a system that declares nothing new,
+asserted by `test-rodas.R` unchanged; per accepted RODAS step the budget
+is six evaluations, plus one for `df/dt` unless autonomous, plus the
+Jacobian once.
+
+**Measured against deSolve with the same R right-hand side**, installed
+build, median of seven. Per call the two are the same: on Lorenz 0.95 µs
+here, 1.03 µs there, the R function itself 0.6 µs of each — what remains
+is R’s. What differs is how many calls a fine output grid costs. Lorenz
+to t = 100 at 1e-6 with 10001 rows:
+[`ode_solve()`](https://traitecoevo.github.io/odelia/reference/ode_solve.md)
+27 ms for 32011 evaluations, `deSolve::ode(method = "ode45")` 57 ms for
+60002, `lsoda` 31 ms for 22729, so 2.1× `ode45` and level with `lsoda`;
+against a 1e-12 reference over the first two time units the three err by
+5.8e-5, 5.6e-6 (its landed steps over-resolve) and 1.3e-4. With 1001
+rows all three take 25–27 ms: the integration itself, not the output, is
+then the cost. Compiled Lorenz through `Lorenz_Solver` takes 1 ms, a
+hundred times faster than any of them. Stiff Van der Pol (ε = 1e-4, t =
+2): RODAS through R 823 steps and 7449 evaluations, the explicit
+steppers above 10000, deSolve `radau` 364 and 3279; odelia and radau
+agree to 5e-6.
+
+**The step-size rule is a switch, with today’s rule the default
+([\#64](https://github.com/traitecoevo/odelia/issues/64)).**
+`OdeControl` gains `set_controller()`: `"gsl"` is the rule odelia has
+always had (GSL’s standard control: accept below 1.1, grow only below
+0.5, otherwise keep the step), `"hairer"` is the classical rule of
+`dopri5.f` (without its Lund stabilisation term) and deSolve (RMS error
+norm, accept at 1, rescale after every step, no growth right after a
+rejection). The dead band in the gsl rule makes it ride the acceptance
+edge: on Lorenz to t = 100 it rejects 794 attempts where the hairer rule
+rejects 491 and does the same 4700 attempts and 28200 evaluations
+deSolve’s `ode45` does. The default stays gsl because changing it
+changes every adaptive step sequence plant takes;
+`ode_solve(controller = )` and `OdeControl$set_controller()` opt in now,
+and the family can flip the default with plant re-baselined.
+
+**A finite-difference Jacobian’s small-component floor is 1e-5, not 1
+and not the absolute tolerance.** `fd_jacobian()` perturbs component j
+by `rel_step * max(|y_j|, y_floor)`. With the floor at 1 a component of
+size 1e-5 was perturbed by a tenth of itself: on Robertson’s kinetics
+RODAS took 19000 steps where 436 do (435 with the analytic Jacobian;
+radau takes 144, being fifth order with Newton). With the floor at the
+absolute tolerance, the first fix tried, a tolerance of 1e-10 makes the
+perturbation 1e-16 and the difference vanishes in the subtraction (a
+unit derivative came back as 0, measured). The default is now
+`rodas.f`’s 1e-5 everywhere (`jac_fd_floor`). A component sitting on the
+upper edge of its domain, whose upward perturbation the right-hand side
+refuses, is perturbed downwards instead: the Jacobian does not depend on
+the step size, so retrying smaller could never have helped.
+[`ode_solve()`](https://traitecoevo.github.io/odelia/reference/ode_solve.md)
+also bounds the step by the span of `times` rather than the control’s
+plant-sized default of 10, which on the same problem was costing a
+thousand steps between t = 10 and t = 10⁴.
+
+A **minor** bump: new capability to pin against, headers changed
+additively, no consumer’s floor moves (nothing in the family uses RODAS
+or the new stepper yet).
+
 ## odelia 0.5.1
 
 **The spline reads as fast as 0.4.0’s again, with the same numbers.** On

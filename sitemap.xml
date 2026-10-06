@@ -15,8 +15,12 @@
 <url><loc>https://traitecoevo.github.io/odelia/reference/LorenzSystem.html</loc></url>
 <url><loc>https://traitecoevo.github.io/odelia/reference/Lorenz_Solver.html</loc></url>
 <url><loc>https://traitecoevo.github.io/odelia/reference/OdeControl.html</loc></url>
+<url><loc>https://traitecoevo.github.io/odelia/reference/OdeSolver.html</loc></url>
+<url><loc>https://traitecoevo.github.io/odelia/reference/domain_error.html</loc></url>
 <url><loc>https://traitecoevo.github.io/odelia/reference/index.html</loc></url>
 <url><loc>https://traitecoevo.github.io/odelia/reference/low_level_wrappers.html</loc></url>
+<url><loc>https://traitecoevo.github.io/odelia/reference/ode_counts.html</loc></url>
+<url><loc>https://traitecoevo.github.io/odelia/reference/ode_solve.html</loc></url>
 <url><loc>https://traitecoevo.github.io/odelia/reference/odelia-package.html</loc></url>
 <url><loc>https://traitecoevo.github.io/odelia/reference/odelia_load_dll.html</loc></url>
 </urlset>

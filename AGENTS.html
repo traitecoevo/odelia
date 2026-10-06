@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -45,9 +45,9 @@
 <div class="section level2">
 <h2 id="layout">Layout<a class="anchor" aria-label="anchor" href="#layout"></a></h2>
 <ul><li>
-<code>inst/include/</code> — the <strong>header-only C++ core</strong> (the solver; this is the reusable artifact).</li>
+<code>inst/include/</code> — the <strong>header-only C++ core</strong> (the solver; this is the reusable artifact). <code>ode_callback_system.hpp</code> is the System over a run-time callable (<code>std::function</code>), the language-neutral half of solving an R (or any other) right-hand side.</li>
 <li>
-<code>src/</code> — Rcpp glue compiled into the package.</li>
+<code>src/</code> — Rcpp glue compiled into the package. <code>r_system.h</code> / <code>r_system_interface.cpp</code> are the R adapter over the callback system and the <code>OdeSolver</code> exports.</li>
 <li>
 <code>R/</code> — friendly <strong>R6</strong> wrappers around the C++ objects.</li>
 <li>

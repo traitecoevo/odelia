@@ -97,6 +97,34 @@ R-CMD-check.) odelia must therefore keep **exporting** these symbols
 from its DLL — do not add a restrictive `.def` or
 `-Wl,--exclude-all-symbols` to odelia’s build.
 
+## A right-hand side handed in at run time
+
+`ode_callback_system.hpp` holds `CallbackSystem`, a System whose
+right-hand side (and optionally Jacobian and validity predicate) are
+`std::function`s handed in at construction, so a callable from any
+language is stepped by the same solver as a compiled system. It is part
+of the R-free core and is exercised as plain C++ in `tests/standalone/`;
+the R adapter in `src/r_system.h` is a few lines that wrap
+`Rcpp::Function`s, and a Python binding would be the same lines over a
+`py::function`. Two contracts the adapter relies on and the core keeps:
+evaluation is lazy (setting the state makes no call; reading the rates
+does), and the last call of an accepted step is at the accepted state.
+
+The implicit stepper takes its Jacobian from a System’s own
+`ode_jacobian()` hook when there is one, else by forward-mode AD on a
+`rebind()`-able system (`ode_jacobian.hpp`); `fd_jacobian()` there is
+the one-line finite-difference body for a hook. A system declaring
+`ode_autonomous()` is not asked for a `df/dt` term.
+
+`ode_step_dopri.hpp` is a third stepper, Dormand-Prince 5(4), whose
+value over Cash-Karp is a free continuous extension of order 4:
+`SolverInternal::interpolate` reads the state anywhere inside the last
+accepted step from the step’s own stages, and
+`Solver::advance_collect(times, dense = true)` uses it to report at
+requested times without making a step end on each. Under the other
+steppers the interpolant is cubic Hermite on the step’s endpoints, one
+order short.
+
 ## The solver core contains no R
 
 Everything in `inst/include/odelia/` **except** `solver_interface.hpp`
@@ -109,13 +137,13 @@ packages — `leaf`, for one — run their C++ test suites without an R
 session (traitecoevo/leaf_cpp#11, odelia \#43).
 
 `tests/standalone/` holds the guard: a translation unit that includes
-the whole core and integrates the Lorenz system, built by
-`make test-cpp` with `-I inst/include` and nothing else. CI runs it on a
-runner with no R. It fails loudly if an R header creeps back in, and —
-the subtler case — if a header comes to rely on a standard-library
-facility it never includes and was quietly getting from R’s headers.
-`spline.hpp` was using `assert` without `<cassert>` on exactly that
-basis.
+the whole core and integrates the Lorenz system (compiled, and through a
+callback), built by `make test-cpp` with `-I inst/include` and nothing
+else. CI runs it on a runner with no R. It fails loudly if an R header
+creeps back in, and — the subtler case — if a header comes to rely on a
+standard-library facility it never includes and was quietly getting from
+R’s headers. `spline.hpp` was using `assert` without `<cassert>` on
+exactly that basis.
 
 Note that the standalone build compiles `src/Tape.cpp` alongside the
 test. That is the single-`Tape`-object rule above, not an R dependency:

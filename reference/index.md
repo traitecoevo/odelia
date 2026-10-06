@@ -1,8 +1,21 @@
 # Package index
 
+## Solving a system written in R
+
+A right-hand side as an R function, with any of the three steppers.
+
+- [`ode_solve()`](https://traitecoevo.github.io/odelia/reference/ode_solve.md)
+  : Solve an ODE given as an R function, deSolve style
+- [`ode_counts()`](https://traitecoevo.github.io/odelia/reference/ode_counts.md)
+  : What a solve cost
+- [`OdeSolver`](https://traitecoevo.github.io/odelia/reference/OdeSolver.md)
+  : An ODE solver over an R right-hand side
+- [`domain_error()`](https://traitecoevo.github.io/odelia/reference/domain_error.md)
+  : Signal that a state is outside the model's domain
+
 ## Systems and solvers
 
-Define an ODE system and advance it through time.
+Define an ODE system in C++ and advance it through time.
 
 - [`LorenzSystem`](https://traitecoevo.github.io/odelia/reference/LorenzSystem.md)
   : Lorenz System R6 Class
@@ -55,4 +68,6 @@ prefer the R6 classes above.
   [`OdeControl_set_step_size_min`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
   [`OdeControl_set_step_size_max`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
   [`OdeControl_set_step_size_initial`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
+  [`OdeControl_set_controller`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
+  [`OdeControl_get_controller`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
   : Low-level Drivers and OdeControl wrappers

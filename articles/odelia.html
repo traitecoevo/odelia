@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -188,34 +188,160 @@ or tighten them:</p>
 <div class="section level2">
 <h2 id="choosing-an-integration-method">Choosing an integration method<a class="anchor" aria-label="anchor" href="#choosing-an-integration-method"></a>
 </h2>
-<p><code>odelia</code> ships two steppers, chosen with the
+<p><code>odelia</code> ships three steppers, chosen with the
 <code>method</code> argument when you create a solver:</p>
 <ul>
 <li>
-<code>"rkck"</code> (default) — an explicit adaptive Cash-Karp
-Runge-Kutta 4(5) method. Fast and accurate for
-<strong>non-stiff</strong> problems like Lorenz.</li>
+<code>"rkck"</code> (the default for a compiled system) — an
+explicit adaptive Cash-Karp Runge-Kutta 4(5) method. Fast and accurate
+for <strong>non-stiff</strong> problems like Lorenz.</li>
+<li>
+<code>"dopri"</code> — the explicit Dormand-Prince 5(4) pair, the
+method behind <code>deSolve</code>’s <code>ode45</code>, with a
+<strong>dense output</strong> of its own order: the state at any time
+inside a step, from the step’s own stages, at no extra evaluation. The
+default for a right-hand side written in R (below).</li>
 <li>
 <code>"rodas"</code> — an implicit, adaptive RODAS4(3) Rosenbrock
-method for <strong>stiff</strong> problems. Each step does one
-exact-Jacobian evaluation (via automatic differentiation) plus a handful
-of linear solves, so the step size is limited by accuracy rather than
-stability. On a stiff problem the explicit method is forced into tiny
-steps (or fails), while RODAS keeps large steps.</li>
+method for <strong>stiff</strong> problems. Each step forms the Jacobian
+once (by automatic differentiation for a compiled system, or from the
+system’s own Jacobian hook) plus a handful of linear solves, so the step
+size is limited by accuracy rather than stability. On a stiff problem
+the explicit method is forced into tiny steps (or fails), while RODAS
+keeps large steps.</li>
 </ul>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">runner_stiff</span> <span class="op">&lt;-</span> <span class="va"><a href="../reference/Lorenz_Solver.html">Lorenz_Solver</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="va">lz</span><span class="op">$</span><span class="va">ptr</span>, <span class="va">ctrl</span><span class="op">$</span><span class="va">ptr</span>, method <span class="op">=</span> <span class="st">"rodas"</span><span class="op">)</span></span></code></pre></div>
-<p>Both steppers share the same adaptive step-size controller and
+<p>All three share the same adaptive step-size controller and
 <code>OdeControl</code> tolerances, so you can switch between them
-without changing anything else.</p>
-<p>To use <code>method = "rodas"</code> with your own system, the
-system’s C++ class must provide a
+without changing anything else. The controller’s rule is itself a
+switch, <code>OdeControl$set_controller()</code>: <code>"gsl"</code>
+(the default, odelia’s long-standing rule) or <code>"hairer"</code> (the
+classical rule of Hairer’s codes and <code>deSolve</code>, which rejects
+far fewer attempts; see the package NEWS for 0.6.0).</p>
+<p>To use <code>method = "rodas"</code> with your own C++ system, give
+it either a
 <code>template&lt;class U&gt; System&lt;U&gt; rebind() const</code>
 method (a one-liner that copies the system with its scalar type swapped)
-so its right-hand side can be differentiated for the Jacobian; see the
-Lorenz example. The implicit stepper currently runs on the passive
-(non-AD) solver; differentiating a fit <em>through</em> RODAS is planned
-(odelia issue #35).</p>
+so its right-hand side can be differentiated for the Jacobian, as the
+Lorenz example does, or an <code>ode_jacobian(y, t, dydt, J)</code>
+method that fills the Jacobian itself – the header
+<code>ode_jacobian.hpp</code> has <code>fd_jacobian()</code> for a
+one-line finite-difference version. The implicit stepper currently runs
+on the passive (non-AD) solver; differentiating a fit <em>through</em>
+RODAS is planned (odelia issue #36).</p>
+</div>
+<div class="section level2">
+<h2 id="solving-a-system-written-in-r">Solving a system written in R<a class="anchor" aria-label="anchor" href="#solving-a-system-written-in-r"></a>
+</h2>
+<p>Everything above drives a system compiled in C++. From 0.6.0 the same
+solver, with the same controller and all three steppers, also takes a
+right-hand side written in R. There is nothing to compile:
+<code><a href="../reference/ode_solve.html">ode_solve()</a></code> is shaped like <code><a href="https://rdrr.io/pkg/deSolve/man/ode.html" class="external-link">deSolve::ode()</a></code>, so
+a function written for deSolve runs unchanged, and returns a matrix with
+a <code>time</code> column and one column per state variable.</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">lorenz_r</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">y</span>, <span class="va">p</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">p</span><span class="op">[[</span><span class="st">"sigma"</span><span class="op">]</span><span class="op">]</span> <span class="op">*</span> <span class="op">(</span><span class="va">y</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span> <span class="op">-</span> <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span>,</span>
+<span>         <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span> <span class="op">*</span> <span class="op">(</span><span class="va">p</span><span class="op">[[</span><span class="st">"R"</span><span class="op">]</span><span class="op">]</span> <span class="op">-</span> <span class="va">y</span><span class="op">[</span><span class="fl">3</span><span class="op">]</span><span class="op">)</span> <span class="op">-</span> <span class="va">y</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span>,</span>
+<span>         <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span> <span class="op">*</span> <span class="va">y</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span> <span class="op">-</span> <span class="va">p</span><span class="op">[[</span><span class="st">"b"</span><span class="op">]</span><span class="op">]</span> <span class="op">*</span> <span class="va">y</span><span class="op">[</span><span class="fl">3</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="va">pars</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>sigma <span class="op">=</span> <span class="fl">10</span>, R <span class="op">=</span> <span class="fl">28</span>, b <span class="op">=</span> <span class="fl">8</span> <span class="op">/</span> <span class="fl">3</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">out_r</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/ode_solve.html">ode_solve</a></span><span class="op">(</span><span class="va">lorenz_r</span>, y0 <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fl">1</span>, y <span class="op">=</span> <span class="fl">1</span>, z <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>,</span>
+<span>                   times <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">2</span>, by <span class="op">=</span> <span class="fl">0.1</span><span class="op">)</span>, parms <span class="op">=</span> <span class="va">pars</span>,</span>
+<span>                   autonomous <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">out_r</span><span class="op">)</span></span>
+<span><span class="co">#&gt;      time         x         y         z</span></span>
+<span><span class="co">#&gt; [1,]  0.0  1.000000  1.000000  1.000000</span></span>
+<span><span class="co">#&gt; [2,]  0.1  2.133108  4.471421  1.113900</span></span>
+<span><span class="co">#&gt; [3,]  0.2  6.542529 13.731189  4.180196</span></span>
+<span><span class="co">#&gt; [4,]  0.3 16.684825 27.183509 26.206476</span></span>
+<span><span class="co">#&gt; [5,]  0.4 15.366195  1.113016 46.757851</span></span>
+<span><span class="co">#&gt; [6,]  0.5  1.198264 -8.867204 32.454742</span></span></code></pre></div>
+<p>The steps are the controller’s own, and the rows asked for are read
+off each step’s dense output (<code>dense = TRUE</code>, the default
+under <code>"dopri"</code>), so asking for ten thousand rows costs the
+same integration as asking for ten. Under the other two steppers the
+interpolant is one order short of the step, so there the default is
+<code>dense = FALSE</code>: a step is made to end on every requested
+time, which is what <code>deSolve</code>’s <code>ode45</code> does and
+what makes a fine output grid expensive there.</p>
+<p>The implicit stepper needs the Jacobian of the right-hand side.
+Supply it as <code>jacfunc(t, y, parms)</code>, an n by n matrix whose
+column j is the derivative with respect to <code>y[j]</code>, or leave
+it out and it is formed by forward differences at <code>n</code> extra
+evaluations per step. <code><a href="../reference/ode_counts.html">ode_counts()</a></code> says what the solve
+cost, which for a right-hand side that is itself expensive is the only
+number that matters:</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">lorenz_jac</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">y</span>, <span class="va">p</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">-</span><span class="va">p</span><span class="op">[[</span><span class="st">"sigma"</span><span class="op">]</span><span class="op">]</span>, <span class="va">p</span><span class="op">[[</span><span class="st">"R"</span><span class="op">]</span><span class="op">]</span> <span class="op">-</span> <span class="va">y</span><span class="op">[</span><span class="fl">3</span><span class="op">]</span>, <span class="va">y</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span>,</span>
+<span>           <span class="va">p</span><span class="op">[[</span><span class="st">"sigma"</span><span class="op">]</span><span class="op">]</span>, <span class="op">-</span><span class="fl">1</span>, <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span>,</span>
+<span>           <span class="fl">0</span>, <span class="op">-</span><span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span>, <span class="op">-</span><span class="va">p</span><span class="op">[[</span><span class="st">"b"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span>, <span class="fl">3</span>, <span class="fl">3</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="va">out_rodas</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/ode_solve.html">ode_solve</a></span><span class="op">(</span><span class="va">lorenz_r</span>, y0 <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fl">1</span>, y <span class="op">=</span> <span class="fl">1</span>, z <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>,</span>
+<span>                       times <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">2</span>, by <span class="op">=</span> <span class="fl">0.1</span><span class="op">)</span>, parms <span class="op">=</span> <span class="va">pars</span>,</span>
+<span>                       jacfunc <span class="op">=</span> <span class="va">lorenz_jac</span>, method <span class="op">=</span> <span class="st">"rodas"</span>, autonomous <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/ode_counts.html">ode_counts</a></span><span class="op">(</span><span class="va">out_rodas</span><span class="op">)</span></span>
+<span><span class="co">#&gt;        n_rhs        n_jac      n_steps n_rejections </span></span>
+<span><span class="co">#&gt;         1339          211          211           12</span></span></code></pre></div>
+<p>A stiff problem is where the implicit stepper earns its keep. Van der
+Pol with a small <code>eps</code> forces the explicit stepper into
+thousands of tiny steps for stability while RODAS stays
+accuracy-limited:</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">vdp</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">y</span>, <span class="va">eps</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">y</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span>, <span class="op">(</span><span class="op">(</span><span class="fl">1</span> <span class="op">-</span> <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span> <span class="op">*</span> <span class="va">y</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span> <span class="op">-</span> <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span> <span class="op">/</span> <span class="va">eps</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="va">times</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">2</span>, by <span class="op">=</span> <span class="fl">0.2</span><span class="op">)</span></span>
+<span><span class="va">stiff_rodas</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/ode_solve.html">ode_solve</a></span><span class="op">(</span><span class="va">vdp</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">0</span><span class="op">)</span>, <span class="va">times</span>, parms <span class="op">=</span> <span class="fl">1e-4</span>, method <span class="op">=</span> <span class="st">"rodas"</span>, autonomous <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="va">stiff_dopri</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/ode_solve.html">ode_solve</a></span><span class="op">(</span><span class="va">vdp</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">0</span><span class="op">)</span>, <span class="va">times</span>, parms <span class="op">=</span> <span class="fl">1e-4</span>, method <span class="op">=</span> <span class="st">"dopri"</span>, autonomous <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span>rodas <span class="op">=</span> <span class="fu"><a href="../reference/ode_counts.html">ode_counts</a></span><span class="op">(</span><span class="va">stiff_rodas</span><span class="op">)</span>, dopri <span class="op">=</span> <span class="fu"><a href="../reference/ode_counts.html">ode_counts</a></span><span class="op">(</span><span class="va">stiff_dopri</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt;       n_rhs n_jac n_steps n_rejections</span></span>
+<span><span class="co">#&gt; rodas  7449   823     823          144</span></span>
+<span><span class="co">#&gt; dopri 79939     0   11938         1385</span></span></code></pre></div>
+<p>Underneath <code><a href="../reference/ode_solve.html">ode_solve()</a></code> is the R6 class
+<code>OdeSolver</code>, which is driven a step at a time. That is what a
+caller with <em>events</em> needs: after each accepted step it can look
+at the state, change it, and even change its length, before the next
+step. The right-hand side here is <code>rhs(t, y)</code> returning the
+rates directly, and a callback that finds its state impossible calls
+<code><a href="../reference/domain_error.html">domain_error()</a></code> to have the step rejected and retried
+smaller rather than committed:</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">logistic</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">y</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span> <span class="op">&lt;</span> <span class="fl">0</span> <span class="op">||</span> <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span> <span class="op">&gt;</span> <span class="fl">1</span><span class="op">)</span> <span class="fu"><a href="../reference/domain_error.html">domain_error</a></span><span class="op">(</span><span class="st">"y has left [0, 1]"</span><span class="op">)</span></span>
+<span>  <span class="fl">50</span> <span class="op">*</span> <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1</span> <span class="op">-</span> <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va"><a href="../reference/OdeSolver.html">OdeSolver</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="va">logistic</span>, y0 <span class="op">=</span> <span class="fl">0.5</span>, autonomous <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="kw">while</span> <span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="fu">time</span><span class="op">(</span><span class="op">)</span> <span class="op">&lt;</span> <span class="fl">1</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">s</span><span class="op">$</span><span class="fu">step</span><span class="op">(</span>time_max <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>time <span class="op">=</span> <span class="va">s</span><span class="op">$</span><span class="fu">time</span><span class="op">(</span><span class="op">)</span>, y <span class="op">=</span> <span class="va">s</span><span class="op">$</span><span class="fu">state</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; time    y </span></span>
+<span><span class="co">#&gt;    1    1</span></span>
+<span><span class="va">s</span><span class="op">$</span><span class="fu">counts</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt;        n_rhs        n_jac      n_steps n_rejections </span></span>
+<span><span class="co">#&gt;         1343            0          143           99</span></span></code></pre></div>
+<p>Between steps <code>s$set_state(y, time)</code> re-seeds the state at
+any length and <code>s$set_step_size(h)</code> carries a step size
+across it; <code>s$advance_collect(times)</code> is the output loop of
+<code><a href="../reference/ode_solve.html">ode_solve()</a></code>, a matrix of states at the times asked for.</p>
+<p>Each stage of a step is one call into R, so for a cheap right-hand
+side this runs at the speed of the R function and the call into it,
+which is the speed <code>deSolve</code> runs an R function at too (on
+Lorenz, 0.95 µs a call here against 1.03 µs there, with the R function
+itself 0.6 µs of each). What makes odelia faster on a fine output grid
+is the dense output: <code>deSolve::ode45</code> lands a step on every
+requested time, odelia does not have to. Lorenz to t = 100 at 1e-6 with
+10001 rows takes 27 ms here against 62 ms for <code>ode45</code> and 33
+ms for <code>lsoda</code>, with the same R function and the same
+accuracy against a tight reference. The compiled route above is a
+hundred times faster still, because nothing crosses into R per stage.
+For a right-hand side that is itself a large computation the solver’s
+own cost is nothing, and what <code><a href="../reference/ode_counts.html">ode_counts()</a></code> reports is the
+whole cost of the integration.</p>
 </div>
 <div class="section level2">
 <h2 id="where-next">Where next<a class="anchor" aria-label="anchor" href="#where-next"></a>
