@@ -4,7 +4,7 @@
 
 #include <odelia/ode_interface.hpp>
 #include <odelia/ode_control.hpp>
-#include <odelia/ode_step.hpp>
+#include <odelia/ode_step_rkck.hpp>
 #include <odelia/ode_step_rodas.hpp>
 #include <odelia/ode_step_dopri.hpp>
 

@@ -136,12 +136,12 @@ SEXP odelia_return_from(SEXP env, SEXP value) {
 }
 
 // [[Rcpp::export]]
-Rcpp::List RSolver_counts(SEXP solver_xp) {
+Rcpp::NumericVector RSolver_counts(SEXP solver_xp) {
   auto solver = get_rsolver(solver_xp);
   const ode::CallbackSystem& sys = solver->get_system_ref();
   const std::vector<double> times = solver->times();
   const double n_steps = times.empty() ? 0.0 : static_cast<double>(times.size() - 1);
-  return Rcpp::List::create(
+  return Rcpp::NumericVector::create(
       Rcpp::Named("n_rhs") = static_cast<double>(sys.n_rhs),
       Rcpp::Named("n_jac") = static_cast<double>(sys.n_jac),
       Rcpp::Named("n_steps") = n_steps,

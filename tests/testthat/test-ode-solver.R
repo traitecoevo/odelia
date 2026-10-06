@@ -42,9 +42,10 @@ testthat::test_that("ode_solve on Lorenz matches the compiled solver, with every
     expect_equal(out[, "x"], ref$x, tolerance = 1e-6)
     expect_equal(out[, "y"], ref$y, tolerance = 1e-6)
     expect_equal(out[, "z"], ref$z, tolerance = 1e-6)
-    counts <- attr(out, "counts")
-    expect_named(counts, c("n_rhs", "n_jac", "n_steps", "n_rejections"))
-    expect_gt(counts$n_rhs, 0)
+    expect_s3_class(out, "odelia_solution")
+    expect_named(counts(out), c("n_rhs", "n_jac", "n_steps", "n_rejections"))
+    expect_gt(counts(out)[["n_rhs"]], 0)
+    expect_output(print(out), "evaluations; counts\\(\\) for detail")
   }
 })
 
@@ -67,18 +68,18 @@ testthat::test_that("a supplied Jacobian agrees with finite differences and is f
   an <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, method = "rodas",
                   jacfunc = lorenz_r_jac, autonomous = TRUE)
   expect_equal(an[2, -1], fd[2, -1], tolerance = 1e-5)
-  ca <- attr(an, "counts")
-  cf <- attr(fd, "counts")
-  expect_equal(ca$n_jac, ca$n_steps)
+  ca <- counts(an)
+  cf <- counts(fd)
+  expect_equal(ca[["n_jac"]], ca[["n_steps"]])
   # The budget from tests/standalone: one evaluation to seed, six per attempt,
   # and for the finite-difference Jacobian n = 3 more per accepted step.
-  expect_equal(ca$n_rhs, 1 + 6 * (ca$n_steps + ca$n_rejections))
-  expect_equal(cf$n_rhs, 1 + 6 * (cf$n_steps + cf$n_rejections) + 3 * cf$n_steps)
+  expect_equal(ca[["n_rhs"]], 1 + 6 * (ca[["n_steps"]] + ca[["n_rejections"]]))
+  expect_equal(cf[["n_rhs"]], 1 + 6 * (cf[["n_steps"]] + cf[["n_rejections"]]) + 3 * cf[["n_steps"]])
   # Not declared autonomous: one more per accepted step for df/dt.
   na <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, method = "rodas",
                   jacfunc = lorenz_r_jac, autonomous = FALSE)
-  cn <- attr(na, "counts")
-  expect_equal(cn$n_rhs, 1 + 6 * (cn$n_steps + cn$n_rejections) + cn$n_steps)
+  cn <- counts(na)
+  expect_equal(cn[["n_rhs"]], 1 + 6 * (cn[["n_steps"]] + cn[["n_rejections"]]) + cn[["n_steps"]])
 })
 
 testthat::test_that("RODAS through R takes far fewer steps than RKCK on stiff Van der Pol", {
@@ -89,7 +90,7 @@ testthat::test_that("RODAS through R takes far fewer steps than RKCK on stiff Va
   rkck <- ode_solve(vdp, c(2, 0), times, eps, method = "rkck", autonomous = TRUE)
   expect_true(all(is.finite(rodas)))
   expect_equal(rodas[, 2], rkck[, 2], tolerance = 1e-3)
-  expect_lt(attr(rodas, "counts")$n_steps, attr(rkck, "counts")$n_steps / 5)
+  expect_lt(counts(rodas)[["n_steps"]], counts(rkck)[["n_steps"]] / 5)
 })
 
 testthat::test_that("dense output under dopri agrees with landing on every time, for far fewer evaluations", {
@@ -100,13 +101,13 @@ testthat::test_that("dense output under dopri agrees with landing on every time,
                       rtol = 1e-8, atol = 1e-8, autonomous = TRUE, dense = FALSE)
   expect_equal(dense[, "time"], times)
   expect_equal(dense[, -1], landed[, -1], tolerance = 1e-5)
-  expect_lt(attr(dense, "counts")$n_rhs, attr(landed, "counts")$n_rhs / 2)
+  expect_lt(counts(dense)[["n_rhs"]], counts(landed)[["n_rhs"]] / 2)
   # A quartic is reproduced exactly, whatever the steps: the dense output has
   # the method's order.
   grid <- seq(0, 2, by = 0.01)
   quartic <- ode_solve(function(t, y, p) 4 * t^3, 0, grid, method = "dopri")
   expect_equal(quartic[, 2], grid^4, tolerance = 1e-10)
-  expect_lt(attr(quartic, "counts")$n_steps, 30)
+  expect_lt(counts(quartic)[["n_steps"]], 30)
   # Under the other steppers the interpolant is cubic Hermite: exact for a
   # cubic, and one order short otherwise.
   cubic <- ode_solve(function(t, y, p) 3 * t^2, 0, grid, method = "rkck")
@@ -140,6 +141,54 @@ testthat::test_that("advance_collect returns the states at the times asked for, 
   expect_equal(landed[, 2], exp(-c(1, 1.5, 2)), tolerance = 1e-6)
   expect_equal(s$times()[length(s$times())], 2)
   expect_true(1.5 %in% s$times())
+})
+
+testthat::test_that("Robertson's stiff kinetics through R matches deSolve radau under RODAS", {
+  skip_if_not_installed("deSolve")
+  robertson <- function(t, y, p) {
+    list(c(-0.04 * y[1] + 1e4 * y[2] * y[3],
+           0.04 * y[1] - 1e4 * y[2] * y[3] - 3e7 * y[2]^2,
+           3e7 * y[2]^2))
+  }
+  times <- c(0, 10^seq(-2, 4, by = 0.5))
+  out <- ode_solve(robertson, c(1, 0, 0), times, method = "rodas", rtol = 1e-8, atol = 1e-10,
+                   autonomous = TRUE, dense = FALSE)
+  ref <- deSolve::ode(c(1, 0, 0), times, robertson, NULL, method = "radau", rtol = 1e-8, atol = 1e-10)
+  expect_equal(out[, 2], as.numeric(ref[, 2]), tolerance = 1e-5)
+  expect_equal(out[, 4], as.numeric(ref[, 4]), tolerance = 1e-5)
+  # mass is conserved to rounding, whatever the steps
+  expect_equal(rowSums(out[, 2:4]), rep(1, nrow(out)), tolerance = 1e-9)
+  # No bound on the step count: RODAS takes ~19000 steps here where radau takes
+  # 144, with 98.6% of them the same size as the one before -- the controller's
+  # dead band holding the step (odelia#64), not an accuracy need.
+  expect_equal(counts(out)[["n_rejections"]], 0)
+})
+
+testthat::test_that("a forced, damped oscillator (non-autonomous) matches its closed form under every stepper", {
+  # y'' + 2 z w y' + w^2 y = cos(t): steady state A cos(t - phi) plus a decaying transient;
+  # integrate from the steady state so the closed form is the whole solution.
+  w <- 2; z <- 0.1
+  A <- 1 / sqrt((w^2 - 1)^2 + (2 * z * w)^2); phi <- atan2(2 * z * w, w^2 - 1)
+  exact <- function(t) A * cos(t - phi)
+  rhs <- function(t, y, p) c(y[2], cos(t) - 2 * z * w * y[2] - w^2 * y[1])
+  times <- seq(0, 20, by = 0.25)
+  y0 <- c(exact(0), -A * sin(-phi))
+  for (method in c("dopri", "rkck", "rodas")) {
+    out <- ode_solve(rhs, y0, times, method = method, rtol = 1e-8, atol = 1e-8,
+                     dense = method == "dopri")
+    expect_equal(out[, 2], exact(times), tolerance = 1e-6, label = method)
+  }
+})
+
+testthat::test_that("a two-species predator-prey system keeps its conserved quantity", {
+  lv <- function(t, y, p) list(c(p$a * y[1] - p$b * y[1] * y[2], p$c * y[1] * y[2] - p$d * y[2]))
+  p <- list(a = 1.5, b = 1, c = 1, d = 3)
+  H <- function(y) p$c * y[, 1] - p$d * log(y[, 1]) + p$b * y[, 2] - p$a * log(y[, 2])
+  times <- seq(0, 30, by = 0.1)
+  out <- ode_solve(lv, c(5, 3), times, p, rtol = 1e-8, atol = 1e-8, autonomous = TRUE)
+  h <- H(out[, 2:3])
+  expect_lt(max(abs(h - h[1])), 1e-5)
+  expect_true(all(out[, 2:3] > 0))
 })
 
 testthat::test_that("a non-autonomous right-hand side is integrated correctly", {
@@ -181,14 +230,14 @@ testthat::test_that("domain_error() rejects the step rather than ending the solv
     expect_silent(s$advance_adaptive(c(0, 1)))
     expect_true(s$state() >= 0 && s$state() <= 1)
     expect_equal(s$time(), 1)
-    expect_gt(s$counts()$n_rejections, 0)
+    expect_gt(s$counts()[["n_rejections"]], 0)
   }
   # And through a validity predicate instead.
   s <- OdeSolver$new(function(t, y) 50 * y * (1 - y), 0.5, control = ctrl, method = "rkck",
                      state_valid = function(t, y) y[1] >= 0 && y[1] <= 1)
   s$advance_adaptive(c(0, 1))
   expect_true(s$state() >= 0 && s$state() <= 1)
-  expect_gt(s$counts()$n_rejections, 0)
+  expect_gt(s$counts()[["n_rejections"]], 0)
   # A domain the exact flow leaves cannot be rescued, and says so.
   ramp <- function(t, y) { if (y[1] > 1) domain_error("over the ceiling"); 1 }
   s <- OdeSolver$new(ramp, 0.9, method = "rkck")

@@ -148,11 +148,16 @@ Rcpp::NumericVector LeafThermalSystem_get_current_drivers(SEXP LeafThermalSystem
 // Solver interface (Leaf-specific creation, generic operations)
 
 // Solver creation - Leaf-specific (must know LeafThermalSystem type)
+// `method` picks the stepper (rcpp_interface_helpers.hpp: "rkck", "dopri" or
+// "rodas"); the leaf system has no Jacobian hook or rebind(), so "rodas" is
+// refused by the solver at the first step.
 // [[Rcpp::export]]
-SEXP LeafSolver_new(SEXP system_xp, SEXP control_xp, SEXP drivers_xp, bool active = false) {
+SEXP LeafSolver_new(SEXP system_xp, SEXP control_xp, SEXP drivers_xp, bool active = false,
+                    std::string method = "rkck") {
   Rcpp::XPtr<SystemType> sys(system_xp);
   Rcpp::XPtr<ode::OdeControl> ctrl(control_xp);
   Rcpp::XPtr<drivers::Drivers> drv(drivers_xp);
+  const ode::Method m = odelia::parse_method(method);
 
   if (active) {
     auto pars = sys->get_pars();
@@ -164,11 +169,11 @@ SEXP LeafSolver_new(SEXP system_xp, SEXP control_xp, SEXP drivers_xp, bool activ
     ActiveSystemType sys_active(LeafThermalPars{pars[0], pars[1], pars[2], pars[3]}, *drv);
     sys_active.set_initial_state(initial_state.begin(), t0);
 
-    auto* solver = new ode::Solver<ActiveSystemType>(sys_active, *ctrl);
+    auto* solver = new ode::Solver<ActiveSystemType>(sys_active, *ctrl, m);
     return Rcpp::XPtr<ode::Solver<ActiveSystemType>>(solver, true);
   } else {
     SystemType sys_copy(*sys);
-    auto* solver = new ode::Solver<SystemType>(sys_copy, *ctrl);
+    auto* solver = new ode::Solver<SystemType>(sys_copy, *ctrl, m);
     return Rcpp::XPtr<ode::Solver<SystemType>>(solver, true);
   }
 }

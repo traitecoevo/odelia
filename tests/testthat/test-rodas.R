@@ -78,6 +78,30 @@ testthat::test_that("RODAS and RKCK agree on the (non-stiff) Lorenz system", {
   expect_equal(out_rodas$z, out_rkck$z, tolerance = 1e-5)
 })
 
+testthat::test_that("Dormand-Prince on the compiled Lorenz system agrees with RKCK and takes about the same steps", {
+  ensure_ode_interface_loaded()
+  pars <- c(sigma = 10.0, R = 28.0, b = 8.0 / 3.0)
+  times <- seq(0, 2, by = 0.05)
+  ctrl <- odelia:::OdeControl$new()
+  ctrl$set_tol_rel(1e-10)
+  ctrl$set_tol_abs(1e-10)
+  run <- function(method) {
+    lz <- odelia:::LorenzSystem$new(pars[["sigma"]], pars[["R"]], pars[["b"]])
+    lz$set_state(c(1, 1, 1), 0.0)
+    runner <- odelia:::Lorenz_Solver$new(lz$ptr, ctrl$ptr, active = FALSE, method = method)
+    runner$advance_adaptive(times)
+    list(history = runner$history(), n_steps = length(runner$times()) - 1)
+  }
+  rk <- run("rkck")
+  dp <- run("dopri")
+  expect_equal(dp$history$x, rk$history$x, tolerance = 1e-5)
+  expect_equal(dp$history$z, rk$history$z, tolerance = 1e-5)
+  expect_lt(abs(log(dp$n_steps / rk$n_steps)), log(2))
+  # The method names deSolve users know are accepted too.
+  expect_s3_class(odelia:::Lorenz_Solver$new(odelia:::LorenzSystem$new(10, 28, 8 / 3)$ptr, ctrl$ptr,
+                                             method = "ode45"), "Lorenz_Solver")
+})
+
 testthat::test_that("RODAS on Lorenz matches deSolve", {
   skip_if_not_installed("deSolve")
   ensure_ode_interface_loaded()

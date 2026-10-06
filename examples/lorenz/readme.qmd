@@ -137,7 +137,7 @@ runtime_odelia_r <- system.time({
     method = "rkck", autonomous = TRUE
   )
 })
-attr(out_odelia_r, "counts")
+counts(out_odelia_r)
 ```
 
 Third run using `deSolve` and rates function defined in C++ 

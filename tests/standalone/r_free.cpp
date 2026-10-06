@@ -25,7 +25,7 @@
 #include <odelia/drivers.hpp>
 #include <odelia/ode_control.hpp>
 #include <odelia/ode_interface.hpp>
-#include <odelia/ode_step.hpp>
+#include <odelia/ode_step_rkck.hpp>
 #include <odelia/ode_step_rodas.hpp>
 #include <odelia/ode_step_dopri.hpp>
 #include <odelia/ode_solver_internal.hpp>
@@ -1120,6 +1120,25 @@ void test_dopri() {
   using odelia::ode::Method;
   const State y0{1.0, 1.0, 1.0};
   const std::vector<double> times{0.0, 1.0, 2.0};
+
+  // A compiled system -- the way plant and leaf use the solver -- under every
+  // stepper, from plain C++ with no R anywhere: the method is a constructor
+  // argument and nothing else about the system changes.
+  {
+    LorenzSystem<double> rk(SIGMA, RHO, BETA), dp(SIGMA, RHO, BETA), ro(SIGMA, RHO, BETA);
+    odelia::ode::Solver<LorenzSystem<double>> s_rk(rk, tight_control(), Method::rkck);
+    odelia::ode::Solver<LorenzSystem<double>> s_dp(dp, tight_control(), Method::dopri);
+    odelia::ode::Solver<LorenzSystem<double>> s_ro(ro, tight_control(), Method::rodas);
+    s_rk.advance_adaptive(times);
+    s_dp.advance_adaptive(times);
+    s_ro.advance_adaptive(times);
+    check(max_abs_diff(s_dp.state(), s_rk.state()) < 1e-5,
+          "a compiled system steps under Dormand-Prince from C++");
+    check(max_abs_diff(s_ro.state(), s_rk.state()) < 1e-5,
+          "and under RODAS, through its rebind() and AD Jacobian");
+    std::printf("       (compiled Lorenz, t = 2 at 1e-10: rkck %zu, dopri %zu, rodas %zu steps)\n",
+                s_rk.times().size() - 1, s_dp.times().size() - 1, s_ro.times().size() - 1);
+  }
 
   // Agrees with the other steppers.
   CallbackSystem a(lorenz_rhs, y0, 0.0);

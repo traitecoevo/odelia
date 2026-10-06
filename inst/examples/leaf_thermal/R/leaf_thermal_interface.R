@@ -2,8 +2,8 @@ LeafThermalSolver <- R6::R6Class(
   "LeafThermalSolver",
   public = list(
     ptr = NULL,
-    initialize = function(System_xp, control_xp, drivers_xp) {
-      self$ptr <- LeafSolver_new(System_xp, control_xp, drivers_xp)
+    initialize = function(System_xp, control_xp, drivers_xp, method = "rkck") {
+      self$ptr <- LeafSolver_new(System_xp, control_xp, drivers_xp, FALSE, method)
     },
     time = function() {
       LeafSolver_time(self$ptr)

@@ -699,7 +699,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // RSolver_counts
-Rcpp::List RSolver_counts(SEXP solver_xp);
+Rcpp::NumericVector RSolver_counts(SEXP solver_xp);
 RcppExport SEXP _odelia_RSolver_counts(SEXP solver_xpSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;

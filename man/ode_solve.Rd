@@ -54,8 +54,8 @@ order short, so use `dense = FALSE` with those when the output grid is
 coarser than the steps.}
 }
 \value{
-A numeric matrix, `length(times)` rows, with attribute `"counts"`
-  holding what the solve cost (see `OdeSolver$counts()`).
+A numeric matrix of class `odelia_solution`, `length(times)` rows;
+  [counts()] on it says what the solve cost.
 }
 \description{
 A convenience over [OdeSolver] shaped like `deSolve::ode()`: the right-hand
@@ -75,5 +75,5 @@ lorenz <- function(t, y, p) {
 out <- ode_solve(lorenz, y0 = c(x = 1, y = 1, z = 1), times = seq(0, 2, by = 0.1),
                  parms = c(sigma = 10, rho = 28, beta = 8 / 3), autonomous = TRUE)
 head(out)
-attr(out, "counts")
+counts(out)
 }

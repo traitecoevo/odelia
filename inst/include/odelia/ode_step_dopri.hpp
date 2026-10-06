@@ -10,7 +10,7 @@
 // Dormand & Prince (1980) as tabulated in Hairer, Norsett & Wanner, Solving
 // ODEs I, table 5.2.
 //
-// What it has that the Cash-Karp pair (ode_step.hpp) has not is a free
+// What it has that the Cash-Karp pair (ode_step_rkck.hpp) has not is a free
 // continuous extension of order 4 (Hairer's dopri5.f, `contd5`): the state
 // anywhere inside an accepted step, from the step's own stages, at no further
 // evaluation and with an error of the same order as the step's. That is what

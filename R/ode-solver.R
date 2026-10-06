@@ -218,11 +218,11 @@ OdeSolver <- R6::R6Class(
       invisible(self)
     },
 
-    #' @description What the integration has cost: a list with `n_rhs`
-    #'   (right-hand-side evaluations) and `n_jac` (Jacobian formations)
-    #'   since the solver was created, `n_steps` (accepted steps since the
-    #'   last `set_state()`) and `n_rejections` (attempts rejected and retried
-    #'   smaller, since the solver was created).
+    #' @description What the integration has cost: a named vector with
+    #'   `n_rhs` (right-hand-side evaluations) and `n_jac` (Jacobian
+    #'   formations) since the solver was created, `n_steps` (accepted steps
+    #'   since the last `set_state()`) and `n_rejections` (attempts rejected
+    #'   and retried smaller, since the solver was created).
     counts = function() RSolver_counts(private$ptr)
   ),
   private = list(
@@ -272,8 +272,8 @@ OdeSolver <- R6::R6Class(
 #'   stepper's order; under `"rkck"` and `"rodas"` it is cubic Hermite, one
 #'   order short, so use `dense = FALSE` with those when the output grid is
 #'   coarser than the steps.
-#' @return A numeric matrix, `length(times)` rows, with attribute `"counts"`
-#'   holding what the solve cost (see `OdeSolver$counts()`).
+#' @return A numeric matrix of class `odelia_solution`, `length(times)` rows;
+#'   [counts()] on it says what the solve cost.
 #' @export
 #' @examples
 #' lorenz <- function(t, y, p) {
@@ -284,7 +284,7 @@ OdeSolver <- R6::R6Class(
 #' out <- ode_solve(lorenz, y0 = c(x = 1, y = 1, z = 1), times = seq(0, 2, by = 0.1),
 #'                  parms = c(sigma = 10, rho = 28, beta = 8 / 3), autonomous = TRUE)
 #' head(out)
-#' attr(out, "counts")
+#' counts(out)
 ode_solve <- function(func, y0, times, parms = NULL, jacfunc = NULL,
                       method = "dopri", control = NULL,
                       rtol = 1e-6, atol = 1e-6,
@@ -312,5 +312,36 @@ ode_solve <- function(func, y0, times, parms = NULL, jacfunc = NULL,
   if (is.null(nm)) nm <- paste0("y", seq_along(y0))
   colnames(out) <- c("time", nm)
   attr(out, "counts") <- s$counts()
+  class(out) <- c("odelia_solution", class(out))
   out
+}
+
+#' What a solve cost
+#'
+#' The number of right-hand-side evaluations (`n_rhs`), Jacobian formations
+#' (`n_jac`), accepted steps (`n_steps`) and rejected attempts
+#' (`n_rejections`) behind a result of [ode_solve()], as a named vector. For
+#' a right-hand side that is itself expensive these are the whole cost of the
+#' integration; `n_rejections` is what the step-size controller wasted.
+#'
+#' @param x A result of [ode_solve()].
+#' @param ... Ignored.
+#' @return A named numeric vector.
+#' @export
+#' @examples
+#' out <- ode_solve(function(t, y, p) -y, y0 = 1, times = c(0, 1))
+#' counts(out)
+counts <- function(x, ...) UseMethod("counts")
+
+#' @rdname counts
+#' @export
+counts.odelia_solution <- function(x, ...) attr(x, "counts")
+
+#' @export
+print.odelia_solution <- function(x, ...) {
+  print(unclass(x)[, , drop = FALSE], ...)
+  n <- attr(x, "counts")
+  cat(sprintf("<%d steps, %d evaluations; counts() for detail>\n",
+              as.integer(n[["n_steps"]]), as.integer(n[["n_rhs"]])))
+  invisible(x)
 }

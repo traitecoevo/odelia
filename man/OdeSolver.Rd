@@ -294,11 +294,11 @@ own noise.}
 \if{html}{\out{<a id="method-OdeSolver-counts"></a>}}
 \if{latex}{\out{\hypertarget{method-OdeSolver-counts}{}}}
 \subsection{\code{OdeSolver$counts()}}{
-  What the integration has cost: a list with `n_rhs`
-  (right-hand-side evaluations) and `n_jac` (Jacobian formations)
-  since the solver was created, `n_steps` (accepted steps since the
-  last `set_state()`) and `n_rejections` (attempts rejected and retried
-  smaller, since the solver was created).
+  What the integration has cost: a named vector with
+  `n_rhs` (right-hand-side evaluations) and `n_jac` (Jacobian
+  formations) since the solver was created, `n_steps` (accepted steps
+  since the last `set_state()`) and `n_rejections` (attempts rejected
+  and retried smaller, since the solver was created).
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{OdeSolver$counts()}
