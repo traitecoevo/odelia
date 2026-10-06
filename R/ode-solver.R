@@ -54,8 +54,10 @@ check_callback <- function(f, name, nullable = FALSE) {
 #'
 #' @description
 #' Integrate a system whose right-hand side is an R function, with odelia's
-#' adaptive step control and either its explicit Cash--Karp RK 4(5) stepper or
-#' the implicit RODAS4(3) Rosenbrock stepper for stiff problems. The solver is
+#' adaptive step control and any of its steppers: the explicit Dormand--Prince
+#' 5(4) pair (the method behind `deSolve`'s `ode45`, with dense output of its
+#' own order), the explicit Cash--Karp 4(5) pair, or the implicit RODAS4(3)
+#' Rosenbrock stepper for stiff problems. The solver is
 #' driven a step at a time (or to a sequence of times), and the state can be
 #' re-seeded between steps -- at a different length if need be -- which is
 #' what a consumer with events needs.
@@ -99,8 +101,9 @@ check_callback <- function(f, name, nullable = FALSE) {
 #' @param parms `NULL`, or a value passed as a third argument to every
 #'   callback.
 #' @param control An [OdeControl], or `NULL` for the defaults.
-#' @param method `"rodas"` (implicit RODAS4(3), the default) or `"rkck"`
-#'   (explicit Cash--Karp RK 4(5)).
+#' @param method `"dopri"` (explicit Dormand--Prince 5(4), the default; the
+#'   one with dense output of its own order), `"rkck"` (explicit Cash--Karp
+#'   4(5)) or `"rodas"` (implicit RODAS4(3), for stiff problems).
 #' @param autonomous `TRUE` if `rhs` does not depend on `t`, which saves the
 #'   implicit stepper one evaluation per step for the time derivative.
 #' @param jac_fd_step Relative step for the finite-difference Jacobian:
@@ -125,7 +128,7 @@ OdeSolver <- R6::R6Class(
     #' @description Create a solver over an R right-hand side. Evaluates
     #'   `rhs` once, at `(t0, y0)`.
     initialize = function(rhs, y0, t0 = 0, jac = NULL, state_valid = NULL,
-                          parms = NULL, control = NULL, method = "rodas",
+                          parms = NULL, control = NULL, method = "dopri",
                           autonomous = FALSE, jac_fd_step = 1e-6) {
       rhs <- check_callback(rhs, "rhs")
       jac <- check_callback(jac, "jac", nullable = TRUE)
@@ -144,7 +147,6 @@ OdeSolver <- R6::R6Class(
       private$ptr <- RSolver_new(rhs, jac, state_valid, parms, y0,
                                  as.numeric(t0), control$ptr, method,
                                  isTRUE(autonomous), jac_fd_step)
-      private$poisoned <- FALSE
     },
 
     #' @description Take one adaptive step, not passing `time_max`. Refused
@@ -152,7 +154,6 @@ OdeSolver <- R6::R6Class(
     step = function(time_max = Inf) {
       private$guard()
       RSolver_step(private$ptr, time_max)
-      private$poisoned <- FALSE
       invisible(self)
     },
 
@@ -161,8 +162,23 @@ OdeSolver <- R6::R6Class(
     advance_adaptive = function(times) {
       private$guard()
       RSolver_advance_adaptive(private$ptr, as.numeric(times))
-      private$poisoned <- FALSE
       invisible(self)
+    },
+
+    #' @description Advance to each of `times` in turn and return the state
+    #'   at each: a matrix with `time` in the first column and one column per
+    #'   state variable, one row per time. The first time must be the current
+    #'   time; the last is landed on exactly. With `dense = TRUE` the steps
+    #'   are the controller's own and each other time is read off the
+    #'   interpolant of the step that spans it, so the integration costs the
+    #'   same however many rows are asked for. Under `"dopri"` that
+    #'   interpolant has the stepper's own order; under the other two it is
+    #'   cubic Hermite on the step's endpoints, one order short, so prefer
+    #'   `"dopri"` for dense output or `dense = FALSE`, which lands a step on
+    #'   every time.
+    advance_collect = function(times, dense = TRUE) {
+      private$guard()
+      RSolver_advance_collect(private$ptr, as.numeric(times), isTRUE(dense))
     },
 
     #' @description Current time.
@@ -189,7 +205,6 @@ OdeSolver <- R6::R6Class(
         stop("y must be a numeric vector of at least one finite value", call. = FALSE)
       }
       RSolver_set_state(private$ptr, y, as.numeric(time))
-      private$poisoned <- FALSE
       invisible(self)
     },
 
@@ -213,13 +228,14 @@ OdeSolver <- R6::R6Class(
   private = list(
     ptr = NULL,
     control = NULL,
-    poisoned = FALSE,
+    # The solver itself knows whether an attempt was abandoned by an error
+    # that escaped from a callback; an error raised before any step (bad
+    # arguments) leaves it usable.
     guard = function() {
-      if (isTRUE(private$poisoned)) {
+      if (RSolver_mid_step(private$ptr)) {
         stop("the previous step was interrupted by an error in a callback; ",
              "call set_state() before stepping again", call. = FALSE)
       }
-      private$poisoned <- TRUE
     }
   )
 )
@@ -239,13 +255,23 @@ OdeSolver <- R6::R6Class(
 #' @param times Times to report at; the first is the initial time.
 #' @param parms Passed through to `func` and `jacfunc`.
 #' @param jacfunc `NULL`, or the Jacobian `jacfunc(t, y, parms)`.
-#' @param method `"rodas"` (implicit, the default) or `"rkck"` (explicit).
+#' @param method `"dopri"` (explicit Dormand--Prince 5(4), the default, as
+#'   `deSolve`'s `ode45`), `"rkck"` (explicit Cash--Karp 4(5)) or `"rodas"`
+#'   (implicit RODAS4(3), for stiff problems).
 #' @param control An [OdeControl], or `NULL` for the defaults.
 #' @param rtol,atol Shorthand for the control's relative and absolute
 #'   tolerances when `control` is `NULL`.
 #' @param autonomous `TRUE` if `func` does not depend on `t`.
 #' @param jac_fd_step Relative step for the finite-difference Jacobian; see
 #'   [OdeSolver].
+#' @param dense `TRUE` (the default) to let the stepper choose its own steps
+#'   and read the requested times off the interpolant of the step spanning
+#'   each, as `deSolve`'s `lsoda` does; `FALSE` to land a step on every
+#'   requested time, as its `ode45` does, which costs more steps when the
+#'   output is finer than the steps. Under `"dopri"` the interpolant has the
+#'   stepper's order; under `"rkck"` and `"rodas"` it is cubic Hermite, one
+#'   order short, so use `dense = FALSE` with those when the output grid is
+#'   coarser than the steps.
 #' @return A numeric matrix, `length(times)` rows, with attribute `"counts"`
 #'   holding what the solve cost (see `OdeSolver$counts()`).
 #' @export
@@ -260,9 +286,9 @@ OdeSolver <- R6::R6Class(
 #' head(out)
 #' attr(out, "counts")
 ode_solve <- function(func, y0, times, parms = NULL, jacfunc = NULL,
-                      method = "rodas", control = NULL,
+                      method = "dopri", control = NULL,
                       rtol = 1e-6, atol = 1e-6,
-                      autonomous = FALSE, jac_fd_step = 1e-6) {
+                      autonomous = FALSE, jac_fd_step = 1e-6, dense = TRUE) {
   func <- check_callback(func, "func")
   # deSolve's form takes three arguments; call it that way even with no parms.
   if (is.null(parms)) parms <- list()
@@ -281,15 +307,9 @@ ode_solve <- function(func, y0, times, parms = NULL, jacfunc = NULL,
   s <- OdeSolver$new(func, y0, t0 = times[1], jac = jacfunc, parms = parms,
                      control = control, method = method,
                      autonomous = autonomous, jac_fd_step = jac_fd_step)
-  n <- length(y0)
-  out <- matrix(NA_real_, length(times), n + 1)
-  out[1, ] <- c(times[1], as.numeric(y0))
-  for (i in seq_along(times)[-1]) {
-    s$advance_adaptive(c(s$time(), times[i]))
-    out[i, ] <- c(times[i], s$state())
-  }
+  out <- s$advance_collect(times, dense = dense)
   nm <- names(y0)
-  if (is.null(nm)) nm <- paste0("y", seq_len(n))
+  if (is.null(nm)) nm <- paste0("y", seq_along(y0))
   colnames(out) <- c("time", nm)
   attr(out, "counts") <- s$counts()
   out

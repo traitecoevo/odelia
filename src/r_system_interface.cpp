@@ -49,6 +49,27 @@ void RSolver_advance_adaptive(SEXP solver_xp, Rcpp::NumericVector times) {
   get_rsolver(solver_xp)->advance_adaptive(ts);
 }
 
+// Advance to each of `times` in turn and return the state at each as the rows
+// of a matrix, time in the first column: the whole output loop of ode_solve()
+// in one call. With `dense` the requested times are read off the interpolant
+// of the step that spans them (#24); otherwise each is landed on.
+// [[Rcpp::export]]
+Rcpp::NumericMatrix RSolver_advance_collect(SEXP solver_xp, Rcpp::NumericVector times,
+                                            bool dense) {
+  auto solver = get_rsolver(solver_xp);
+  std::vector<double> ts(times.begin(), times.end());
+  const std::vector<std::vector<double>> rows = solver->advance_collect(ts, dense);
+  const size_t n = solver->get_system_ref().ode_size();
+  Rcpp::NumericMatrix out(static_cast<int>(rows.size()), static_cast<int>(n + 1));
+  for (size_t i = 0; i < rows.size(); ++i) {
+    out(i, 0) = ts[i];
+    for (size_t j = 0; j < n; ++j) {
+      out(i, j + 1) = rows[i][j];
+    }
+  }
+  return out;
+}
+
 // [[Rcpp::export]]
 double RSolver_time(SEXP solver_xp) {
   return get_rsolver(solver_xp)->time();
@@ -80,6 +101,13 @@ void RSolver_set_state(SEXP solver_xp, Rcpp::NumericVector y, double time) {
   std::vector<double> yy(y.begin(), y.end());
   solver->get_system_ref().resize(yy.size());
   solver->set_state(yy, time);
+}
+
+// True after an error in a callback escaped from inside a step: the solver
+// holds a half-finished attempt until set_state().
+// [[Rcpp::export]]
+bool RSolver_mid_step(SEXP solver_xp) {
+  return get_rsolver(solver_xp)->mid_step();
 }
 
 // [[Rcpp::export]]

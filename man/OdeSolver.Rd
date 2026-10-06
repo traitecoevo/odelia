@@ -5,8 +5,10 @@
 \title{An ODE solver over an R right-hand side}
 \description{
 Integrate a system whose right-hand side is an R function, with odelia's
-adaptive step control and either its explicit Cash--Karp RK 4(5) stepper or
-the implicit RODAS4(3) Rosenbrock stepper for stiff problems. The solver is
+adaptive step control and any of its steppers: the explicit Dormand--Prince
+5(4) pair (the method behind `deSolve`'s `ode45`, with dense output of its
+own order), the explicit Cash--Karp 4(5) pair, or the implicit RODAS4(3)
+Rosenbrock stepper for stiff problems. The solver is
 driven a step at a time (or to a sequence of times), and the state can be
 re-seeded between steps -- at a different length if need be -- which is
 what a consumer with events needs.
@@ -51,6 +53,7 @@ s$counts()
     \item \href{#method-OdeSolver-initialize}{\code{OdeSolver$new()}}
     \item \href{#method-OdeSolver-step}{\code{OdeSolver$step()}}
     \item \href{#method-OdeSolver-advance_adaptive}{\code{OdeSolver$advance_adaptive()}}
+    \item \href{#method-OdeSolver-advance_collect}{\code{OdeSolver$advance_collect()}}
     \item \href{#method-OdeSolver-time}{\code{OdeSolver$time()}}
     \item \href{#method-OdeSolver-state}{\code{OdeSolver$state()}}
     \item \href{#method-OdeSolver-rates}{\code{OdeSolver$rates()}}
@@ -78,7 +81,7 @@ s$counts()
   state_valid = NULL,
   parms = NULL,
   control = NULL,
-  method = "rodas",
+  method = "dopri",
   autonomous = FALSE,
   jac_fd_step = 1e-06
 )}
@@ -99,8 +102,9 @@ rejected.}
       \item{\code{parms}}{`NULL`, or a value passed as a third argument to every
 callback.}
       \item{\code{control}}{An [OdeControl], or `NULL` for the defaults.}
-      \item{\code{method}}{`"rodas"` (implicit RODAS4(3), the default) or `"rkck"`
-(explicit Cash--Karp RK 4(5)).}
+      \item{\code{method}}{`"dopri"` (explicit Dormand--Prince 5(4), the default; the
+one with dense output of its own order), `"rkck"` (explicit Cash--Karp
+4(5)) or `"rodas"` (implicit RODAS4(3), for stiff problems).}
       \item{\code{autonomous}}{`TRUE` if `rhs` does not depend on `t`, which saves the
 implicit stepper one evaluation per step for the time derivative.}
       \item{\code{jac_fd_step}}{Relative step for the finite-difference Jacobian:
@@ -141,6 +145,35 @@ own noise.}
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{OdeSolver$advance_adaptive(times)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{times}}{Times to advance to; the first must be the current time.}
+    }
+    \if{html}{\out{</div>}}
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-OdeSolver-advance_collect"></a>}}
+\if{latex}{\out{\hypertarget{method-OdeSolver-advance_collect}{}}}
+\subsection{\code{OdeSolver$advance_collect()}}{
+  Advance to each of `times` in turn and return the state
+  at each: a matrix with `time` in the first column and one column per
+  state variable, one row per time. The first time must be the current
+  time; the last is landed on exactly. With `dense = TRUE` the steps
+  are the controller's own and each other time is read off the
+  interpolant of the step that spans it, so the integration costs the
+  same however many rows are asked for. Under `"dopri"` that
+  interpolant has the stepper's own order; under the other two it is
+  cubic Hermite on the step's endpoints, one order short, so prefer
+  `"dopri"` for dense output or `dense = FALSE`, which lands a step on
+  every time.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{OdeSolver$advance_collect(times, dense = TRUE)}
     \if{html}{\out{</div>}}
   }
   \subsection{Arguments}{

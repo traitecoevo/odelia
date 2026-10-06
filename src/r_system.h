@@ -27,6 +27,8 @@
 // attribute on the call and nothing else.
 
 #include <Rcpp.h>
+#include <algorithm>
+#include <csetjmp>
 #include <string>
 #include <vector>
 #include <odelia/ode_callback_system.hpp>
@@ -36,38 +38,56 @@ namespace rinterface {
 
 namespace detail {
 
-inline void throw_if_domain_sentinel(const Rcpp::RObject& out) {
-  if (out.hasAttribute("odelia_domain_error")) {
-    util::stop_domain(Rcpp::as<std::string>(out.attr("odelia_domain_error")));
+inline void throw_if_domain_sentinel(SEXP out) {
+  SEXP msg = Rf_getAttrib(out, Rf_install("odelia_domain_error"));
+  if (msg != R_NilValue) {
+    util::stop_domain(Rcpp::as<std::string>(msg));
   }
 }
 
 // One R callback, called as fn(t, y) or, with parms, as fn(t, y, parms) --
 // deSolve's shape, so a function written for it runs unchanged -- with a
 // result that may be a list whose first element is the answer (deSolve's
-// shape again). The call object is built once and its arguments replaced on
-// each evaluation: an allocation per stage would be most of what an R
-// right-hand side costs. The call carries the `odelia_callback` mark that
+// shape again). The call carries the `odelia_callback` mark that
 // domain_error() looks for in sys.calls().
+//
+// This is the hot path of an R right-hand side, so it does per call only what
+// it must: a fresh scalar for t and a fresh vector for y (the callback may keep
+// either, so neither can be reused in place), the evaluation, and a copy out.
+// The call object, the unwind-protect continuation token and the symbols are
+// made once. Results are held with PROTECT, not the precious list. Measured
+// against deSolve calling the same R function: 0.95 us a call here, 1.03 there,
+// of which the R function itself is 0.6.
+//
+// The evaluation is R_UnwindProtect with a cached token, which is what
+// Rcpp::unwindProtect does with a token it allocates per call: on a jump the
+// token is preserved and thrown as Rcpp::LongjumpException, and the package
+// boundary (END_RCPP) releases it and resumes the jump. The extra preserve
+// per jump balances that release and keeps our own hold on the token.
 class Callback {
 public:
   Callback(Rcpp::Function fn, Rcpp::RObject parms)
       : fn_(fn), parms_(parms),
         call_(parms.isNULL() ? Rf_lang3(fn, R_NilValue, R_NilValue)
-                             : Rf_lang4(fn, R_NilValue, R_NilValue, parms)) {
+                             : Rf_lang4(fn, R_NilValue, R_NilValue, parms)),
+        token_(R_MakeUnwindCont()) {
     Rcpp::Shield<SEXP> mark(Rf_ScalarLogical(1));
     Rf_setAttrib(call_, Rf_install("odelia_callback"), mark);
   }
 
-  Rcpp::RObject operator()(double t, const std::vector<double>& y) const {
+  // The result, protected by the caller's Shield: a numeric vector or matrix,
+  // or whatever the callback returned (checked by the caller).
+  SEXP operator()(double t, const std::vector<double>& y) const {
     Rcpp::Shield<SEXP> tt(Rf_ScalarReal(t));
-    Rcpp::Shield<SEXP> yy(Rcpp::wrap(y));
+    Rcpp::Shield<SEXP> yy(Rf_allocVector(REALSXP, static_cast<R_xlen_t>(y.size())));
+    std::copy(y.begin(), y.end(), REAL(yy));
     SETCADR(call_, tt);
     SETCADDR(call_, yy);
-    Rcpp::RObject out(Rcpp::Rcpp_fast_eval(call_, R_GlobalEnv));
+    SEXP out = eval();
     // Leave no dangling reference to this stage's arguments in the call.
     SETCADR(call_, R_NilValue);
     SETCADDR(call_, R_NilValue);
+    Rcpp::Shield<SEXP> keep(out);
     throw_if_domain_sentinel(out);
     if (TYPEOF(out) == VECSXP) {
       if (Rf_xlength(out) < 1) {
@@ -80,24 +100,58 @@ public:
   }
 
 private:
+  struct Eval {
+    SEXP call;
+    std::jmp_buf jmpbuf;
+  };
+  static SEXP eval_call(void* data) {
+    return Rf_eval(static_cast<Eval*>(data)->call, R_GlobalEnv);
+  }
+  static void maybe_jump(void* data, Rboolean jump) {
+    if (jump) {
+      longjmp(static_cast<Eval*>(data)->jmpbuf, 1);
+    }
+  }
+  SEXP eval() const {
+    Eval e{call_, {}};
+    if (setjmp(e.jmpbuf)) {
+      ::R_PreserveObject(token_);
+      throw Rcpp::LongjumpException(token_);
+    }
+    return ::R_UnwindProtect(eval_call, &e, maybe_jump, &e, token_);
+  }
+
   Rcpp::Function fn_;
   Rcpp::RObject parms_;
   Rcpp::RObject call_;
+  Rcpp::RObject token_;
 };
 
+// A REALSXP from a callback result: the result itself, or an integer result
+// coerced once. The caller protects what comes back.
+inline SEXP as_real(SEXP x) {
+  if (TYPEOF(x) == REALSXP) {
+    return x;
+  }
+  if (TYPEOF(x) == INTSXP || TYPEOF(x) == LGLSXP) {
+    return Rf_coerceVector(x, REALSXP);
+  }
+  util::stop("callback must return a numeric vector");
+}
+
 } // namespace detail
+
 
 inline ode::CallbackSystem::rhs_type wrap_rhs(Rcpp::Function rhs, Rcpp::RObject parms) {
   detail::Callback call(rhs, parms);
   return [call](double t, const std::vector<double>& y, std::vector<double>& dydt) {
-    Rcpp::NumericVector rates(call(t, y));
-    if (static_cast<size_t>(rates.size()) != y.size()) {
-      util::stop("rhs returned " + std::to_string(rates.size()) +
+    Rcpp::Shield<SEXP> out(call(t, y));
+    Rcpp::Shield<SEXP> rates(detail::as_real(out));
+    if (static_cast<size_t>(Rf_xlength(rates)) != y.size()) {
+      util::stop("rhs returned " + std::to_string(Rf_xlength(rates)) +
                  " rates, expected " + std::to_string(y.size()));
     }
-    for (size_t i = 0; i < y.size(); ++i) {
-      dydt[i] = rates[i];
-    }
+    std::copy(REAL(rates), REAL(rates) + y.size(), dydt.begin());
   };
 }
 
@@ -108,15 +162,23 @@ inline ode::CallbackSystem::jac_type wrap_jac(Rcpp::Function jac, Rcpp::RObject 
   return [call](double t, const std::vector<double>& y,
                 const std::vector<double>& /* dydt */, std::vector<double>& J) {
     const size_t n = y.size();
-    Rcpp::NumericMatrix m(call(t, y));
-    if (static_cast<size_t>(m.nrow()) != n || static_cast<size_t>(m.ncol()) != n) {
-      util::stop("jac returned a " + std::to_string(m.nrow()) + " x " +
-                 std::to_string(m.ncol()) + " matrix, expected " +
-                 std::to_string(n) + " x " + std::to_string(n));
+    Rcpp::Shield<SEXP> out(call(t, y));
+    Rcpp::Shield<SEXP> m(detail::as_real(out));
+    SEXP dim = Rf_getAttrib(m, R_DimSymbol);
+    const bool square = TYPEOF(dim) == INTSXP && Rf_xlength(dim) == 2 &&
+                        static_cast<size_t>(INTEGER(dim)[0]) == n &&
+                        static_cast<size_t>(INTEGER(dim)[1]) == n;
+    if (!square) {
+      std::string got = TYPEOF(dim) == INTSXP && Rf_xlength(dim) == 2
+                            ? std::to_string(INTEGER(dim)[0]) + " x " + std::to_string(INTEGER(dim)[1]) + " matrix"
+                            : "vector of length " + std::to_string(Rf_xlength(m));
+      util::stop("jac returned a " + got + ", expected " + std::to_string(n) +
+                 " x " + std::to_string(n));
     }
+    const double* v = REAL(m); // column-major
     for (size_t row = 0; row < n; ++row) {
       for (size_t col = 0; col < n; ++col) {
-        J[row * n + col] = m(row, col);
+        J[row * n + col] = v[row + col * n];
       }
     }
   };
@@ -125,11 +187,11 @@ inline ode::CallbackSystem::jac_type wrap_jac(Rcpp::Function jac, Rcpp::RObject 
 inline ode::CallbackSystem::valid_type wrap_valid(Rcpp::Function valid, Rcpp::RObject parms) {
   detail::Callback call(valid, parms);
   return [call](double t, const std::vector<double>& y) {
-    Rcpp::LogicalVector ok(call(t, y));
-    if (ok.size() != 1 || Rcpp::LogicalVector::is_na(ok[0])) {
+    Rcpp::Shield<SEXP> out(call(t, y));
+    if (TYPEOF(out) != LGLSXP || Rf_xlength(out) != 1 || LOGICAL(out)[0] == NA_LOGICAL) {
       util::stop("state_valid must return a single TRUE or FALSE");
     }
-    return ok[0] == TRUE;
+    return LOGICAL(out)[0] == 1;
   };
 }
 

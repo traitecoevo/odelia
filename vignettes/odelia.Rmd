@@ -101,11 +101,16 @@ ctrl$set_tol_rel(1e-8)
 
 ## Choosing an integration method
 
-`odelia` ships two steppers, chosen with the `method` argument when you create a
-solver:
+`odelia` ships three steppers, chosen with the `method` argument when you create
+a solver:
 
-- `"rkck"` (default) — an explicit adaptive Cash-Karp Runge-Kutta 4(5) method.
-  Fast and accurate for **non-stiff** problems like Lorenz.
+- `"rkck"` (the default for a compiled system) — an explicit adaptive Cash-Karp
+  Runge-Kutta 4(5) method. Fast and accurate for **non-stiff** problems like
+  Lorenz.
+- `"dopri"` — the explicit Dormand-Prince 5(4) pair, the method behind
+  `deSolve`'s `ode45`, with a **dense output** of its own order: the state at
+  any time inside a step, from the step's own stages, at no extra evaluation.
+  The default for a right-hand side written in R (below).
 - `"rodas"` — an implicit, adaptive RODAS4(3) Rosenbrock method for **stiff**
   problems. Each step forms the Jacobian once (by automatic differentiation for
   a compiled system, or from the system's own Jacobian hook) plus a handful of
@@ -116,7 +121,7 @@ solver:
 runner_stiff <- Lorenz_Solver$new(lz$ptr, ctrl$ptr, method = "rodas")
 ```
 
-Both steppers share the same adaptive step-size controller and `OdeControl`
+All three share the same adaptive step-size controller and `OdeControl`
 tolerances, so you can switch between them without changing anything else.
 
 To use `method = "rodas"` with your own C++ system, give it either a
@@ -146,9 +151,15 @@ pars <- c(sigma = 10, R = 28, b = 8 / 3)
 
 out_r <- ode_solve(lorenz_r, y0 = c(x = 1, y = 1, z = 1),
                    times = seq(0, 2, by = 0.1), parms = pars,
-                   method = "rkck", autonomous = TRUE)
+                   autonomous = TRUE)
 head(out_r)
 ```
+
+The steps are the controller's own, and the rows asked for are read off each
+step's dense output (`dense = TRUE`, the default), so asking for ten thousand
+rows costs the same integration as asking for ten. With `dense = FALSE` a step
+is made to end on every requested time instead, which is what `deSolve`'s
+`ode45` does and what makes a fine output grid expensive there.
 
 The implicit stepper needs the Jacobian of the right-hand side. Supply it as
 `jacfunc(t, y, parms)`, an n by n matrix whose column j is the derivative with
@@ -179,8 +190,8 @@ vdp <- function(t, y, eps) {
 }
 times <- seq(0, 2, by = 0.2)
 stiff_rodas <- ode_solve(vdp, c(2, 0), times, parms = 1e-4, method = "rodas", autonomous = TRUE)
-stiff_rkck  <- ode_solve(vdp, c(2, 0), times, parms = 1e-4, method = "rkck",  autonomous = TRUE)
-c(rodas = attr(stiff_rodas, "counts")$n_steps, rkck = attr(stiff_rkck, "counts")$n_steps)
+stiff_dopri <- ode_solve(vdp, c(2, 0), times, parms = 1e-4, method = "dopri", autonomous = TRUE)
+c(rodas = attr(stiff_rodas, "counts")$n_steps, dopri = attr(stiff_dopri, "counts")$n_steps)
 ```
 
 Underneath `ode_solve()` is the R6 class `OdeSolver`, which is driven a step
@@ -196,7 +207,7 @@ logistic <- function(t, y) {
   if (y[1] < 0 || y[1] > 1) domain_error("y has left [0, 1]")
   50 * y[1] * (1 - y[1])
 }
-s <- OdeSolver$new(logistic, y0 = 0.5, method = "rkck", autonomous = TRUE)
+s <- OdeSolver$new(logistic, y0 = 0.5, autonomous = TRUE)
 while (s$time() < 1) {
   s$step(time_max = 1)
 }
@@ -205,12 +216,21 @@ unlist(s$counts())
 ```
 
 Between steps `s$set_state(y, time)` re-seeds the state at any length and
-`s$set_step_size(h)` carries a step size across it. Each stage of a step is one
-call into R, so for a cheap right-hand side this runs at the speed of the R
-function and the call into it, much as `deSolve` does with an R function; the
-compiled route above is the fast one. For a right-hand side that is itself a
-large computation the solver's own cost is nothing, and what `counts()`
-reports is the whole cost of the integration.
+`s$set_step_size(h)` carries a step size across it; `s$advance_collect(times)`
+is the output loop of `ode_solve()`, a matrix of states at the times asked for.
+
+Each stage of a step is one call into R, so for a cheap right-hand side this
+runs at the speed of the R function and the call into it, which is the speed
+`deSolve` runs an R function at too (on Lorenz, 0.95 µs a call here against
+1.03 µs there, with the R function itself 0.6 µs of each). What makes odelia
+faster on a fine output grid is the dense output: `deSolve::ode45` lands a step
+on every requested time, odelia does not have to. Lorenz to t = 100 at 1e-6
+with 10001 rows takes 27 ms here against 62 ms for `ode45` and 33 ms for
+`lsoda`, with the same R function and the same accuracy against a tight
+reference. The compiled route above is a hundred times faster still, because
+nothing crosses into R per stage. For a right-hand side that is itself a large
+computation the solver's own cost is nothing, and what `counts()` reports is
+the whole cost of the integration.
 
 ## Where next
 

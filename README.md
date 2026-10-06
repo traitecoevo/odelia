@@ -28,8 +28,10 @@ code out so it can be used more widely.
 - Friendly **R6** wrappers around the C++ objects.
 - A right-hand side **written in R** can be solved by the same steppers, through
   `ode_solve()` (shaped like `deSolve::ode()`) or the step-at-a-time `OdeSolver`,
-  with genuinely adaptive Runge-Kutta stepping, the accepted steps exposed, and
-  a count of what the solve cost.
+  with genuinely adaptive Runge-Kutta stepping, dense output of the method's
+  order (Dormand-Prince 5(4)), the accepted steps exposed, and a count of what
+  the solve cost. On a fine output grid that is about twice as fast as
+  `deSolve::ode45` with the same R function.
 
 ## Installation
 

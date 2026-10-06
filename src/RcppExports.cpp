@@ -585,6 +585,19 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
+// RSolver_advance_collect
+Rcpp::NumericMatrix RSolver_advance_collect(SEXP solver_xp, Rcpp::NumericVector times, bool dense);
+RcppExport SEXP _odelia_RSolver_advance_collect(SEXP solver_xpSEXP, SEXP timesSEXP, SEXP denseSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type times(timesSEXP);
+    Rcpp::traits::input_parameter< bool >::type dense(denseSEXP);
+    rcpp_result_gen = Rcpp::wrap(RSolver_advance_collect(solver_xp, times, dense));
+    return rcpp_result_gen;
+END_RCPP
+}
 // RSolver_time
 double RSolver_time(SEXP solver_xp);
 RcppExport SEXP _odelia_RSolver_time(SEXP solver_xpSEXP) {
@@ -639,6 +652,17 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type time(timeSEXP);
     RSolver_set_state(solver_xp, y, time);
     return R_NilValue;
+END_RCPP
+}
+// RSolver_mid_step
+bool RSolver_mid_step(SEXP solver_xp);
+RcppExport SEXP _odelia_RSolver_mid_step(SEXP solver_xpSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
+    rcpp_result_gen = Rcpp::wrap(RSolver_mid_step(solver_xp));
+    return rcpp_result_gen;
 END_RCPP
 }
 // RSolver_step_size
@@ -735,11 +759,13 @@ static const R_CallMethodDef CallEntries[] = {
     {"_odelia_RSolver_new", (DL_FUNC) &_odelia_RSolver_new, 10},
     {"_odelia_RSolver_step", (DL_FUNC) &_odelia_RSolver_step, 2},
     {"_odelia_RSolver_advance_adaptive", (DL_FUNC) &_odelia_RSolver_advance_adaptive, 2},
+    {"_odelia_RSolver_advance_collect", (DL_FUNC) &_odelia_RSolver_advance_collect, 3},
     {"_odelia_RSolver_time", (DL_FUNC) &_odelia_RSolver_time, 1},
     {"_odelia_RSolver_state", (DL_FUNC) &_odelia_RSolver_state, 1},
     {"_odelia_RSolver_rates", (DL_FUNC) &_odelia_RSolver_rates, 1},
     {"_odelia_RSolver_times", (DL_FUNC) &_odelia_RSolver_times, 1},
     {"_odelia_RSolver_set_state", (DL_FUNC) &_odelia_RSolver_set_state, 3},
+    {"_odelia_RSolver_mid_step", (DL_FUNC) &_odelia_RSolver_mid_step, 1},
     {"_odelia_RSolver_step_size", (DL_FUNC) &_odelia_RSolver_step_size, 1},
     {"_odelia_RSolver_set_step_size", (DL_FUNC) &_odelia_RSolver_set_step_size, 2},
     {"_odelia_odelia_return_from", (DL_FUNC) &_odelia_odelia_return_from, 2},

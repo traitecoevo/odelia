@@ -20,7 +20,10 @@ inline ode::Method parse_method(const std::string& method) {
   if (method == "rkck" || method == "rk45" || method == "explicit") {
     return ode::Method::rkck;
   }
-  Rcpp::stop("Unknown method '" + method + "'. Use 'rkck' or 'rodas'.");
+  if (method == "dopri" || method == "dopri5" || method == "ode45" || method == "rk45dp7") {
+    return ode::Method::dopri;
+  }
+  Rcpp::stop("Unknown method '" + method + "'. Use 'dopri', 'rkck' or 'rodas'.");
 }
 
 }  // namespace odelia

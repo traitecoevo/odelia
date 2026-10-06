@@ -27,6 +27,7 @@
 #include <odelia/ode_interface.hpp>
 #include <odelia/ode_step.hpp>
 #include <odelia/ode_step_rodas.hpp>
+#include <odelia/ode_step_dopri.hpp>
 #include <odelia/ode_solver_internal.hpp>
 #include <odelia/ode_solver.hpp>
 #include <odelia/ode_fit.hpp>
@@ -1033,6 +1034,147 @@ void test_singular_w_is_a_rejection() {
   check(std::abs(s.state()[0] - std::exp(-0.1)) < 1e-5, "after which the solve is right");
 }
 
+
+// --- Dense output (#24) ------------------------------------------------------
+//
+// Landing a step on every requested output time costs steps the controller did
+// not want: Lorenz to t = 100 at 1e-6 takes 27k evaluations with two output
+// rows and 60k with ten thousand. The interpolant reads the state inside the
+// last accepted step from its endpoints and their derivatives, which are
+// already in hand, so a dense collect costs what the integration costs.
+
+void test_dense_output() {
+  using odelia::ode::Method;
+  // dy/dt = 3 t^2, y = t^3: a cubic, which the Hermite interpolant reproduces
+  // exactly, whatever the steps.
+  auto cubic = [](double t, const State&, State& dydt) { dydt[0] = 3.0 * t * t; };
+  odelia::ode::OdeControl control(1e-6, 1e-6, 1.0, 0.0, 1e-12, 0.3, 0.1);
+  CallbackSystem sys(cubic, State{0.0}, 0.0);
+  odelia::ode::Solver<CallbackSystem> s(sys, control, Method::rkck);
+  std::vector<double> times;
+  for (int i = 0; i <= 100; ++i) times.push_back(0.01 * i);
+  const auto rows = s.advance_collect(times, true);
+  double worst = 0.0;
+  for (size_t k = 0; k < times.size(); ++k) {
+    worst = std::max(worst, std::abs(rows[k][0] - times[k] * times[k] * times[k]));
+  }
+  check(rows.size() == times.size(), "a dense collect returns one row per time");
+  check(worst < 1e-12, "and reproduces a cubic exactly at every requested time");
+  check(s.time() == times.back(), "landing exactly on the last time");
+  const size_t steps = s.times().size() - 1;
+  check(steps < times.size() - 1, "with fewer steps than output times (test is not vacuous)");
+  std::printf("       (%zu steps for %zu output rows, worst error %.1e)\n",
+              steps, times.size(), worst);
+
+  // Lorenz: the dense rows agree with landed rows to within the tolerance's
+  // reach, for many fewer evaluations.
+  const State y0{1.0, 1.0, 1.0};
+  std::vector<double> many;
+  for (int i = 0; i <= 2000; ++i) many.push_back(0.001 * i);
+  odelia::ode::OdeControl tight(1e-8, 1e-8, 1.0, 0.0, 1e-12, 10.0, 1e-6);
+  CallbackSystem a(lorenz_rhs, y0, 0.0, lorenz_jac, CallbackSystem::valid_type(), true);
+  odelia::ode::Solver<CallbackSystem> sa(a, tight, Method::rkck);
+  const auto dense = sa.advance_collect(many, true);
+  CallbackSystem b(lorenz_rhs, y0, 0.0, lorenz_jac, CallbackSystem::valid_type(), true);
+  odelia::ode::Solver<CallbackSystem> sb(b, tight, Method::rkck);
+  const auto landed = sb.advance_collect(many, false);
+  double worst_l = 0.0;
+  for (size_t k = 0; k < many.size(); ++k) {
+    worst_l = std::max(worst_l, max_abs_diff(dense[k], landed[k]));
+  }
+  check(worst_l < 1e-4, "dense and landed Lorenz rows agree to the interpolant's order");
+  check(sa.get_system_ref().n_rhs < sb.get_system_ref().n_rhs / 2,
+        "and the dense collect made under half the evaluations");
+  std::printf("       (dense %zu evaluations, landed %zu, worst difference %.1e)\n",
+              sa.get_system_ref().n_rhs, sb.get_system_ref().n_rhs, worst_l);
+
+  // The same under RODAS, whose end derivative is now carried forward.
+  CallbackSystem c(lorenz_rhs, y0, 0.0, lorenz_jac, CallbackSystem::valid_type(), true);
+  odelia::ode::Solver<CallbackSystem> sc(c, tight, Method::rodas);
+  const auto dense_r = sc.advance_collect(many, true);
+  double worst_r = 0.0;
+  for (size_t k = 0; k < many.size(); ++k) {
+    worst_r = std::max(worst_r, max_abs_diff(dense_r[k], landed[k]));
+  }
+  check(worst_r < 1e-4, "and RODAS dense rows agree with landed RKCK rows");
+
+  // Refusals: no accepted step, a time outside the last step, bad times.
+  CallbackSystem d(cubic, State{0.0}, 0.0);
+  odelia::ode::Solver<CallbackSystem> sd(d, control, Method::rkck);
+  bool threw = false;
+  try { State out; sd.get_internal().interpolate(0.0, out); } catch (const std::runtime_error&) { threw = true; }
+  check(threw, "interpolating before any accepted step is refused");
+  sd.step(0.05);
+  threw = false;
+  try { State out; sd.get_internal().interpolate(0.06, out); } catch (const std::runtime_error&) { threw = true; }
+  check(threw, "and so is a time outside the last step");
+  threw = false;
+  try { sd.advance_collect(std::vector<double>{sd.time(), 1.0, 0.5}, true); } catch (const std::runtime_error&) { threw = true; }
+  check(threw, "and times that are not increasing");
+}
+
+
+// --- Dormand-Prince 5(4) with order-4 dense output -----------------------------
+
+void test_dopri() {
+  using odelia::ode::Method;
+  const State y0{1.0, 1.0, 1.0};
+  const std::vector<double> times{0.0, 1.0, 2.0};
+
+  // Agrees with the other steppers.
+  CallbackSystem a(lorenz_rhs, y0, 0.0);
+  odelia::ode::Solver<CallbackSystem> sa(a, tight_control(), Method::rkck);
+  sa.advance_adaptive(times);
+  CallbackSystem b(lorenz_rhs, y0, 0.0);
+  odelia::ode::Solver<CallbackSystem> sb(b, tight_control(), Method::dopri);
+  sb.advance_adaptive(times);
+  check(max_abs_diff(sa.state(), sb.state()) < 1e-5, "Dormand-Prince agrees with RKCK on Lorenz");
+
+  // Six evaluations per attempt, first-same-as-last.
+  odelia::ode::OdeControl control(1e-6, 1e-6, 1.0, 0.0, 1e-12, 10.0, 1e-3);
+  CallbackSystem c(lorenz_rhs, y0, 0.0);
+  odelia::ode::Solver<CallbackSystem> sc(c, control, Method::dopri);
+  sc.advance_adaptive(std::vector<double>{0.0, 0.5});
+  const size_t attempts = sc.times().size() - 1 + sc.get_n_rejections();
+  check(sc.get_system_ref().n_rhs == 1 + 6 * attempts, "and costs six evaluations per attempt");
+
+  // The dense output is exact for a quartic: y' = 4 t^3, y = t^4. A wrong
+  // dense coefficient shows up here at O(1e-3).
+  auto quartic = [](double t, const State&, State& dydt) { dydt[0] = 4.0 * t * t * t; };
+  odelia::ode::OdeControl coarse(1e-6, 1e-6, 1.0, 0.0, 1e-12, 0.4, 0.25);
+  CallbackSystem q(quartic, State{0.0}, 0.0);
+  odelia::ode::Solver<CallbackSystem> sq(q, coarse, Method::dopri);
+  std::vector<double> grid;
+  for (int i = 0; i <= 200; ++i) grid.push_back(0.01 * i);
+  const auto rows = sq.advance_collect(grid, true);
+  double worst = 0.0;
+  for (size_t k = 0; k < grid.size(); ++k) {
+    const double t = grid[k];
+    worst = std::max(worst, std::abs(rows[k][0] - t * t * t * t));
+  }
+  check(worst < 1e-12, "its dense output reproduces a quartic exactly");
+  check(sq.times().size() - 1 < 20, "from a handful of steps (test is not vacuous)");
+  std::printf("       (%zu steps for %zu rows, worst error %.1e)\n", sq.times().size() - 1, grid.size(), worst);
+
+  // On Lorenz the dense rows are within the tolerance's reach of the landed
+  // rows, where cubic Hermite was 40-100x out.
+  std::vector<double> many;
+  for (int i = 0; i <= 2000; ++i) many.push_back(0.001 * i);
+  odelia::ode::OdeControl tol8(1e-8, 1e-8, 1.0, 0.0, 1e-12, 10.0, 1e-6);
+  CallbackSystem d(lorenz_rhs, y0, 0.0);
+  odelia::ode::Solver<CallbackSystem> sd(d, tol8, Method::dopri);
+  const auto dense = sd.advance_collect(many, true);
+  CallbackSystem e(lorenz_rhs, y0, 0.0);
+  odelia::ode::Solver<CallbackSystem> se(e, tol8, Method::dopri);
+  const auto landed = se.advance_collect(many, false);
+  double worst_l = 0.0;
+  for (size_t k = 0; k < many.size(); ++k) worst_l = std::max(worst_l, max_abs_diff(dense[k], landed[k]));
+  check(worst_l < 1e-5, "dense Lorenz rows are within 1e-5 of landed rows at 1e-8");
+  check(sd.get_system_ref().n_rhs < se.get_system_ref().n_rhs / 2, "for under half the evaluations");
+  std::printf("       (dense %zu evaluations, landed %zu, worst difference %.1e)\n",
+              sd.get_system_ref().n_rhs, se.get_system_ref().n_rhs, worst_l);
+}
+
 } // namespace
 
 int main() {
@@ -1057,6 +1199,8 @@ int main() {
   test_callback_domain_error_is_a_rejection();
   test_callback_single_step_driving();
   test_singular_w_is_a_rejection();
+  test_dense_output();
+  test_dopri();
   if (failures == 0) {
     std::printf("all checks passed\n");
     return 0;

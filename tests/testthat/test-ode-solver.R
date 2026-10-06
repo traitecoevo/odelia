@@ -27,10 +27,10 @@ compiled_lorenz <- function(times, method, tol = 1e-10) {
   runner$history()
 }
 
-testthat::test_that("ode_solve on Lorenz matches the compiled solver, with either stepper", {
+testthat::test_that("ode_solve on Lorenz matches the compiled solver, with every stepper", {
   times <- seq(0, 2, by = 0.05)
   ref <- compiled_lorenz(times, "rodas")
-  for (method in c("rodas", "rkck")) {
+  for (method in c("dopri", "rodas", "rkck")) {
     out <- ode_solve(lorenz_r_rhs, y0 = c(x = 1, y = 1, z = 1), times = times,
                      parms = lorenz_pars, method = method, rtol = 1e-10, atol = 1e-10,
                      autonomous = TRUE)
@@ -63,9 +63,9 @@ testthat::test_that("ode_solve on Lorenz matches deSolve, and takes a deSolve fu
 
 testthat::test_that("a supplied Jacobian agrees with finite differences and is formed once per step", {
   times <- c(0, 0.5)
-  fd <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, autonomous = TRUE)
-  an <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, jacfunc = lorenz_r_jac,
-                  autonomous = TRUE)
+  fd <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, method = "rodas", autonomous = TRUE)
+  an <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, method = "rodas",
+                  jacfunc = lorenz_r_jac, autonomous = TRUE)
   expect_equal(an[2, -1], fd[2, -1], tolerance = 1e-5)
   ca <- attr(an, "counts")
   cf <- attr(fd, "counts")
@@ -75,8 +75,8 @@ testthat::test_that("a supplied Jacobian agrees with finite differences and is f
   expect_equal(ca$n_rhs, 1 + 6 * (ca$n_steps + ca$n_rejections))
   expect_equal(cf$n_rhs, 1 + 6 * (cf$n_steps + cf$n_rejections) + 3 * cf$n_steps)
   # Not declared autonomous: one more per accepted step for df/dt.
-  na <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, jacfunc = lorenz_r_jac,
-                  autonomous = FALSE)
+  na <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, method = "rodas",
+                  jacfunc = lorenz_r_jac, autonomous = FALSE)
   cn <- attr(na, "counts")
   expect_equal(cn$n_rhs, 1 + 6 * (cn$n_steps + cn$n_rejections) + cn$n_steps)
 })
@@ -92,13 +92,65 @@ testthat::test_that("RODAS through R takes far fewer steps than RKCK on stiff Va
   expect_lt(attr(rodas, "counts")$n_steps, attr(rkck, "counts")$n_steps / 5)
 })
 
+testthat::test_that("dense output under dopri agrees with landing on every time, for far fewer evaluations", {
+  times <- seq(0, 2, by = 0.001)
+  dense <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, method = "dopri",
+                     rtol = 1e-8, atol = 1e-8, autonomous = TRUE, dense = TRUE)
+  landed <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, method = "dopri",
+                      rtol = 1e-8, atol = 1e-8, autonomous = TRUE, dense = FALSE)
+  expect_equal(dense[, "time"], times)
+  expect_equal(dense[, -1], landed[, -1], tolerance = 1e-5)
+  expect_lt(attr(dense, "counts")$n_rhs, attr(landed, "counts")$n_rhs / 2)
+  # A quartic is reproduced exactly, whatever the steps: the dense output has
+  # the method's order.
+  grid <- seq(0, 2, by = 0.01)
+  quartic <- ode_solve(function(t, y, p) 4 * t^3, 0, grid, method = "dopri")
+  expect_equal(quartic[, 2], grid^4, tolerance = 1e-10)
+  expect_lt(attr(quartic, "counts")$n_steps, 30)
+  # Under the other steppers the interpolant is cubic Hermite: exact for a
+  # cubic, and one order short otherwise.
+  cubic <- ode_solve(function(t, y, p) 3 * t^2, 0, grid, method = "rkck")
+  expect_equal(cubic[, 2], grid^3, tolerance = 1e-10)
+})
+
+testthat::test_that("dopri through R matches deSolve's ode45, the same method", {
+  skip_if_not_installed("deSolve")
+  times <- seq(0, 2, by = 0.05)
+  ref <- deSolve::ode(y = c(1, 1, 1), times = times, func = lorenz_r_rhs,
+                      parms = lorenz_pars, method = "ode45", rtol = 1e-10, atol = 1e-10)
+  out <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, method = "dopri",
+                   rtol = 1e-10, atol = 1e-10, autonomous = TRUE)
+  expect_equal(out[, 2], as.numeric(ref[, 2]), tolerance = 1e-6)
+  expect_equal(out[, 3], as.numeric(ref[, 3]), tolerance = 1e-6)
+  expect_equal(out[, 4], as.numeric(ref[, 4]), tolerance = 1e-6)
+})
+
+testthat::test_that("advance_collect returns the states at the times asked for, in one call", {
+  s <- OdeSolver$new(function(t, y) -y, c(a = 1, b = 2), autonomous = TRUE)
+  out <- s$advance_collect(c(0, 0.5, 1))
+  expect_equal(dim(out), c(3, 3))
+  expect_equal(out[, 1], c(0, 0.5, 1))
+  expect_equal(out[, 2], exp(-c(0, 0.5, 1)), tolerance = 1e-6)
+  expect_equal(out[, 3], 2 * exp(-c(0, 0.5, 1)), tolerance = 1e-6)
+  expect_equal(s$time(), 1)
+  expect_error(s$advance_collect(c(0, 2)), "same as current time")
+  expect_error(s$advance_collect(numeric(0)), "at least length 1")
+  expect_error(s$advance_collect(c(1, 3, 2)), "strictly increasing")
+  landed <- s$advance_collect(c(1, 1.5, 2), dense = FALSE)
+  expect_equal(landed[, 2], exp(-c(1, 1.5, 2)), tolerance = 1e-6)
+  expect_equal(s$times()[length(s$times())], 2)
+  expect_true(1.5 %in% s$times())
+})
+
 testthat::test_that("a non-autonomous right-hand side is integrated correctly", {
-  out <- ode_solve(function(t, y, p) cos(t), y0 = 0, times = seq(0, 3, by = 0.5),
-                   rtol = 1e-8, atol = 1e-8)
-  expect_equal(out[, 2], sin(out[, 1]), tolerance = 1e-6)
-  out2 <- ode_solve(function(t, y, p) cos(t), y0 = 0, times = seq(0, 3, by = 0.5),
-                    method = "rkck", rtol = 1e-8, atol = 1e-8)
-  expect_equal(out2[, 2], sin(out2[, 1]), tolerance = 1e-6)
+  times <- seq(0, 3, by = 0.5)
+  out <- ode_solve(function(t, y, p) cos(t), y0 = 0, times = times, rtol = 1e-8, atol = 1e-8)
+  expect_equal(out[, 2], sin(times), tolerance = 1e-6)
+  for (method in c("rkck", "rodas")) {
+    out2 <- ode_solve(function(t, y, p) cos(t), y0 = 0, times = times,
+                      method = method, rtol = 1e-8, atol = 1e-8, dense = FALSE)
+    expect_equal(out2[, 2], sin(times), tolerance = 1e-6)
+  }
 })
 
 testthat::test_that("an error in a callback surfaces with its own message and poisons the solver until set_state", {
@@ -113,6 +165,7 @@ testthat::test_that("an error in a callback surfaces with its own message and po
                              method = "rodas")$step(), "2 x 2 matrix, expected 1 x 1")
   expect_error(OdeSolver$new("not a function", 1), "rhs must be a function")
   expect_error(OdeSolver$new(function(t, y) -y, 1, method = "euler"), "Unknown method")
+  expect_s3_class(OdeSolver$new(function(t, y) -y, 1, method = "ode45"), "OdeSolver")
 })
 
 testthat::test_that("domain_error() rejects the step rather than ending the solve", {

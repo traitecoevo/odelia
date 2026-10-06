@@ -10,12 +10,13 @@ ode_solve(
   times,
   parms = NULL,
   jacfunc = NULL,
-  method = "rodas",
+  method = "dopri",
   control = NULL,
   rtol = 1e-06,
   atol = 1e-06,
   autonomous = FALSE,
-  jac_fd_step = 1e-06
+  jac_fd_step = 1e-06,
+  dense = TRUE
 )
 }
 \arguments{
@@ -29,7 +30,9 @@ ode_solve(
 
 \item{jacfunc}{`NULL`, or the Jacobian `jacfunc(t, y, parms)`.}
 
-\item{method}{`"rodas"` (implicit, the default) or `"rkck"` (explicit).}
+\item{method}{`"dopri"` (explicit Dormand--Prince 5(4), the default, as
+`deSolve`'s `ode45`), `"rkck"` (explicit Cash--Karp 4(5)) or `"rodas"`
+(implicit RODAS4(3), for stiff problems).}
 
 \item{control}{An [OdeControl], or `NULL` for the defaults.}
 
@@ -40,6 +43,15 @@ tolerances when `control` is `NULL`.}
 
 \item{jac_fd_step}{Relative step for the finite-difference Jacobian; see
 [OdeSolver].}
+
+\item{dense}{`TRUE` (the default) to let the stepper choose its own steps
+and read the requested times off the interpolant of the step spanning
+each, as `deSolve`'s `lsoda` does; `FALSE` to land a step on every
+requested time, as its `ode45` does, which costs more steps when the
+output is finer than the steps. Under `"dopri"` the interpolant has the
+stepper's order; under `"rkck"` and `"rodas"` it is cubic Hermite, one
+order short, so use `dense = FALSE` with those when the output grid is
+coarser than the steps.}
 }
 \value{
 A numeric matrix, `length(times)` rows, with attribute `"counts"`

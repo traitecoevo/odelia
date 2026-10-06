@@ -193,6 +193,10 @@ RSolver_advance_adaptive <- function(solver_xp, times) {
     invisible(.Call(`_odelia_RSolver_advance_adaptive`, solver_xp, times))
 }
 
+RSolver_advance_collect <- function(solver_xp, times, dense) {
+    .Call(`_odelia_RSolver_advance_collect`, solver_xp, times, dense)
+}
+
 RSolver_time <- function(solver_xp) {
     .Call(`_odelia_RSolver_time`, solver_xp)
 }
@@ -211,6 +215,10 @@ RSolver_times <- function(solver_xp) {
 
 RSolver_set_state <- function(solver_xp, y, time) {
     invisible(.Call(`_odelia_RSolver_set_state`, solver_xp, y, time))
+}
+
+RSolver_mid_step <- function(solver_xp) {
+    .Call(`_odelia_RSolver_mid_step`, solver_xp)
 }
 
 RSolver_step_size <- function(solver_xp) {

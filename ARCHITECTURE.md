@@ -106,6 +106,13 @@ hook when there is one, else by forward-mode AD on a `rebind()`-able system
 body for a hook. A system declaring `ode_autonomous()` is not asked for a
 `df/dt` term.
 
+`ode_step_dopri.hpp` is a third stepper, Dormand-Prince 5(4), whose value over
+Cash-Karp is a free continuous extension of order 4: `SolverInternal::interpolate`
+reads the state anywhere inside the last accepted step from the step's own
+stages, and `Solver::advance_collect(times, dense = true)` uses it to report at
+requested times without making a step end on each. Under the other steppers
+the interpolant is cubic Hermite on the step's endpoints, one order short.
+
 ## The solver core contains no R
 
 Everything in `inst/include/odelia/` **except** `solver_interface.hpp` and

@@ -176,9 +176,71 @@ public:
     }
   }
 
+  // The state at each of `times`, one entry per time, the first of which must
+  // be the current time. With `dense` the steps are the controller's own and
+  // each requested time is read off the interpolant of the step that spans it
+  // (#24): the integration costs what it costs, however many rows are asked
+  // for, and the last time is still landed on exactly. Without it every
+  // requested time is landed on, as advance_adaptive() does.
+  std::vector<ode::state_type<System>> advance_collect(const std::vector<double>& times,
+                                                       bool dense = true)
+  {
+    if (times.empty())
+    {
+      util::stop("'times' must be vector of at least length 1");
+    }
+    if (!util::identical(times[0], time()))
+    {
+      util::stop("First element in 'times' must be same as current time");
+    }
+    for (size_t k = 1; k < times.size(); ++k)
+    {
+      if (!(times[k] > times[k - 1]))
+      {
+        util::stop("'times' must be strictly increasing");
+      }
+    }
+    std::vector<ode::state_type<System>> out;
+    out.reserve(times.size());
+    out.push_back(state());
+    if (!dense)
+    {
+      std::vector<double> leg(2);
+      for (size_t k = 1; k < times.size(); ++k)
+      {
+        leg[0] = time();
+        leg[1] = times[k];
+        advance_adaptive(leg);
+        out.push_back(state());
+      }
+      return out;
+    }
+    const double final_time = times.back();
+    ode::state_type<System> y_at;
+    for (size_t k = 1; k < times.size(); ++k)
+    {
+      while (time() < times[k])
+      {
+        step(final_time);
+      }
+      if (util::identical(time(), times[k]))
+      {
+        out.push_back(state());
+      }
+      else
+      {
+        solver.interpolate(times[k], y_at);
+        out.push_back(y_at);
+      }
+    }
+    return out;
+  }
+
   double get_step_size() const { return solver.get_step_size(); }
   void set_step_size(double h) { solver.set_step_size(h); }
   std::size_t get_n_rejections() const { return solver.get_n_rejections(); }
+  bool mid_step() const { return solver.mid_step(); }
+  const SolverInternal<System>& get_internal() const { return solver; }
 
   bool get_collect() const { return collect; }
 
