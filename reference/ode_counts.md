@@ -14,6 +14,9 @@ ode_counts(x, ...)
 
 # S3 method for class 'odelia_solution'
 ode_counts(x, ...)
+
+# S3 method for class 'odelia_steady_state'
+ode_counts(x, ...)
 ```
 
 ## Arguments

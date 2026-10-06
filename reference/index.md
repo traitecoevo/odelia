@@ -6,6 +6,9 @@ A right-hand side as an R function, with any of the three steppers.
 
 - [`ode_solve()`](https://traitecoevo.github.io/odelia/reference/ode_solve.md)
   : Solve an ODE given as an R function, deSolve style
+- [`ode_steady_state()`](https://traitecoevo.github.io/odelia/reference/ode_steady_state.md)
+  : Equilibrium of an ODE given as an R function, and how it moves with
+  the parameters
 - [`ode_counts()`](https://traitecoevo.github.io/odelia/reference/ode_counts.md)
   : What a solve cost
 - [`OdeSolver`](https://traitecoevo.github.io/odelia/reference/OdeSolver.md)
