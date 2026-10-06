@@ -9,8 +9,6 @@ ensure_ss_runner <- function() {
   }
   ensure_ode_interface_loaded()
 
-  include_dir <- dirname(dirname(resolve_test_path(
-    "include/odelia/ode_solver.hpp", "inst/include/odelia/ode_solver.hpp")))
   runner_cpp <- resolve_test_path(
     "tests/testthat/steady_state_runner.cpp",
     "tests/testthat/steady_state_runner.cpp")
@@ -24,7 +22,7 @@ ensure_ss_runner <- function() {
     Sys.getenv("PKG_LIBS", unset = "")
   }
   withr::local_envvar(
-    PKG_CPPFLAGS = paste0("-I", include_dir),
+    PKG_CPPFLAGS = odelia_cppflags(),
     PKG_LIBS = pkg_libs
   )
 

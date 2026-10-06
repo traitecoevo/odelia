@@ -106,6 +106,18 @@ hook when there is one, else by forward-mode AD on a `rebind()`-able system
 body for a hook. A system declaring `ode_autonomous()` is not asked for a
 `df/dt` term.
 
+`ode_steady_state.hpp` reuses that Jacobian and the dense LU away from the
+stepper: `SteadyState<System>` solves `f(y*) = 0` by damped Newton, reads the
+fixed point's stability off the eigenvalues of `df/dy` (`ode_linalg.hpp`,
+Hessenberg reduction then Francis QR), and takes the parameter sensitivity
+`dy*/dθ = −(df/dy)⁻¹ (df/dθ)` from the same factorisation. `df/dθ` is the same
+forward sweep as `df/dy` with the seed on a parameter instead of a state
+component; which parameters is the System's `ad_parameters()` hook, a vector of
+pointers to them in a fixed order. Endpoint-only and tape-free by design: the
+transient is never differentiated, and a consumer that needs `y*` on its own
+adjoint tape attaches the sensitivity rows as a supplied derivative rather than
+taping the Newton iteration.
+
 `ode_step_dopri.hpp` is a third stepper, Dormand-Prince 5(4), whose value over
 Cash-Karp is a free continuous extension of order 4: `SolverInternal::interpolate`
 reads the state anywhere inside the last accepted step from the step's own

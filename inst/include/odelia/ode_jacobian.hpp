@@ -34,7 +34,8 @@
 // implicit-function-theorem steady-state sensitivity in ode_steady_state.hpp:
 // the same forward sweep on the same twin, differing only in where the unit
 // tangent seed is placed. It needs the twin (a hook knows nothing about
-// parameters), so it is gated on `params_supported` below.
+// parameters) and the System's `ad_parameters()` hook naming them, so it is
+// gated on `params_supported` below.
 
 #include <algorithm>
 #include <cmath>
@@ -72,16 +73,18 @@ public:
   enum { value = sizeof(test<S>(0)) == sizeof(true_type) };
 };
 
-// Detect a `std::vector<scalar*> ode_parameters()` hook: pointers to the
+// Detect a `std::vector<scalar*> ad_parameters()` hook: pointers to the
 // system's differentiable parameters, in a fixed order, used to seed parameter
-// tangents for the forward-mode parameter Jacobian df/dtheta. A system that
-// omits it simply cannot have its parameter sensitivity taken (gated below).
+// tangents for the forward-mode parameter Jacobian df/dtheta. The same hook,
+// with the same shape, names the parameters a reverse-mode sweep accumulates
+// adjoints for (#59), so a System declares them once. A system that omits it
+// simply cannot have its parameter sensitivity taken (gated below).
 template <typename S, typename = void>
-struct has_ode_parameters : std::false_type {};
+struct has_ad_parameters : std::false_type {};
 
 template <typename S>
-struct has_ode_parameters<
-    S, std::void_t<decltype(std::declval<S&>().ode_parameters())>>
+struct has_ad_parameters<
+    S, std::void_t<decltype(std::declval<S&>().ad_parameters())>>
     : std::true_type {};
 
 // The System type rebound to scalar U, i.e. decltype(system.rebind<U>()). When
@@ -124,10 +127,10 @@ public:
 
   // Whether the parameter Jacobian df/dtheta is additionally available: needs
   // the AD route (a twin to differentiate on; a hook says nothing about
-  // parameters) plus an `ode_parameters()` hook on that twin exposing pointers
+  // parameters) plus an `ad_parameters()` hook on that twin exposing pointers
   // to the differentiable parameters to seed.
   static constexpr bool params_supported =
-      ad_supported && has_ode_parameters<twin_type>::value;
+      ad_supported && has_ad_parameters<twin_type>::value;
 
   void resize(size_t size_) {
     size = size_;
@@ -173,20 +176,23 @@ public:
   // Compute the parameter Jacobian Jp = d f / d theta at (y, t), written
   // row-major into `Jp` (size n * n_params), Jp[row * n_params + col] =
   // d f_row / d theta_col. `n_params` is set to the number of parameters the
-  // System exposes via ode_parameters().
+  // System exposes via ad_parameters().
   //
   // Same forward-mode sweep as compute()'s AD route, but the tangent seed is
   // placed on a *parameter* of the twin rather than a state component: state
   // carries zero derivative, one parameter carries unit derivative per column,
   // so the output tangent is exactly that parameter's column of df/dtheta. This
-  // reuses the twin and buffers -- seeding parameters instead of routing through
-  // the reverse-mode set_params-on-tape path keeps the whole sweep tape-free, so
-  // it never contends with an outer adjoint tape and composes under one later.
+  // reuses the twin and buffers and keeps the sweep tape-free: it records
+  // nothing, so it can run beside an outer adjoint recording without touching
+  // it. The rows it yields are plain numbers, which is the form a supplied
+  // derivative record takes (#59, implicit_node.hpp) if the solve that uses
+  // them is later to sit on an outer tape -- never a tangent nested above an
+  // adjoint scalar.
   void compute_params(const System& system, const std::vector<value_type>& y,
                       double t, std::vector<value_type>& Jp,
                       size_t& n_params) {
     static_assert(params_supported,
-                  "compute_params requires rebind() and an ode_parameters() "
+                  "compute_params requires rebind() and an ad_parameters() "
                   "hook on the System twin");
     twin_type twin = system.template rebind<tangent_type>();
 
@@ -196,7 +202,7 @@ public:
 
     // Pointers into the twin's own parameter storage; valid for the lifetime of
     // `twin`. Seeding a tangent here propagates through compute_rates().
-    std::vector<tangent_type*> params = twin.ode_parameters();
+    std::vector<tangent_type*> params = twin.ad_parameters();
     n_params = params.size();
     Jp.assign(size * n_params, value_type(0.0));
 

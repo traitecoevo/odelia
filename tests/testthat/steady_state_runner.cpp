@@ -85,8 +85,9 @@ public:
   }
 
   // Pointers to the differentiable parameters, in a fixed order, so the
-  // forward-mode parameter Jacobian df/dtheta can seed their tangents.
-  std::vector<T*> ode_parameters() { return { &a, &b, &c }; }
+  // forward-mode parameter Jacobian df/dtheta can seed their tangents (and a
+  // reverse-mode sweep can accumulate adjoints for them: the same hook, #59).
+  std::vector<T*> ad_parameters() { return { &a, &b, &c }; }
 
   template <typename U>
   DemogSystem<U> rebind() const {

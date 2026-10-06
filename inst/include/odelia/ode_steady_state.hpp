@@ -20,19 +20,24 @@
 // This is deliberately *endpoint-only*: no time integration through the
 // transient, and no nested AD. Everything runs at the solver's scalar type
 // (double for the intended passive use); the Jacobians use one tape-free
-// forward-mode layer internally. An optional RODAS warm-start integrates the
-// transient to reach the attracting basin before Newton, and doubles as a
-// dynamical confirmation that the fixed point is attracting.
+// forward-mode layer internally. The sensitivity comes back as plain rows, so
+// a caller whose own model sits on an adjoint tape attaches them to y* as a
+// supplied derivative (#59, implicit_node.hpp) rather than taping the Newton
+// iteration. An optional RODAS warm-start integrates the transient to reach the
+// attracting basin before Newton, and doubles as a dynamical confirmation that
+// the fixed point is attracting.
 //
 // Scope: fixed-point attractors of autonomous systems only. Equilibrium is not
 // well-defined when f depends explicitly on time; time_dependence() surfaces a
 // nonzero df/dt at the solution as a guard. A system that declares
 // ode_autonomous() is not asked for df/dt at all, as with the implicit stepper.
 
-#include <vector>
-#include <cstddef>
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <vector>
 #include <XAD/XAD.hpp>
+#include <odelia/ode_util.hpp>
 #include <odelia/ode_interface.hpp>
 #include <odelia/ode_jacobian.hpp>
 #include <odelia/ode_linalg.hpp>
@@ -49,7 +54,7 @@ public:
 
   // Requires a state Jacobian from either route (an ode_jacobian() hook, or a
   // rebind() hook + non-active scalar). Parameter sensitivity needs the AD
-  // route plus the ode_parameters() hook. Callers gate on these; the class
+  // route plus the ad_parameters() hook. Callers gate on these; the class
   // instantiates regardless.
   static constexpr bool supported = Jacobian<System>::supported;
   static constexpr bool params_supported = Jacobian<System>::params_supported;
@@ -184,7 +189,7 @@ public:
     Solver<System> solver(system, control, method);
     std::vector<double> y0d(y0.size());
     for (size_t i = 0; i < y0.size(); ++i) {
-      y0d[i] = xad::value(y0[i]);
+      y0d[i] = util::to_passive(y0[i]);
     }
     solver.set_collect(false);
     solver.set_state(y0d, times.front());
@@ -204,7 +209,7 @@ public:
       util::stop("Call solve() (to convergence) before sensitivity().");
     }
     if constexpr (!params_supported) {
-      util::stop("Parameter sensitivity needs an ode_parameters() hook on the "
+      util::stop("Parameter sensitivity needs an ad_parameters() hook on the "
                  "system exposing the differentiable parameters.");
       return std::vector<value_type>();
     } else {
@@ -255,17 +260,19 @@ public:
   const std::vector<value_type>& state_jacobian() const { return J; }
 
 private:
+  // Norms of the passive values: convergence and line-search decisions are
+  // never themselves differentiated quantities.
   static double norm_inf(const state_type& v) {
     double m = 0.0;
     for (const auto& x : v) {
-      m = std::max(m, std::fabs(xad::value(x)));
+      m = std::max(m, std::fabs(util::to_passive(x)));
     }
     return m;
   }
   static double norm2(const state_type& v) {
     double s = 0.0;
     for (const auto& x : v) {
-      const double xv = xad::value(x);
+      const double xv = util::to_passive(x);
       s += xv * xv;
     }
     return std::sqrt(s);
