@@ -83,7 +83,8 @@ s$counts()
   control = NULL,
   method = "dopri",
   autonomous = FALSE,
-  jac_fd_step = 1e-06
+  jac_fd_step = 1e-06,
+  jac_fd_floor = NULL
 )}
     \if{html}{\out{</div>}}
   }
@@ -108,9 +109,13 @@ one with dense output of its own order), `"rkck"` (explicit Cash--Karp
       \item{\code{autonomous}}{`TRUE` if `rhs` does not depend on `t`, which saves the
 implicit stepper one evaluation per step for the time derivative.}
       \item{\code{jac_fd_step}}{Relative step for the finite-difference Jacobian:
-`h_j = jac_fd_step * max(abs(y[j]), 1)`. A right-hand side that is itself
-an iterative solve wants a larger step than the default to stay above its
-own noise.}
+`h_j = jac_fd_step * max(abs(y[j]), jac_fd_floor)`. A right-hand side
+that is itself an iterative solve wants a larger step than the default to
+stay above its own noise.}
+      \item{\code{jac_fd_floor}}{The size below which a state component counts as small
+for that perturbation; `NULL` means the control's absolute tolerance. It
+must be of the order of the smallest component that matters, not 1: a
+floor of 1 perturbs a component of size 1e-5 by a tenth of itself.}
     }
     \if{html}{\out{</div>}}
   }

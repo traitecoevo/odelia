@@ -123,6 +123,10 @@ runner_stiff <- Lorenz_Solver$new(lz$ptr, ctrl$ptr, method = "rodas")
 
 All three share the same adaptive step-size controller and `OdeControl`
 tolerances, so you can switch between them without changing anything else.
+The controller's rule is itself a switch, `OdeControl$set_controller()`:
+`"gsl"` (the default, odelia's long-standing rule) or `"hairer"` (the rule of
+Hairer's codes and `deSolve`, which rejects far fewer attempts; see the package
+NEWS for 0.6.0).
 
 To use `method = "rodas"` with your own C++ system, give it either a
 `template<class U> System<U> rebind() const` method (a one-liner that copies the

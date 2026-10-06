@@ -20,6 +20,8 @@
 \alias{OdeControl_set_step_size_min}
 \alias{OdeControl_set_step_size_max}
 \alias{OdeControl_set_step_size_initial}
+\alias{OdeControl_set_controller}
+\alias{OdeControl_get_controller}
 \title{Low-level Drivers and OdeControl wrappers}
 \description{
 Low-level exported wrappers around native C++ interfaces for driver

@@ -158,10 +158,31 @@ testthat::test_that("Robertson's stiff kinetics through R matches deSolve radau 
   expect_equal(out[, 4], as.numeric(ref[, 4]), tolerance = 1e-5)
   # mass is conserved to rounding, whatever the steps
   expect_equal(rowSums(out[, 2:4]), rep(1, nrow(out)), tolerance = 1e-9)
-  # No bound on the step count: RODAS takes ~19000 steps here where radau takes
-  # 144, with 98.6% of them the same size as the one before -- the controller's
-  # dead band holding the step (odelia#64), not an accuracy need.
-  expect_equal(counts(out)[["n_rejections"]], 0)
+  # With the finite-difference Jacobian's floor at atol this takes ~450 steps
+  # (radau: 144). With the floor at 1 it took 19000: a floor of 1 perturbs the
+  # 1e-5-sized middle component by 10% of itself and the Jacobian is garbage.
+  expect_lt(counts(out)[["n_steps"]], 1000)
+  bad <- ode_solve(robertson, c(1, 0, 0), times, method = "rodas", rtol = 1e-8, atol = 1e-10,
+                   autonomous = TRUE, dense = FALSE, jac_fd_floor = 1)
+  expect_gt(counts(bad)[["n_steps"]], 5 * counts(out)[["n_steps"]])
+})
+
+testthat::test_that("the step-size rule is a switch, with the gsl rule the default", {
+  ctrl <- OdeControl$new()
+  expect_equal(ctrl$get_controller(), "gsl")
+  ctrl$set_controller("hairer")
+  expect_equal(ctrl$get_controller(), "hairer")
+  expect_error(ctrl$set_controller("pi"), "Unknown controller")
+  times <- c(0, 20)
+  gsl <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, autonomous = TRUE)
+  hairer <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, autonomous = TRUE,
+                      controller = "hairer")
+  expect_lt(counts(hairer)[["n_rejections"]], 0.8 * counts(gsl)[["n_rejections"]])
+  expect_lte(counts(hairer)[["n_rhs"]], counts(gsl)[["n_rhs"]])
+  short <- seq(0, 2, by = 0.1)
+  expect_equal(ode_solve(lorenz_r_rhs, c(1, 1, 1), short, lorenz_pars, autonomous = TRUE, controller = "hairer")[, 2],
+               ode_solve(lorenz_r_rhs, c(1, 1, 1), short, lorenz_pars, autonomous = TRUE)[, 2],
+               tolerance = 1e-3)
 })
 
 testthat::test_that("a forced, damped oscillator (non-autonomous) matches its closed form under every stepper", {

@@ -200,7 +200,8 @@ inline ode::CallbackSystem make_r_system(Rcpp::Function rhs,
                                          Rcpp::Nullable<Rcpp::Function> valid,
                                          Rcpp::RObject parms,
                                          std::vector<double> y0, double t0,
-                                         bool autonomous, double jac_fd_step) {
+                                         bool autonomous, double jac_fd_step,
+                                         double jac_fd_floor) {
   ode::CallbackSystem::jac_type j;
   if (jac.isNotNull()) {
     j = wrap_jac(Rcpp::Function(jac.get()), parms);
@@ -210,7 +211,7 @@ inline ode::CallbackSystem make_r_system(Rcpp::Function rhs,
     v = wrap_valid(Rcpp::Function(valid.get()), parms);
   }
   return ode::CallbackSystem(wrap_rhs(rhs, parms), std::move(y0), t0, j, v,
-                             autonomous, jac_fd_step);
+                             autonomous, jac_fd_step, jac_fd_floor);
 }
 
 } // namespace rinterface

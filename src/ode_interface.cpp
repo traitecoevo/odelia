@@ -109,6 +109,27 @@ void OdeControl_set_step_size_initial(SEXP control_xp, double step_size_initial)
   get_OdeControl(control_xp)->step_size_initial = step_size_initial;
 }
 
+// Which rule turns the error estimate into the next step: "gsl" (the default,
+// odelia's dead-band rule) or "hairer" (rescale after every step); see
+// ode_control.hpp and #64.
+// [[Rcpp::export]]
+void OdeControl_set_controller(SEXP control_xp, std::string controller) {
+  ode::Controller c;
+  if (controller == "gsl") {
+    c = ode::Controller::gsl;
+  } else if (controller == "hairer") {
+    c = ode::Controller::hairer;
+  } else {
+    Rcpp::stop("Unknown controller '" + controller + "'. Use 'gsl' or 'hairer'.");
+  }
+  get_OdeControl(control_xp)->set_controller(c);
+}
+
+// [[Rcpp::export]]
+std::string OdeControl_get_controller(SEXP control_xp) {
+  return get_OdeControl(control_xp)->get_controller() == ode::Controller::hairer ? "hairer" : "gsl";
+}
+
 //-------------------------------------------------------------------------
 // Drivers interface
 

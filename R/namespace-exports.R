@@ -24,4 +24,6 @@
 #' @rawNamespace export(OdeControl_set_step_size_min)
 #' @rawNamespace export(OdeControl_set_step_size_max)
 #' @rawNamespace export(OdeControl_set_step_size_initial)
+#' @rawNamespace export(OdeControl_set_controller)
+#' @rawNamespace export(OdeControl_get_controller)
 NULL

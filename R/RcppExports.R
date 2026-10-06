@@ -149,6 +149,14 @@ OdeControl_set_step_size_initial <- function(control_xp, step_size_initial) {
     invisible(.Call(`_odelia_OdeControl_set_step_size_initial`, control_xp, step_size_initial))
 }
 
+OdeControl_set_controller <- function(control_xp, controller) {
+    invisible(.Call(`_odelia_OdeControl_set_controller`, control_xp, controller))
+}
+
+OdeControl_get_controller <- function(control_xp) {
+    .Call(`_odelia_OdeControl_get_controller`, control_xp)
+}
+
 Drivers_new <- function() {
     .Call(`_odelia_Drivers_new`)
 }
@@ -181,8 +189,8 @@ Drivers_clear <- function(drivers_xp) {
     invisible(.Call(`_odelia_Drivers_clear`, drivers_xp))
 }
 
-RSolver_new <- function(rhs, jac, state_valid, parms, y0, t0, control_xp, method, autonomous, jac_fd_step) {
-    .Call(`_odelia_RSolver_new`, rhs, jac, state_valid, parms, y0, t0, control_xp, method, autonomous, jac_fd_step)
+RSolver_new <- function(rhs, jac, state_valid, parms, y0, t0, control_xp, method, autonomous, jac_fd_step, jac_fd_floor) {
+    .Call(`_odelia_RSolver_new`, rhs, jac, state_valid, parms, y0, t0, control_xp, method, autonomous, jac_fd_step, jac_fd_floor)
 }
 
 RSolver_step <- function(solver_xp, time_max) {

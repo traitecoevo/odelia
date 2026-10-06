@@ -449,6 +449,28 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
+// OdeControl_set_controller
+void OdeControl_set_controller(SEXP control_xp, std::string controller);
+RcppExport SEXP _odelia_OdeControl_set_controller(SEXP control_xpSEXP, SEXP controllerSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type control_xp(control_xpSEXP);
+    Rcpp::traits::input_parameter< std::string >::type controller(controllerSEXP);
+    OdeControl_set_controller(control_xp, controller);
+    return R_NilValue;
+END_RCPP
+}
+// OdeControl_get_controller
+std::string OdeControl_get_controller(SEXP control_xp);
+RcppExport SEXP _odelia_OdeControl_get_controller(SEXP control_xpSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type control_xp(control_xpSEXP);
+    rcpp_result_gen = Rcpp::wrap(OdeControl_get_controller(control_xp));
+    return rcpp_result_gen;
+END_RCPP
+}
 // Drivers_new
 SEXP Drivers_new();
 RcppExport SEXP _odelia_Drivers_new() {
@@ -544,8 +566,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // RSolver_new
-SEXP RSolver_new(Rcpp::Function rhs, Rcpp::Nullable<Rcpp::Function> jac, Rcpp::Nullable<Rcpp::Function> state_valid, SEXP parms, Rcpp::NumericVector y0, double t0, SEXP control_xp, std::string method, bool autonomous, double jac_fd_step);
-RcppExport SEXP _odelia_RSolver_new(SEXP rhsSEXP, SEXP jacSEXP, SEXP state_validSEXP, SEXP parmsSEXP, SEXP y0SEXP, SEXP t0SEXP, SEXP control_xpSEXP, SEXP methodSEXP, SEXP autonomousSEXP, SEXP jac_fd_stepSEXP) {
+SEXP RSolver_new(Rcpp::Function rhs, Rcpp::Nullable<Rcpp::Function> jac, Rcpp::Nullable<Rcpp::Function> state_valid, SEXP parms, Rcpp::NumericVector y0, double t0, SEXP control_xp, std::string method, bool autonomous, double jac_fd_step, double jac_fd_floor);
+RcppExport SEXP _odelia_RSolver_new(SEXP rhsSEXP, SEXP jacSEXP, SEXP state_validSEXP, SEXP parmsSEXP, SEXP y0SEXP, SEXP t0SEXP, SEXP control_xpSEXP, SEXP methodSEXP, SEXP autonomousSEXP, SEXP jac_fd_stepSEXP, SEXP jac_fd_floorSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -559,7 +581,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
     Rcpp::traits::input_parameter< bool >::type autonomous(autonomousSEXP);
     Rcpp::traits::input_parameter< double >::type jac_fd_step(jac_fd_stepSEXP);
-    rcpp_result_gen = Rcpp::wrap(RSolver_new(rhs, jac, state_valid, parms, y0, t0, control_xp, method, autonomous, jac_fd_step));
+    Rcpp::traits::input_parameter< double >::type jac_fd_floor(jac_fd_floorSEXP);
+    rcpp_result_gen = Rcpp::wrap(RSolver_new(rhs, jac, state_valid, parms, y0, t0, control_xp, method, autonomous, jac_fd_step, jac_fd_floor));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -748,6 +771,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_odelia_OdeControl_set_step_size_min", (DL_FUNC) &_odelia_OdeControl_set_step_size_min, 2},
     {"_odelia_OdeControl_set_step_size_max", (DL_FUNC) &_odelia_OdeControl_set_step_size_max, 2},
     {"_odelia_OdeControl_set_step_size_initial", (DL_FUNC) &_odelia_OdeControl_set_step_size_initial, 2},
+    {"_odelia_OdeControl_set_controller", (DL_FUNC) &_odelia_OdeControl_set_controller, 2},
+    {"_odelia_OdeControl_get_controller", (DL_FUNC) &_odelia_OdeControl_get_controller, 1},
     {"_odelia_Drivers_new", (DL_FUNC) &_odelia_Drivers_new, 0},
     {"_odelia_Drivers_set_constant", (DL_FUNC) &_odelia_Drivers_set_constant, 3},
     {"_odelia_Drivers_set_variable", (DL_FUNC) &_odelia_Drivers_set_variable, 4},
@@ -756,7 +781,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_odelia_Drivers_evaluate_range", (DL_FUNC) &_odelia_Drivers_evaluate_range, 3},
     {"_odelia_Drivers_get_names", (DL_FUNC) &_odelia_Drivers_get_names, 1},
     {"_odelia_Drivers_clear", (DL_FUNC) &_odelia_Drivers_clear, 1},
-    {"_odelia_RSolver_new", (DL_FUNC) &_odelia_RSolver_new, 10},
+    {"_odelia_RSolver_new", (DL_FUNC) &_odelia_RSolver_new, 11},
     {"_odelia_RSolver_step", (DL_FUNC) &_odelia_RSolver_step, 2},
     {"_odelia_RSolver_advance_adaptive", (DL_FUNC) &_odelia_RSolver_advance_adaptive, 2},
     {"_odelia_RSolver_advance_collect", (DL_FUNC) &_odelia_RSolver_advance_collect, 3},

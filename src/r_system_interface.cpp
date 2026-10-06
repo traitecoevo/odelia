@@ -26,11 +26,17 @@ static Rcpp::XPtr<RSolver> get_rsolver(SEXP xp) {
 SEXP RSolver_new(Rcpp::Function rhs, Rcpp::Nullable<Rcpp::Function> jac,
                  Rcpp::Nullable<Rcpp::Function> state_valid, SEXP parms,
                  Rcpp::NumericVector y0, double t0, SEXP control_xp,
-                 std::string method, bool autonomous, double jac_fd_step) {
+                 std::string method, bool autonomous, double jac_fd_step,
+                 double jac_fd_floor) {
   Rcpp::XPtr<ode::OdeControl> ctrl(control_xp);
   std::vector<double> y(y0.begin(), y0.end());
+  // A non-positive floor means "the control's absolute tolerance".
+  if (!(jac_fd_floor > 0.0)) {
+    jac_fd_floor = ctrl->get_tol_abs();
+  }
   ode::CallbackSystem sys = rinterface::make_r_system(
-      rhs, jac, state_valid, Rcpp::RObject(parms), y, t0, autonomous, jac_fd_step);
+      rhs, jac, state_valid, Rcpp::RObject(parms), y, t0, autonomous, jac_fd_step,
+      jac_fd_floor);
   auto* solver = new RSolver(sys, *ctrl, parse_method(method));
   // No history: a consumer driving this a step at a time reads the state as it
   // goes, and a copy of the system per step would be pure growth.

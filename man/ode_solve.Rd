@@ -14,8 +14,10 @@ ode_solve(
   control = NULL,
   rtol = 1e-06,
   atol = 1e-06,
+  controller = "gsl",
   autonomous = FALSE,
   jac_fd_step = 1e-06,
+  jac_fd_floor = NULL,
   dense = TRUE
 )
 }
@@ -34,15 +36,21 @@ ode_solve(
 `deSolve`'s `ode45`), `"rkck"` (explicit Cash--Karp 4(5)) or `"rodas"`
 (implicit RODAS4(3), for stiff problems).}
 
-\item{control}{An [OdeControl], or `NULL` for the defaults.}
+\item{control}{An [OdeControl], or `NULL` for the defaults with the
+tolerances below, the `controller` below, and the largest step set to
+the span of `times` (an [OdeControl] made directly caps the step at 10).}
 
 \item{rtol, atol}{Shorthand for the control's relative and absolute
 tolerances when `control` is `NULL`.}
 
+\item{controller}{The step-size rule when `control` is `NULL`: `"gsl"`
+(the default) or `"hairer"`; see [OdeControl].}
+
 \item{autonomous}{`TRUE` if `func` does not depend on `t`.}
 
-\item{jac_fd_step}{Relative step for the finite-difference Jacobian; see
-[OdeSolver].}
+\item{jac_fd_step, jac_fd_floor}{The finite-difference Jacobian's relative
+step and small-component floor; see [OdeSolver]. The floor defaults to
+`atol`.}
 
 \item{dense}{`TRUE` (the default) to let the stepper choose its own steps
 and read the requested times off the interpolant of the step spanning

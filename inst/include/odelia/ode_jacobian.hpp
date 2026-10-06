@@ -154,20 +154,27 @@ private:
 // Forward-difference Jacobian of the right-hand side, for a system that has no
 // rebind() to differentiate through: the one-line body of an ode_jacobian() hook
 // on such a system. One evaluation per column, at y + h_j e_j with
-// h_j = rel_step * max(|y_j|, 1), against the `dydt` already known at y, written
-// row-major like Jacobian::compute(). The system is left on the last perturbed
-// point; the stepper sets it again before anything reads it.
+// h_j = rel_step * max(|y_j|, y_floor), against the `dydt` already known at y,
+// written row-major like Jacobian::compute(). The system is left on the last
+// perturbed point; the stepper sets it again before anything reads it.
 //
 // rel_step is a trade between truncation and round-off and the right value
 // depends on how clean the right-hand side is: 1e-6 suits an exactly evaluated
 // function, while one that is itself an iterative solve (a tolerance inside it)
 // wants a larger step, 1e-5 or so, to stay above its noise floor.
+//
+// y_floor is the size below which a component is treated as "small" and the
+// perturbation stops shrinking with it. It must be of the order of the
+// absolute tolerance, not 1: on Robertson's kinetics the middle component sits
+// near 1e-5, and a floor of 1 perturbs it by 10% of itself, which makes the
+// Jacobian wrong enough that RODAS takes 19000 steps where 430 do (measured).
+// A caller with no better number passes its tol_abs.
 template <typename System>
 void fd_jacobian(System& system,
                  const std::vector<typename System::value_type>& y, double t,
                  const std::vector<typename System::value_type>& dydt,
                  std::vector<typename System::value_type>& J,
-                 double rel_step = 1e-6) {
+                 double rel_step = 1e-6, double y_floor = 1e-8) {
   using value_type = typename System::value_type;
   const size_t n = y.size();
   J.assign(n * n, value_type(0.0));
@@ -175,7 +182,7 @@ void fd_jacobian(System& system,
   std::vector<value_type> fj(n);
   for (size_t col = 0; col < n; ++col) {
     const double h =
-        rel_step * std::max(std::abs(util::to_passive(y[col])), 1.0);
+        rel_step * std::max(std::abs(util::to_passive(y[col])), y_floor);
     yj[col] = y[col] + value_type(h);
     ode::derivs(system, yj, fj, t);
     for (size_t row = 0; row < n; ++row) {

@@ -1194,6 +1194,68 @@ void test_dopri() {
               sd.get_system_ref().n_rhs, se.get_system_ref().n_rhs, worst_l);
 }
 
+
+// --- The step-size rule is a switch (#64) -------------------------------------
+
+void test_controller_switch() {
+  using odelia::ode::Controller;
+  using odelia::ode::Method;
+  const State y0{1.0, 1.0, 1.0};
+  const std::vector<double> times{0.0, 20.0};
+  odelia::ode::OdeControl control(1e-6, 1e-6, 1.0, 0.0, 1e-12, 1e9, 1e-6);
+
+  // The default is the gsl rule, and saying so changes nothing: bit-identical.
+  CallbackSystem a(lorenz_rhs, y0, 0.0);
+  odelia::ode::Solver<CallbackSystem> sa(a, control, Method::dopri);
+  sa.advance_adaptive(times);
+  odelia::ode::OdeControl explicit_gsl = control;
+  explicit_gsl.set_controller(Controller::gsl);
+  CallbackSystem b(lorenz_rhs, y0, 0.0);
+  odelia::ode::Solver<CallbackSystem> sb(b, explicit_gsl, Method::dopri);
+  sb.advance_adaptive(times);
+  check(control.get_controller() == Controller::gsl, "the default rule is gsl");
+  check(sa.state() == sb.state() && sa.times() == sb.times(),
+        "and naming it changes nothing, bit for bit");
+
+  // Hairer's rule reaches the same answer (over a horizon short enough that
+  // chaos does not separate two correct step sequences) with fewer rejected
+  // attempts over a long one.
+  odelia::ode::OdeControl hairer = control;
+  hairer.set_controller(Controller::hairer);
+  {
+    CallbackSystem g(lorenz_rhs, y0, 0.0), hh(lorenz_rhs, y0, 0.0);
+    odelia::ode::Solver<CallbackSystem> sg(g, control, Method::dopri), sh(hh, hairer, Method::dopri);
+    sg.advance_adaptive(std::vector<double>{0.0, 2.0});
+    sh.advance_adaptive(std::vector<double>{0.0, 2.0});
+    check(max_abs_diff(sh.state(), sg.state()) < 1e-3,
+          "the hairer rule integrates Lorenz to the same place at 1e-6");
+  }
+  CallbackSystem c(lorenz_rhs, y0, 0.0);
+  odelia::ode::Solver<CallbackSystem> sc(c, hairer, Method::dopri);
+  sc.advance_adaptive(times);
+  check(sc.get_n_rejections() < sa.get_n_rejections() * 0.8,
+        "with at least a fifth fewer rejected attempts");
+  check(sc.get_system_ref().n_rhs <= sa.get_system_ref().n_rhs,
+        "and no more evaluations");
+  std::printf("       (gsl %zu steps + %zu rejections, hairer %zu + %zu)\n",
+              sa.times().size() - 1, sa.get_n_rejections(),
+              sc.times().size() - 1, sc.get_n_rejections());
+
+  // The two validity paths are shared: a non-finite estimate and a domain
+  // refusal are rejections under either rule.
+  auto logistic = [](double, const State& y, State& dydt) {
+    if (y[0] < 0.0 || y[0] > 1.0) odelia::util::stop_domain("outside [0, 1]");
+    dydt[0] = 50.0 * y[0] * (1.0 - y[0]);
+  };
+  odelia::ode::OdeControl loose = loose_control();
+  loose.set_controller(Controller::hairer);
+  CallbackSystem d(logistic, State{0.5}, 0.0);
+  odelia::ode::Solver<CallbackSystem> sd(d, loose, Method::rkck);
+  sd.advance_adaptive(std::vector<double>{0.0, 1.0});
+  check(sd.state()[0] >= 0.0 && sd.state()[0] <= 1.0 && sd.get_n_rejections() > 0,
+        "a domain refusal is a rejection under the hairer rule too");
+}
+
 } // namespace
 
 int main() {
@@ -1220,6 +1282,7 @@ int main() {
   test_singular_w_is_a_rejection();
   test_dense_output();
   test_dopri();
+  test_controller_switch();
   if (failures == 0) {
     std::printf("all checks passed\n");
     return 0;

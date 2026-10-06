@@ -10,6 +10,29 @@
 namespace odelia {
 namespace ode {
 
+// Which rule turns the error estimate into the next step (#64).
+//
+//   gsl     GSL's "standard control", odelia's since plant: accept while the
+//           worst error ratio is below 1.1, grow (by 0.9 r^(-1/(ord+1)), at
+//           most 5x) only below 0.5, and in between keep the step as it is.
+//           The dead band means a step that lands near the edge is repeated
+//           unchanged and rejected next time, and a step sitting inside the
+//           band is never grown: nine times deSolve's rejections on Lorenz,
+//           and 19000 steps where radau takes 144 on Robertson, measured.
+//   hairer  Hairer's rule (dopri5.f, deSolve's rk): the error ratio in the
+//           RMS norm over components, accept at or below 1, then rescale after
+//           every accepted step by 0.9 r^(-1/ord), clamped to [0.2, 5], so
+//           the ratio is steered to about 0.9^ord and the step tracks the
+//           solution's smoothness; no growth on the step right after a
+//           rejection. On Lorenz it does the work deSolve's ode45 does, to
+//           within a fraction of a percent of evaluations.
+//
+// The default is gsl because changing it changes every adaptive step sequence
+// plant takes; the switch is here so a consumer can opt in now and the family
+// can flip the default with plant re-baselined. Rejection of a non-finite
+// estimate (#52) and reject_step() (#55) are the same under both.
+enum class Controller { gsl, hairer };
+
 struct OdeControl {
   typedef std::vector<double> state_type;
 
@@ -39,6 +62,7 @@ struct OdeControl {
     set_step_size_max(step_size_max_);
     set_step_size_initial(step_size_initial_);
     last_step_size_shrank = false;
+    last_rejected = false;
   }
 
   std::vector<double> get_controls() const {
@@ -66,6 +90,9 @@ struct OdeControl {
 
   void set_step_size_initial(double value) { step_size_initial = value; }
   double get_step_size_initial() const { return step_size_initial; }
+
+  void set_controller(Controller value) { controller = value; }
+  Controller get_controller() const { return controller; }
 
   double adjust_step_size(size_t dim, size_t ord,
                           double step_size,
@@ -119,6 +146,21 @@ struct OdeControl {
     {
       step_size = reject_step(step_size);
     }
+    else if (controller == Controller::hairer)
+    {
+      // Hairer's rule reads the error in the RMS norm, as dopri5.f and deSolve
+      // do; the max norm above is the gsl rule's. Measured on Lorenz to
+      // t = 100 at 1e-6 under Dormand-Prince: max norm 4628 steps + 659
+      // rejections, RMS 4208 + 491, the latter the same 4700 attempts and
+      // 28200 evaluations as deSolve's ode45 on the same problem.
+      double ss = 0.0;
+      for (size_t i = 0; i < dim; i++)
+      {
+        const double rr = abs(yerr[i]) / abs(errlevel(y[i], dydt[i], step_size));
+        ss += rr * rr;
+      }
+      step_size = adjust_step_size_hairer(ord, step_size, std::sqrt(ss / dim));
+    }
     else if (rmax > 1.1)
     {
       // decrease step, no more than factor of 5
@@ -166,6 +208,41 @@ struct OdeControl {
     return step_size;
   }
 
+  // Hairer's rule, see Controller. `last_rejected` carries the no-growth-after-
+  // a-rejection memory from one call to the next.
+  double adjust_step_size_hairer(size_t ord, double step_size, double rmax)
+  {
+    const double S = 0.9;
+    double r = rmax > 0.0 ? S / pow(rmax, 1.0 / ord) : 5.0;
+    if (rmax > 1.0)
+    {
+      // Reject and shrink, by at most a factor of 5; at the floor the step
+      // goes through, as the gsl rule lets it (accuracy, not validity).
+      if (r < 0.2) r = 0.2;
+      double new_step = step_size * r;
+      if (new_step < step_size_min) new_step = step_size_min;
+      if (new_step < step_size)
+      {
+        step_size = new_step;
+        last_step_size_shrank = true;
+      }
+      else
+      {
+        last_step_size_shrank = false;
+      }
+      last_rejected = true;
+      return step_size;
+    }
+    if (r > 5.0) r = 5.0;
+    if (r < 0.2) r = 0.2;
+    if (last_rejected && r > 1.0) r = 1.0;
+    step_size *= r;
+    if (step_size > step_size_max) step_size = step_size_max;
+    last_step_size_shrank = false;
+    last_rejected = false;
+    return step_size;
+  }
+
   // Reject the current step outright: not merely inaccurate but *invalid* -- a
   // non-finite error estimate (odelia#52), or a state the system refuses (#55).
   //
@@ -183,6 +260,7 @@ struct OdeControl {
       new_step = step_size_min;
     }
     last_step_size_shrank = true;
+    last_rejected = true;
     return new_step;
   }
 
@@ -207,6 +285,8 @@ struct OdeControl {
   double tol_abs, tol_rel, a_y, a_dydt;
   double step_size_min, step_size_max, step_size_initial;
   bool last_step_size_shrank;
+  Controller controller = Controller::gsl;
+  bool last_rejected = false; // hairer: no growth on the step after a rejection
 };
 
 }

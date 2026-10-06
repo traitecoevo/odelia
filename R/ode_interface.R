@@ -9,6 +9,12 @@
 #' @param step_size_min Minimum allowed step size.
 #' @param step_size_max Maximum allowed step size.
 #' @param step_size_initial Initial step size.
+#' @param controller Which rule turns the error estimate into the next step:
+#'   `"gsl"` (the default; accept below 1.1, grow only below 0.5, otherwise
+#'   keep the step) or `"hairer"` (accept at 1, rescale after every step, as
+#'   `deSolve` and Hairer's codes do). The default is kept for continuity of
+#'   step sequences; `"hairer"` makes far fewer rejected attempts and lets the
+#'   step track a smoothing solution (odelia#64).
 #' @export
 OdeControl <- R6::R6Class(
   "OdeControl",
@@ -72,6 +78,17 @@ OdeControl <- R6::R6Class(
     set_step_size_max = function(step_size_max) {
       OdeControl_set_step_size_max(self$ptr, step_size_max)
       invisible(self)
+    },
+
+    #' @description Set the step-size rule, `"gsl"` or `"hairer"`.
+    set_controller = function(controller) {
+      OdeControl_set_controller(self$ptr, controller)
+      invisible(self)
+    },
+
+    #' @description The step-size rule in force.
+    get_controller = function() {
+      OdeControl_get_controller(self$ptr)
     },
 
     #' @description Set initial step size.

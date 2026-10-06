@@ -60,11 +60,14 @@ public:
 
   // y0 and t0 are the initial state the solver starts from and that reset()
   // returns to; the callable is sized by y0.
+  // jac_fd_step and jac_fd_floor are fd_jacobian()'s rel_step and y_floor;
+  // the floor wants to be the solve's absolute tolerance.
   CallbackSystem(rhs_type rhs, state_type y0, double t0 = 0.0,
                  jac_type jac = jac_type(), valid_type valid = valid_type(),
-                 bool autonomous = false, double jac_fd_step = 1e-6)
+                 bool autonomous = false, double jac_fd_step = 1e-6,
+                 double jac_fd_floor = 1e-8)
       : rhs_(std::move(rhs)), jac_(std::move(jac)), valid_(std::move(valid)),
-        autonomous_(autonomous), jac_fd_step_(jac_fd_step),
+        autonomous_(autonomous), jac_fd_step_(jac_fd_step), jac_fd_floor_(jac_fd_floor),
         y_(std::move(y0)), t_(t0), y0_(y_), t0_(t0) {
     if (!rhs_) {
       util::stop("CallbackSystem needs a right-hand side");
@@ -74,6 +77,9 @@ public:
     }
     if (!(jac_fd_step_ > 0.0)) {
       util::stop("jac_fd_step must be positive");
+    }
+    if (!(jac_fd_floor_ > 0.0)) {
+      util::stop("jac_fd_floor must be positive");
     }
     dydt_.assign(y_.size(), 0.0);
     dirty_ = true;
@@ -135,7 +141,7 @@ public:
                    " elements, expected " + std::to_string(n * n));
       }
     } else {
-      fd_jacobian(*this, y, t, dydt, J, jac_fd_step_);
+      fd_jacobian(*this, y, t, dydt, J, jac_fd_step_, jac_fd_floor_);
     }
   }
 
@@ -166,6 +172,7 @@ public:
 
   bool autonomous() const { return autonomous_; }
   double jac_fd_step() const { return jac_fd_step_; }
+  double jac_fd_floor() const { return jac_fd_floor_; }
   bool has_jacobian_callback() const { return static_cast<bool>(jac_); }
 
   // Right-hand-side evaluations and Jacobian formations since construction.
@@ -191,6 +198,7 @@ private:
   valid_type valid_;
   bool autonomous_ = false;
   double jac_fd_step_ = 1e-6;
+  double jac_fd_floor_ = 1e-8;
 
   state_type y_;
   double t_ = 0.0;
