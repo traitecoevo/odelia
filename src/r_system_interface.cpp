@@ -30,10 +30,6 @@ SEXP RSolver_new(Rcpp::Function rhs, Rcpp::Nullable<Rcpp::Function> jac,
                  double jac_fd_floor) {
   Rcpp::XPtr<ode::OdeControl> ctrl(control_xp);
   std::vector<double> y(y0.begin(), y0.end());
-  // A non-positive floor means "the control's absolute tolerance".
-  if (!(jac_fd_floor > 0.0)) {
-    jac_fd_floor = ctrl->get_tol_abs();
-  }
   ode::CallbackSystem sys = rinterface::make_r_system(
       rhs, jac, state_valid, Rcpp::RObject(parms), y, t0, autonomous, jac_fd_step,
       jac_fd_floor);

@@ -72,7 +72,7 @@ check_callback <- function(f, name, nullable = FALSE) {
 #' right-hand-side evaluations per step.
 #'
 #' Only the number of right-hand-side evaluations matters for a right-hand
-#' side that is itself expensive, and `counts()` reports it. Per accepted
+#' side that is itself expensive, and `$counts()` reports it. Per accepted
 #' step RODAS makes six (five stages and the derivative at the new point),
 #' plus one for the time derivative unless `autonomous = TRUE`, plus the
 #' Jacobian once -- `n` evaluations by finite differences, one call to `jac`
@@ -111,14 +111,20 @@ check_callback <- function(f, name, nullable = FALSE) {
 #'   that is itself an iterative solve wants a larger step than the default to
 #'   stay above its own noise.
 #' @param jac_fd_floor The size below which a state component counts as small
-#'   for that perturbation; `NULL` means the control's absolute tolerance. It
-#'   must be of the order of the smallest component that matters, not 1: a
-#'   floor of 1 perturbs a component of size 1e-5 by a tenth of itself.
+#'   for that perturbation (the default 1e-5 is `rodas.f`'s). A floor of 1
+#'   perturbs a component of size 1e-5 by a tenth of itself; a floor as small
+#'   as a tight absolute tolerance makes the perturbation vanish in the
+#'   subtraction. Lower it only for a state whose components legitimately
+#'   live below 1e-5. A component sitting on the upper edge of its domain is
+#'   perturbed downwards instead when the right-hand side refuses the upward
+#'   point with [domain_error()].
 #' @param time_max A time the step must not pass; `Inf` for no bound.
 #' @param times Times to advance to; the first must be the current time.
 #' @param y A state vector, of any length.
 #' @param time The time that state is at.
 #' @param h A step size.
+#' @param dense `TRUE` to read the requested times off each step's
+#'   interpolant, `FALSE` to land a step on each; see `advance_collect()`.
 #' @export
 #' @examples
 #' decay <- function(t, y) -y
@@ -134,7 +140,7 @@ OdeSolver <- R6::R6Class(
     initialize = function(rhs, y0, t0 = 0, jac = NULL, state_valid = NULL,
                           parms = NULL, control = NULL, method = "dopri",
                           autonomous = FALSE, jac_fd_step = 1e-6,
-                          jac_fd_floor = NULL) {
+                          jac_fd_floor = 1e-5) {
       rhs <- check_callback(rhs, "rhs")
       jac <- check_callback(jac, "jac", nullable = TRUE)
       state_valid <- check_callback(state_valid, "state_valid", nullable = TRUE)
@@ -152,7 +158,7 @@ OdeSolver <- R6::R6Class(
       private$ptr <- RSolver_new(rhs, jac, state_valid, parms, y0,
                                  as.numeric(t0), control$ptr, method,
                                  isTRUE(autonomous), jac_fd_step,
-                                 if (is.null(jac_fd_floor)) -1 else as.numeric(jac_fd_floor))
+                                 as.numeric(jac_fd_floor))
     },
 
     #' @description Take one adaptive step, not passing `time_max`. Refused
@@ -267,24 +273,25 @@ OdeSolver <- R6::R6Class(
 #' @param control An [OdeControl], or `NULL` for the defaults with the
 #'   tolerances below, the `controller` below, and the largest step set to
 #'   the span of `times` (an [OdeControl] made directly caps the step at 10).
+#'   With a `control` given, `rtol`, `atol` and `controller` are ignored.
 #' @param rtol,atol Shorthand for the control's relative and absolute
 #'   tolerances when `control` is `NULL`.
 #' @param autonomous `TRUE` if `func` does not depend on `t`.
 #' @param jac_fd_step,jac_fd_floor The finite-difference Jacobian's relative
-#'   step and small-component floor; see [OdeSolver]. The floor defaults to
-#'   `atol`.
+#'   step and small-component floor; see [OdeSolver].
 #' @param controller The step-size rule when `control` is `NULL`: `"gsl"`
 #'   (the default) or `"hairer"`; see [OdeControl].
-#' @param dense `TRUE` (the default) to let the stepper choose its own steps
-#'   and read the requested times off the interpolant of the step spanning
-#'   each, as `deSolve`'s `lsoda` does; `FALSE` to land a step on every
-#'   requested time, as its `ode45` does, which costs more steps when the
-#'   output is finer than the steps. Under `"dopri"` the interpolant has the
-#'   stepper's order; under `"rkck"` and `"rodas"` it is cubic Hermite, one
-#'   order short, so use `dense = FALSE` with those when the output grid is
-#'   coarser than the steps.
+#' @param dense `TRUE` to let the stepper choose its own steps and read the
+#'   requested times off the interpolant of the step spanning each, as
+#'   `deSolve`'s `lsoda` does; `FALSE` to land a step on every requested time,
+#'   as its `ode45` does, which costs more steps when the output is finer than
+#'   the steps. `NULL`, the default, means `TRUE` under `"dopri"`, whose
+#'   interpolant has the stepper's order, and `FALSE` under `"rkck"` and
+#'   `"rodas"`, whose interpolant is cubic Hermite, one order short (on Lorenz
+#'   at 1e-6 the Cash--Karp dense rows err by 6e-4 where landed rows err by
+#'   3e-11, measured).
 #' @return A numeric matrix of class `odelia_solution`, `length(times)` rows;
-#'   [counts()] on it says what the solve cost.
+#'   [ode_counts()] on it says what the solve cost.
 #' @export
 #' @examples
 #' lorenz <- function(t, y, p) {
@@ -295,18 +302,22 @@ OdeSolver <- R6::R6Class(
 #' out <- ode_solve(lorenz, y0 = c(x = 1, y = 1, z = 1), times = seq(0, 2, by = 0.1),
 #'                  parms = c(sigma = 10, rho = 28, beta = 8 / 3), autonomous = TRUE)
 #' head(out)
-#' counts(out)
+#' ode_counts(out)
 ode_solve <- function(func, y0, times, parms = NULL, jacfunc = NULL,
                       method = "dopri", control = NULL,
                       rtol = 1e-6, atol = 1e-6, controller = "gsl",
-                      autonomous = FALSE, jac_fd_step = 1e-6, jac_fd_floor = NULL,
-                      dense = TRUE) {
+                      autonomous = FALSE, jac_fd_step = 1e-6, jac_fd_floor = 1e-5,
+                      dense = NULL) {
   func <- check_callback(func, "func")
   # deSolve's form takes three arguments; call it that way even with no parms.
   if (is.null(parms)) parms <- list()
   times <- as.numeric(times)
   if (length(times) < 1 || anyNA(times) || is.unsorted(times, strictly = TRUE)) {
     stop("times must be strictly increasing", call. = FALSE)
+  }
+  if (is.null(dense)) {
+    # Only Dormand-Prince has dense output of its own order; see ?ode_solve.
+    dense <- method %in% c("dopri", "dopri5", "ode45", "rk45dp7")
   }
   if (is.null(control)) {
     control <- OdeControl$new()
@@ -315,7 +326,8 @@ ode_solve <- function(func, y0, times, parms = NULL, jacfunc = NULL,
     control$set_controller(controller)
     # The control's default largest step (10) is a plant-sized number; here
     # the span of the output is the only natural bound, as in deSolve.
-    control$set_step_size_max(max(diff(range(times)), 1))
+    span <- diff(range(times))
+    if (span > 0) control$set_step_size_max(span)
   }
   # func and jacfunc are called as f(t, y, parms) and a list result is
   # unwrapped, both inside the adapter: no R closure sits between the solver
@@ -347,18 +359,18 @@ ode_solve <- function(func, y0, times, parms = NULL, jacfunc = NULL,
 #' @export
 #' @examples
 #' out <- ode_solve(function(t, y, p) -y, y0 = 1, times = c(0, 1))
-#' counts(out)
-counts <- function(x, ...) UseMethod("counts")
+#' ode_counts(out)
+ode_counts <- function(x, ...) UseMethod("ode_counts")
 
-#' @rdname counts
+#' @rdname ode_counts
 #' @export
-counts.odelia_solution <- function(x, ...) attr(x, "counts")
+ode_counts.odelia_solution <- function(x, ...) attr(x, "counts")
 
 #' @export
 print.odelia_solution <- function(x, ...) {
   print(unclass(x)[, , drop = FALSE], ...)
   n <- attr(x, "counts")
-  cat(sprintf("<%d steps, %d evaluations; counts() for detail>\n",
+  cat(sprintf("<%d steps, %d evaluations; ode_counts() for detail>\n",
               as.integer(n[["n_steps"]]), as.integer(n[["n_rhs"]])))
   invisible(x)
 }

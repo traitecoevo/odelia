@@ -164,27 +164,42 @@ private:
 // wants a larger step, 1e-5 or so, to stay above its noise floor.
 //
 // y_floor is the size below which a component is treated as "small" and the
-// perturbation stops shrinking with it. It must be of the order of the
-// absolute tolerance, not 1: on Robertson's kinetics the middle component sits
-// near 1e-5, and a floor of 1 perturbs it by 10% of itself, which makes the
-// Jacobian wrong enough that RODAS takes 19000 steps where 430 do (measured).
-// A caller with no better number passes its tol_abs.
+// perturbation stops shrinking with it. The default 1e-5 is rodas.f's. It has
+// to sit between two failures: a floor of 1 perturbs a component of size 1e-5
+// by a tenth of itself (on Robertson's kinetics RODAS then takes 19000 steps
+// where 430 do, measured), while a floor of the solve's absolute tolerance
+// makes the perturbation rel_step * tol_abs, which at tol_abs = 1e-10 is 1e-16
+// and vanishes in the subtraction (J = 0 for a unit derivative, measured).
+// Lower it only for a state whose components legitimately live below 1e-5,
+// keeping rel_step * y_floor well above eps * |f|.
+//
+// A right-hand side that refuses y + h e_j (util::DomainError: a component
+// sitting on the upper edge of its domain) is asked at y - h e_j instead, so
+// that a bounded state on its boundary does not make every retry fail the
+// same way; the Jacobian does not depend on the step size, so a smaller step
+// could never have helped. If both sides refuse, the refusal propagates and
+// the stepper treats it as it treats any domain refusal.
 template <typename System>
 void fd_jacobian(System& system,
                  const std::vector<typename System::value_type>& y, double t,
                  const std::vector<typename System::value_type>& dydt,
                  std::vector<typename System::value_type>& J,
-                 double rel_step = 1e-6, double y_floor = 1e-8) {
+                 double rel_step = 1e-6, double y_floor = 1e-5) {
   using value_type = typename System::value_type;
   const size_t n = y.size();
   J.assign(n * n, value_type(0.0));
   std::vector<value_type> yj(y);
   std::vector<value_type> fj(n);
   for (size_t col = 0; col < n; ++col) {
-    const double h =
-        rel_step * std::max(std::abs(util::to_passive(y[col])), y_floor);
+    double h = rel_step * std::max(std::abs(util::to_passive(y[col])), y_floor);
     yj[col] = y[col] + value_type(h);
-    ode::derivs(system, yj, fj, t);
+    try {
+      ode::derivs(system, yj, fj, t);
+    } catch (const util::DomainError&) {
+      h = -h;
+      yj[col] = y[col] + value_type(h);
+      ode::derivs(system, yj, fj, t);
+    }
     for (size_t row = 0; row < n; ++row) {
       J[row * n + col] = (fj[row] - dydt[row]) / value_type(h);
     }

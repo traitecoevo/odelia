@@ -43,9 +43,9 @@ testthat::test_that("ode_solve on Lorenz matches the compiled solver, with every
     expect_equal(out[, "y"], ref$y, tolerance = 1e-6)
     expect_equal(out[, "z"], ref$z, tolerance = 1e-6)
     expect_s3_class(out, "odelia_solution")
-    expect_named(counts(out), c("n_rhs", "n_jac", "n_steps", "n_rejections"))
-    expect_gt(counts(out)[["n_rhs"]], 0)
-    expect_output(print(out), "evaluations; counts\\(\\) for detail")
+    expect_named(ode_counts(out), c("n_rhs", "n_jac", "n_steps", "n_rejections"))
+    expect_gt(ode_counts(out)[["n_rhs"]], 0)
+    expect_output(print(out), "evaluations; ode_counts\\(\\) for detail")
   }
 })
 
@@ -68,8 +68,8 @@ testthat::test_that("a supplied Jacobian agrees with finite differences and is f
   an <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, method = "rodas",
                   jacfunc = lorenz_r_jac, autonomous = TRUE)
   expect_equal(an[2, -1], fd[2, -1], tolerance = 1e-5)
-  ca <- counts(an)
-  cf <- counts(fd)
+  ca <- ode_counts(an)
+  cf <- ode_counts(fd)
   expect_equal(ca[["n_jac"]], ca[["n_steps"]])
   # The budget from tests/standalone: one evaluation to seed, six per attempt,
   # and for the finite-difference Jacobian n = 3 more per accepted step.
@@ -78,7 +78,7 @@ testthat::test_that("a supplied Jacobian agrees with finite differences and is f
   # Not declared autonomous: one more per accepted step for df/dt.
   na <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, method = "rodas",
                   jacfunc = lorenz_r_jac, autonomous = FALSE)
-  cn <- counts(na)
+  cn <- ode_counts(na)
   expect_equal(cn[["n_rhs"]], 1 + 6 * (cn[["n_steps"]] + cn[["n_rejections"]]) + cn[["n_steps"]])
 })
 
@@ -90,7 +90,7 @@ testthat::test_that("RODAS through R takes far fewer steps than RKCK on stiff Va
   rkck <- ode_solve(vdp, c(2, 0), times, eps, method = "rkck", autonomous = TRUE)
   expect_true(all(is.finite(rodas)))
   expect_equal(rodas[, 2], rkck[, 2], tolerance = 1e-3)
-  expect_lt(counts(rodas)[["n_steps"]], counts(rkck)[["n_steps"]] / 5)
+  expect_lt(ode_counts(rodas)[["n_steps"]], ode_counts(rkck)[["n_steps"]] / 5)
 })
 
 testthat::test_that("dense output under dopri agrees with landing on every time, for far fewer evaluations", {
@@ -101,13 +101,13 @@ testthat::test_that("dense output under dopri agrees with landing on every time,
                       rtol = 1e-8, atol = 1e-8, autonomous = TRUE, dense = FALSE)
   expect_equal(dense[, "time"], times)
   expect_equal(dense[, -1], landed[, -1], tolerance = 1e-5)
-  expect_lt(counts(dense)[["n_rhs"]], counts(landed)[["n_rhs"]] / 2)
+  expect_lt(ode_counts(dense)[["n_rhs"]], ode_counts(landed)[["n_rhs"]] / 2)
   # A quartic is reproduced exactly, whatever the steps: the dense output has
   # the method's order.
   grid <- seq(0, 2, by = 0.01)
   quartic <- ode_solve(function(t, y, p) 4 * t^3, 0, grid, method = "dopri")
   expect_equal(quartic[, 2], grid^4, tolerance = 1e-10)
-  expect_lt(counts(quartic)[["n_steps"]], 30)
+  expect_lt(ode_counts(quartic)[["n_steps"]], 30)
   # Under the other steppers the interpolant is cubic Hermite: exact for a
   # cubic, and one order short otherwise.
   cubic <- ode_solve(function(t, y, p) 3 * t^2, 0, grid, method = "rkck")
@@ -158,13 +158,13 @@ testthat::test_that("Robertson's stiff kinetics through R matches deSolve radau 
   expect_equal(out[, 4], as.numeric(ref[, 4]), tolerance = 1e-5)
   # mass is conserved to rounding, whatever the steps
   expect_equal(rowSums(out[, 2:4]), rep(1, nrow(out)), tolerance = 1e-9)
-  # With the finite-difference Jacobian's floor at atol this takes ~450 steps
+  # With the finite-difference Jacobian's floor at 1e-5 this takes ~450 steps
   # (radau: 144). With the floor at 1 it took 19000: a floor of 1 perturbs the
   # 1e-5-sized middle component by 10% of itself and the Jacobian is garbage.
-  expect_lt(counts(out)[["n_steps"]], 1000)
+  expect_lt(ode_counts(out)[["n_steps"]], 1000)
   bad <- ode_solve(robertson, c(1, 0, 0), times, method = "rodas", rtol = 1e-8, atol = 1e-10,
                    autonomous = TRUE, dense = FALSE, jac_fd_floor = 1)
-  expect_gt(counts(bad)[["n_steps"]], 5 * counts(out)[["n_steps"]])
+  expect_gt(ode_counts(bad)[["n_steps"]], 5 * ode_counts(out)[["n_steps"]])
 })
 
 testthat::test_that("the step-size rule is a switch, with the gsl rule the default", {
@@ -177,8 +177,8 @@ testthat::test_that("the step-size rule is a switch, with the gsl rule the defau
   gsl <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, autonomous = TRUE)
   hairer <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, autonomous = TRUE,
                       controller = "hairer")
-  expect_lt(counts(hairer)[["n_rejections"]], 0.8 * counts(gsl)[["n_rejections"]])
-  expect_lte(counts(hairer)[["n_rhs"]], counts(gsl)[["n_rhs"]])
+  expect_lt(ode_counts(hairer)[["n_rejections"]], 0.8 * ode_counts(gsl)[["n_rejections"]])
+  expect_lte(ode_counts(hairer)[["n_rhs"]], ode_counts(gsl)[["n_rhs"]])
   short <- seq(0, 2, by = 0.1)
   expect_equal(ode_solve(lorenz_r_rhs, c(1, 1, 1), short, lorenz_pars, autonomous = TRUE, controller = "hairer")[, 2],
                ode_solve(lorenz_r_rhs, c(1, 1, 1), short, lorenz_pars, autonomous = TRUE)[, 2],
@@ -306,4 +306,54 @@ testthat::test_that("after every accepted step the last evaluation was at the so
     expect_identical(seen, list(t = 2, y = c(3, 4, 5)))
     expect_identical(s$rates(), -c(3, 4, 5))
   }
+})
+
+testthat::test_that("an error in a callback names the callback, not the deparsed closure", {
+  e <- tryCatch(ode_solve(function(t, y, p) { a <- 1; if (t > 0.1) stop("boom"); -y }, 1, c(0, 1)),
+                error = function(e) e)
+  expect_equal(conditionMessage(e), "boom")
+  expect_equal(as.character(conditionCall(e)[[1]]), "rhs")
+  e <- tryCatch(OdeSolver$new(function(t, y) -y, 1, jac = function(t, y) stop("jac boom"),
+                              method = "rodas")$step(), error = function(e) e)
+  expect_equal(as.character(conditionCall(e)[[1]]), "jac")
+})
+
+testthat::test_that("parms reaches the function as given, even when it is a symbol or a call", {
+  seen <- NULL
+  out <- ode_solve(function(t, y, p) { seen <<- p; -y }, 1, c(0, 0.1), parms = quote(x))
+  expect_identical(seen, quote(x))
+  ode_solve(function(t, y, p) { seen <<- p; -y }, 1, c(0, 0.1), parms = quote(a + b))
+  expect_identical(seen, quote(a + b))
+  ode_solve(function(t, y, p) { seen <<- p; -y }, 1, c(0, 0.1), parms = ~ z)
+  expect_s3_class(seen, "formula")
+})
+
+testthat::test_that("dense output is the default only under dopri", {
+  times <- seq(0, 2, by = 0.01)
+  for (method in c("rkck", "rodas")) {
+    expect_identical(ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, method = method, autonomous = TRUE),
+                     ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, method = method, autonomous = TRUE,
+                               dense = FALSE))
+  }
+  expect_identical(ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, autonomous = TRUE),
+                   ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, autonomous = TRUE, dense = TRUE))
+  expect_false(identical(ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, autonomous = TRUE),
+                         ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, autonomous = TRUE, dense = FALSE)))
+})
+
+testthat::test_that("the finite-difference Jacobian survives a state on the upper edge of its domain", {
+  # The exact flow approaches 1 from below and never crosses; a forward
+  # perturbation from y = 1 is refused, and the Jacobian does not depend on
+  # the step size, so without the downward fallback no retry could help.
+  ceiling_rhs <- function(t, y, p) { if (y[1] > 1) domain_error("over 1"); -(y[1] - 1) }
+  out <- ode_solve(ceiling_rhs, 1, c(0, 1), method = "rodas")
+  expect_equal(unname(out[2, 2]), 1)
+  # And the floor keeps the perturbation above rounding at a tight tolerance:
+  # f = exp(-y) + 1 has slope -1 at y = 0, where a floor of atol would make
+  # the perturbation 1e-16 and the Jacobian zero.
+  n_jac_steps <- function(...) {
+    ode_counts(ode_solve(function(t, y, p) exp(-y) + 1, 0, c(0, 1), method = "rodas",
+                         rtol = 1e-10, atol = 1e-10, autonomous = TRUE, ...))[["n_steps"]]
+  }
+  expect_lt(n_jac_steps(), 2 * n_jac_steps(jac_fd_floor = 1e-3))
 })

@@ -61,11 +61,11 @@ public:
   // y0 and t0 are the initial state the solver starts from and that reset()
   // returns to; the callable is sized by y0.
   // jac_fd_step and jac_fd_floor are fd_jacobian()'s rel_step and y_floor;
-  // the floor wants to be the solve's absolute tolerance.
+  // see there for why the floor is 1e-5 and not the absolute tolerance.
   CallbackSystem(rhs_type rhs, state_type y0, double t0 = 0.0,
                  jac_type jac = jac_type(), valid_type valid = valid_type(),
                  bool autonomous = false, double jac_fd_step = 1e-6,
-                 double jac_fd_floor = 1e-8)
+                 double jac_fd_floor = 1e-5)
       : rhs_(std::move(rhs)), jac_(std::move(jac)), valid_(std::move(valid)),
         autonomous_(autonomous), jac_fd_step_(jac_fd_step), jac_fd_floor_(jac_fd_floor),
         y_(std::move(y0)), t_(t0), y0_(y_), t0_(t0) {
@@ -198,7 +198,7 @@ private:
   valid_type valid_;
   bool autonomous_ = false;
   double jac_fd_step_ = 1e-6;
-  double jac_fd_floor_ = 1e-8;
+  double jac_fd_floor_ = 1e-5;
 
   state_type y_;
   double t_ = 0.0;

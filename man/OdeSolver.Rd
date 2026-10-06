@@ -23,7 +23,7 @@ leave it `NULL` and it is formed by forward differences at `n` extra
 right-hand-side evaluations per step.
 
 Only the number of right-hand-side evaluations matters for a right-hand
-side that is itself expensive, and `counts()` reports it. Per accepted
+side that is itself expensive, and `$counts()` reports it. Per accepted
 step RODAS makes six (five stages and the derivative at the new point),
 plus one for the time derivative unless `autonomous = TRUE`, plus the
 Jacobian once -- `n` evaluations by finite differences, one call to `jac`
@@ -84,7 +84,7 @@ s$counts()
   method = "dopri",
   autonomous = FALSE,
   jac_fd_step = 1e-06,
-  jac_fd_floor = NULL
+  jac_fd_floor = 1e-05
 )}
     \if{html}{\out{</div>}}
   }
@@ -113,9 +113,13 @@ implicit stepper one evaluation per step for the time derivative.}
 that is itself an iterative solve wants a larger step than the default to
 stay above its own noise.}
       \item{\code{jac_fd_floor}}{The size below which a state component counts as small
-for that perturbation; `NULL` means the control's absolute tolerance. It
-must be of the order of the smallest component that matters, not 1: a
-floor of 1 perturbs a component of size 1e-5 by a tenth of itself.}
+for that perturbation (the default 1e-5 is `rodas.f`'s). A floor of 1
+perturbs a component of size 1e-5 by a tenth of itself; a floor as small
+as a tight absolute tolerance makes the perturbation vanish in the
+subtraction. Lower it only for a state whose components legitimately
+live below 1e-5. A component sitting on the upper edge of its domain is
+perturbed downwards instead when the right-hand side refuses the upward
+point with [domain_error()].}
     }
     \if{html}{\out{</div>}}
   }
@@ -185,6 +189,8 @@ floor of 1 perturbs a component of size 1e-5 by a tenth of itself.}
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{times}}{Times to advance to; the first must be the current time.}
+      \item{\code{dense}}{`TRUE` to read the requested times off each step's
+interpolant, `FALSE` to land a step on each; see `advance_collect()`.}
     }
     \if{html}{\out{</div>}}
   }

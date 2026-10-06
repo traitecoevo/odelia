@@ -764,6 +764,36 @@ void test_callback_rodas_matches_compiled() {
   odelia::ode::fd_jacobian(probe, y, 0.0, f, J_fd);
   lorenz_jac(0.0, y, f, J_an);
   check(max_abs_diff(J_fd, J_an) < 1e-4, "fd_jacobian matches the analytic Jacobian");
+
+  // The default floor keeps the perturbation above rounding: f = exp(y) + 1
+  // has unit slope at y = 0, where a floor of a tight absolute tolerance
+  // (1e-10) makes the perturbation 1e-16 and the difference vanishes.
+  auto expo = [](double, const State& y, State& dydt) { dydt[0] = std::exp(y[0]) + 1.0; };
+  CallbackSystem ex(expo, State{0.0}, 0.0);
+  State y_zero{0.0}, f_zero(1), J1, J2;
+  odelia::ode::derivs(ex, y_zero, f_zero, 0.0);
+  odelia::ode::fd_jacobian(ex, y_zero, 0.0, f_zero, J1);
+  odelia::ode::fd_jacobian(ex, y_zero, 0.0, f_zero, J2, 1e-6, 1e-10);
+  check(std::abs(J1[0] - 1.0) < 1e-4, "fd_jacobian's default floor gives the unit slope at y = 0");
+  check(std::abs(J2[0] - 1.0) > 0.5, "where a floor of 1e-10 loses it (test is not vacuous)");
+
+  // A component on the upper edge of its domain is perturbed downwards when
+  // the right-hand side refuses the upward point.
+  auto ceiling = [](double, const State& y, State& dydt) {
+    if (y[0] > 1.0) odelia::util::stop_domain("over 1");
+    dydt[0] = -(y[0] - 1.0);
+  };
+  CallbackSystem ce(ceiling, State{1.0}, 0.0);
+  State y_one{1.0}, f_one(1), Jc;
+  odelia::ode::derivs(ce, y_one, f_one, 0.0);
+  odelia::ode::fd_jacobian(ce, y_one, 0.0, f_one, Jc);
+  check(std::abs(Jc[0] + 1.0) < 1e-4, "fd_jacobian falls back to a downward perturbation on the boundary");
+  CallbackSystem ce2(ceiling, State{1.0}, 0.0, CallbackSystem::jac_type(), CallbackSystem::valid_type(), true);
+  odelia::ode::Solver<CallbackSystem> sce(ce2, tight_control(), Method::rodas);
+  bool threw = false;
+  try { sce.advance_adaptive(std::vector<double>{0.0, 1.0}); } catch (const std::runtime_error&) { threw = true; }
+  check(!threw && std::abs(sce.state()[0] - 1.0) < 1e-8,
+        "so RODAS with a finite-difference Jacobian starts from the boundary");
 }
 
 // What a step costs in right-hand-side evaluations is the whole cost of a step

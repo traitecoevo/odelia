@@ -124,9 +124,9 @@ runner_stiff <- Lorenz_Solver$new(lz$ptr, ctrl$ptr, method = "rodas")
 All three share the same adaptive step-size controller and `OdeControl`
 tolerances, so you can switch between them without changing anything else.
 The controller's rule is itself a switch, `OdeControl$set_controller()`:
-`"gsl"` (the default, odelia's long-standing rule) or `"hairer"` (the rule of
-Hairer's codes and `deSolve`, which rejects far fewer attempts; see the package
-NEWS for 0.6.0).
+`"gsl"` (the default, odelia's long-standing rule) or `"hairer"` (the classical
+rule of Hairer's codes and `deSolve`, which rejects far fewer attempts; see the
+package NEWS for 0.6.0).
 
 To use `method = "rodas"` with your own C++ system, give it either a
 `template<class U> System<U> rebind() const` method (a one-liner that copies the
@@ -140,7 +140,7 @@ differentiating a fit *through* RODAS is planned (odelia issue #36).
 ## Solving a system written in R
 
 Everything above drives a system compiled in C++. From 0.6.0 the same solver,
-with the same controller and both steppers, also takes a right-hand side
+with the same controller and all three steppers, also takes a right-hand side
 written in R. There is nothing to compile: `ode_solve()` is shaped like
 `deSolve::ode()`, so a function written for deSolve runs unchanged, and returns
 a matrix with a `time` column and one column per state variable.
@@ -160,15 +160,17 @@ head(out_r)
 ```
 
 The steps are the controller's own, and the rows asked for are read off each
-step's dense output (`dense = TRUE`, the default), so asking for ten thousand
-rows costs the same integration as asking for ten. With `dense = FALSE` a step
-is made to end on every requested time instead, which is what `deSolve`'s
-`ode45` does and what makes a fine output grid expensive there.
+step's dense output (`dense = TRUE`, the default under `"dopri"`), so asking
+for ten thousand rows costs the same integration as asking for ten. Under the
+other two steppers the interpolant is one order short of the step, so there
+the default is `dense = FALSE`: a step is made to end on every requested time,
+which is what `deSolve`'s `ode45` does and what makes a fine output grid
+expensive there.
 
 The implicit stepper needs the Jacobian of the right-hand side. Supply it as
 `jacfunc(t, y, parms)`, an n by n matrix whose column j is the derivative with
 respect to `y[j]`, or leave it out and it is formed by forward differences at
-`n` extra evaluations per step. `counts()` says what the solve cost, which for a
+`n` extra evaluations per step. `ode_counts()` says what the solve cost, which for a
 right-hand side that is itself expensive is the only number that matters:
 
 ```{r r-rhs-rodas}
@@ -180,7 +182,7 @@ lorenz_jac <- function(t, y, p) {
 out_rodas <- ode_solve(lorenz_r, y0 = c(x = 1, y = 1, z = 1),
                        times = seq(0, 2, by = 0.1), parms = pars,
                        jacfunc = lorenz_jac, method = "rodas", autonomous = TRUE)
-counts(out_rodas)
+ode_counts(out_rodas)
 ```
 
 A stiff problem is where the implicit stepper earns its keep. Van der Pol with
@@ -194,7 +196,7 @@ vdp <- function(t, y, eps) {
 times <- seq(0, 2, by = 0.2)
 stiff_rodas <- ode_solve(vdp, c(2, 0), times, parms = 1e-4, method = "rodas", autonomous = TRUE)
 stiff_dopri <- ode_solve(vdp, c(2, 0), times, parms = 1e-4, method = "dopri", autonomous = TRUE)
-rbind(rodas = counts(stiff_rodas), dopri = counts(stiff_dopri))
+rbind(rodas = ode_counts(stiff_rodas), dopri = ode_counts(stiff_dopri))
 ```
 
 Underneath `ode_solve()` is the R6 class `OdeSolver`, which is driven a step
@@ -232,7 +234,7 @@ with 10001 rows takes 27 ms here against 62 ms for `ode45` and 33 ms for
 `lsoda`, with the same R function and the same accuracy against a tight
 reference. The compiled route above is a hundred times faster still, because
 nothing crosses into R per stage. For a right-hand side that is itself a large
-computation the solver's own cost is nothing, and what `counts()` reports is
+computation the solver's own cost is nothing, and what `ode_counts()` reports is
 the whole cost of the integration.
 
 ## Where next

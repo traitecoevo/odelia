@@ -19,10 +19,11 @@ namespace ode {
 //           unchanged and rejected next time, and a step sitting inside the
 //           band is never grown: nine times deSolve's rejections on Lorenz,
 //           and 19000 steps where radau takes 144 on Robertson, measured.
-//   hairer  Hairer's rule (dopri5.f, deSolve's rk): the error ratio in the
-//           RMS norm over components, accept at or below 1, then rescale after
-//           every accepted step by 0.9 r^(-1/ord), clamped to [0.2, 5], so
-//           the ratio is steered to about 0.9^ord and the step tracks the
+//   hairer  Hairer's classical rule (dopri5.f without its Lund stabilisation
+//           term, beta = 0; deSolve's rk): the error ratio in the RMS norm
+//           over components, accept at or below 1, then rescale after every
+//           accepted step by 0.9 r^(-1/ord), clamped to [0.2, 5], so the
+//           ratio is steered to about 0.9^ord and the step tracks the
 //           solution's smoothness; no growth on the step right after a
 //           rejection. On Lorenz it does the work deSolve's ode45 does, to
 //           within a fraction of a percent of evaluations.
@@ -156,7 +157,9 @@ struct OdeControl {
       double ss = 0.0;
       for (size_t i = 0; i < dim; i++)
       {
-        const double rr = abs(yerr[i]) / abs(errlevel(y[i], dydt[i], step_size));
+        // std::abs, not abs: with libstdc++ an unqualified abs on a double is
+        // C's int abs(int), and the ratio becomes an integer division by zero.
+        const double rr = std::abs(yerr[i]) / std::abs(errlevel(y[i], dydt[i], step_size));
         ss += rr * rr;
       }
       step_size = adjust_step_size_hairer(ord, step_size, std::sqrt(ss / dim));

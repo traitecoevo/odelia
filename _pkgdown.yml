@@ -5,9 +5,10 @@ template:
 
 reference:
 - title: Solving a system written in R
-  desc: A right-hand side as an R function, with either stepper.
+  desc: A right-hand side as an R function, with any of the three steppers.
   contents:
   - ode_solve
+  - ode_counts
   - OdeSolver
   - domain_error
 - title: Systems and solvers
