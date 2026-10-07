@@ -52,8 +52,11 @@ public:
     jac_valid = false;
     y_jac.assign(size, value_type(0.0));
     t_jac = 0.0;
-    J.assign(size * size, value_type(0.0));
-    W.assign(size * size, value_type(0.0));
+    // The n*n buffers J and W are NOT sized here but in step(). The solver
+    // resizes every stepper it holds whenever the state length changes, whether
+    // or not this one is ever stepped, and a consumer that grows its state often
+    // (plant introduces a cohort at every schedule event) would otherwise pay
+    // O(n^2) per resize for a method it does not use.
     dT.assign(size, value_type(0.0));
     arg.assign(size, value_type(0.0));
     ftmp.assign(size, value_type(0.0));
@@ -92,6 +95,10 @@ public:
       jac_valid = true;
     }
 
+    // J was sized by jac.compute(): resize() clears jac_valid, so the first
+    // step at a new size always forms it. W is overwritten in full below, so
+    // sizing it needs no fill.
+    W.resize(size * size);
     const value_type fac = value_type(1.0 / (h * gamma));
     for (size_t i = 0; i < size * size; ++i) {
       W[i] = -J[i];
