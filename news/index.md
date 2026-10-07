@@ -1,5 +1,24 @@
 # Changelog
 
+## odelia 0.6.2
+
+**Resizing a solver no longer costs the square of the state length when
+RODAS is not the stepper (plant#656).** `SolverInternal::resize()`
+resizes every stepper the solver holds, and `RodasStep::resize()`
+zero-filled its two dense n×n buffers (`J`, `W`) each time, whatever the
+method. A consumer that changes its state length often paid that on
+every change: plant grows its state at each cohort introduction, so a
+run over n unknowns cost O(n²) per introduction for a stepper it never
+calls. The buffers are now sized on RODAS’s first step at a new length,
+and `W` without a fill, since every step overwrites it. Results are
+bit-identical; only allocation moved. In plant, `run_mutant()` over 51
+FF16 mutants against one resident fell from 45 s to 0.72 s (63×), now
+cheaper per mutant than running them one at a time, and a three-species
+FF16 resident run from 0.76 s to 0.37 s.
+
+A **patch** bump: no signature changes, and the same results for every
+method.
+
 ## odelia 0.6.1
 
 **A fixed point, its stability, and how it moves with every parameter,

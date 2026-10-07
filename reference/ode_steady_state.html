@@ -17,7 +17,7 @@ written for `deSolve` (or for `rootSolve::steady()`) runs unchanged."></head><bo
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -217,9 +217,9 @@ unless `autonomous = TRUE`; a value above finite-difference noise means
 <span class="r-in"><span><span class="va">eq</span><span class="op">$</span><span class="va">stable</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] TRUE</span>
 <span class="r-in"><span><span class="va">eq</span><span class="op">$</span><span class="va">sensitivity</span>   <span class="co"># dy*/da, dy*/db, dy*/dc</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>           a          b             c</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> n 0.6666667 -0.8888889 -6.487391e-17</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> m 2.5396838 -3.3862451 -3.628118e+00</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>           a          b         c</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> n 0.6666667 -0.8888889  0.000000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> m 2.5396838 -3.3862451 -3.628118</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># A logistic population has a trivial root at 0 that Newton finds from a</span></span></span>
 <span class="r-in"><span><span class="co"># small guess; warmup integrates past it to the attractor.</span></span></span>

@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,11 @@
       <small>Source: <a href="https://github.com/traitecoevo/odelia/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.6.2" id="odelia-062">odelia 0.6.2<a class="anchor" aria-label="anchor" href="#odelia-062"></a></h2>
+<p><strong>Resizing a solver no longer costs the square of the state length when RODAS is not the stepper (plant#656).</strong> <code>SolverInternal::resize()</code> resizes every stepper the solver holds, and <code>RodasStep::resize()</code> zero-filled its two dense n×n buffers (<code>J</code>, <code>W</code>) each time, whatever the method. A consumer that changes its state length often paid that on every change: plant grows its state at each cohort introduction, so a run over n unknowns cost O(n²) per introduction for a stepper it never calls. The buffers are now sized on RODAS’s first step at a new length, and <code>W</code> without a fill, since every step overwrites it. Results are bit-identical; only allocation moved. In plant, <code>run_mutant()</code> over 51 FF16 mutants against one resident fell from 45 s to 0.72 s (63×), now cheaper per mutant than running them one at a time, and a three-species FF16 resident run from 0.76 s to 0.37 s.</p>
+<p>A <strong>patch</strong> bump: no signature changes, and the same results for every method.</p>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.6.1" id="odelia-061">odelia 0.6.1<a class="anchor" aria-label="anchor" href="#odelia-061"></a></h2>
 <p><strong>A fixed point, its stability, and how it moves with every parameter, without integrating to it (<a href="https://github.com/traitecoevo/odelia/issues/39" class="external-link">#39</a>).</strong> <code>SteadyState&lt;System&gt;</code> in <code>ode_steady_state.hpp</code> solves <code>f(y*) = 0</code> by damped Newton with an Armijo line search, reusing the implicit stepper’s Jacobian and dense LU; <code>sensitivity()</code> is the implicit-function-theorem <code>dy*/dθ = −(df/dy)⁻¹ (df/dθ)</code> from the same factorisation, one linear solve per parameter and no pass through the transient; <code>eigenvalues()</code> and <code>spectral_abscissa()</code> read attraction off <code>df/dy</code> (Hessenberg reduction, then Francis double-shift QR, in <code>ode_linalg.hpp</code>). <code>df/dθ</code> is <code>Jacobian::compute_params()</code>, the forward sweep that already gives <code>df/dy</code> with its unit seed on a parameter instead of a state component; the System names those parameters through <code>ad_parameters()</code>, a vector of pointers in a fixed order, which is the hook the reverse-mode work (<a href="https://github.com/traitecoevo/odelia/issues/59" class="external-link">#59</a>) uses for the same purpose. Newton finds any root, so <code>solve_with_warmup()</code> is the call that seeks an attractor: it integrates the transient first, RODAS for a stiff system, when Newton from the given guess does not converge <em>or converges to a root that is not attracting</em>, the trivial equilibrium of a demographic model being the usual case. A Newton step that is not finite or does not reduce the residual at any fraction down to <code>min_lambda</code> stops the solve unconverged rather than being taken; <code>sensitivity()</code> and the stability queries refuse until a solve has converged. Fixed-point attractors of autonomous systems only; a system that declares <code>ode_autonomous()</code> is not asked for <code>df/dt</code>, and <code>time_dependence()</code> reports it for one that does not.</p>

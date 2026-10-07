@@ -167,9 +167,9 @@ eq$y
 eq$stable
 #> [1] TRUE
 eq$sensitivity   # dy*/da, dy*/db, dy*/dc
-#>           a          b             c
-#> n 0.6666667 -0.8888889 -6.487391e-17
-#> m 2.5396838 -3.3862451 -3.628118e+00
+#>           a          b         c
+#> n 0.6666667 -0.8888889  0.000000
+#> m 2.5396838 -3.3862451 -3.628118
 
 # A logistic population has a trivial root at 0 that Newton finds from a
 # small guess; warmup integrates past it to the attractor.
