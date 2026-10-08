@@ -22,7 +22,7 @@ compiled_lorenz <- function(times, method, tol = 1e-10) {
   ctrl$set_tol_abs(tol)
   lz <- odelia:::LorenzSystem$new(lorenz_pars[["sigma"]], lorenz_pars[["R"]], lorenz_pars[["b"]])
   lz$set_state(c(1, 1, 1), 0.0)
-  runner <- odelia:::Lorenz_Solver$new(lz$ptr, ctrl$ptr, active = FALSE, method = method)
+  runner <- odelia:::Lorenz_Solver$new(lz$ptr, ctrl$ptr, method = method)
   runner$advance_adaptive(times)
   runner$history()
 }

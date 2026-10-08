@@ -32,10 +32,16 @@ odelia_include_dir <- function() {
     "include/odelia/ode_solver.hpp", "inst/include/odelia/ode_solver.hpp")))
 }
 
-# The flags a sourceCpp snippet compiles with: the include path and the same
-# preprocessor defines as src/Makevars, which today is none. Keep them equal.
+# What a sourceCpp snippet must compile with to agree with the shipped library.
+# Both defines are src/Makevars' and must stay equal to it: XAD reaches its
+# active tape through a variable whose storage class XAD_NO_THREADLOCAL sets,
+# and the storage class does not change the mangled name, so a snippet built
+# without it references the same symbol in the other class. That is a link
+# error where the snippet links against the library and a silently separate
+# tape where it does not.
 odelia_cppflags <- function(include_dir = odelia_include_dir()) {
-  paste0("-I", shQuote(include_dir))
+  paste0("-I", shQuote(include_dir),
+         " -DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE")
 }
 
 # Detect whether the currently loaded DLL came from pkgload/load_all,
@@ -78,7 +84,7 @@ ensure_leaf_thermal_interfaces <- function(rebuild = FALSE) {
 
   ensure_ode_interface_loaded(rebuild = rebuild)
 
-  include_dir <- dirname(dirname(resolve_test_path("include/odelia/ode_solver.hpp", "inst/include/odelia/ode_solver.hpp")))
+  include_dir <- odelia_include_dir()
   leaf_cpp <- resolve_test_path(
     "examples/leaf_thermal/src/leaf_thermal_interface.cpp",
     "inst/examples/leaf_thermal/src/leaf_thermal_interface.cpp"
@@ -98,7 +104,7 @@ ensure_leaf_thermal_interfaces <- function(rebuild = FALSE) {
   # Windows has no global symbol namespace - DLL imports must be resolved at
   # link time. Linking the sourceCpp build directly against the odelia library
   # via PKG_LIBS (honoured by R CMD SHLIB) works on every platform.
-  pkg_cppflags <- paste0("-I", include_dir)
+  pkg_cppflags <- odelia_cppflags(include_dir)
   odelia_so <- .odelia_test_cache$odelia_so
   pkg_libs <- if (is.character(odelia_so) &&
                   length(odelia_so) == 1 &&

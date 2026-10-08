@@ -40,7 +40,7 @@
 // reaches nothing. y' = k - y; y* = a*b; dy*/da = b, dy*/db = a, which the AD
 // sensitivity reports as 0 and 0. check_parameters() must say so.
 
-// [[Rcpp::plugins(cpp17)]]
+// [[Rcpp::plugins(cpp20)]]
 #include <Rcpp.h>
 #include <vector>
 #include <cstddef>
@@ -111,7 +111,7 @@ public:
   std::vector<T*> ad_parameters() { return { &a, &b, &c }; }
 
   template <typename U>
-  DemogSystem<U> rebind() const {
+  DemogSystem<U> rebind_from() const {
     DemogSystem<U> s(U(xad::value(a)), U(xad::value(b)), U(xad::value(c)));
     std::vector<U> init{ U(xad::value(y0_init)), U(xad::value(y1_init)) };
     s.set_initial_state(init.begin(), t0);
@@ -184,7 +184,7 @@ public:
   std::vector<T*> ad_parameters() { return { &r, &K, &m, &c }; }
 
   template <typename U>
-  LogisticSystem<U> rebind() const {
+  LogisticSystem<U> rebind_from() const {
     LogisticSystem<U> s(U(xad::value(r)), U(xad::value(K)), U(xad::value(m)),
                         U(xad::value(c)));
     std::vector<U> init{ U(xad::value(y0_init)), U(xad::value(y1_init)) };
@@ -228,7 +228,7 @@ public:
   std::vector<T*> ad_parameters() { return { &a, &b }; }
 
   template <typename U>
-  CachedSystem<U> rebind() const {
+  CachedSystem<U> rebind_from() const {
     CachedSystem<U> s(U(xad::value(a)), U(xad::value(b)));
     std::vector<U> st{ U(xad::value(y)) };
     s.set_ode_state(st.begin(), 0.0);

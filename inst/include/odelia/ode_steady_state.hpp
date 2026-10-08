@@ -3,13 +3,13 @@
 #define ODELIA_ODE_STEADY_STATE_HPP_
 
 // Steady-state solve + implicit-function-theorem parameter sensitivity for an
-// autonomous System (issue #39, "Case B" of #36).
+// autonomous System.
 //
 // For a System whose right-hand side is f(y; theta), this:
 //   1. Solves the equilibrium  f(y*, theta) = 0  by damped Newton's method,
 //      reusing the state Jacobian J = df/dy the implicit stepper uses
 //      (ode_jacobian.hpp: the system's own ode_jacobian() hook, or forward-mode
-//      AD on a rebind() twin) and the dense LU (ode_linalg.hpp).
+//      AD on a rebind_from() twin) and the dense LU (ode_linalg.hpp).
 //   2. Computes the parameter sensitivity of the fixed point by the implicit
 //      function theorem,   dy*/dtheta = - (df/dy)^-1 (df/dtheta),   reusing the
 //      LU factorization of df/dy already formed at the solution and the
@@ -21,7 +21,7 @@
 // transient, and no nested AD. Everything runs at a passive scalar type; the
 // Jacobians use one tape-free forward-mode layer internally. The sensitivity
 // comes back as plain rows, so a caller whose own model sits on an adjoint tape
-// attaches them to y* as a supplied derivative (#59, implicit_node.hpp) rather
+// attaches them to y* as a supplied derivative (implicit_node.hpp) rather
 // than taping the Newton iteration, which is why solve() refuses an active
 // scalar type outright. An optional warm-start integrates the transient to
 // reach the attracting basin before Newton.
@@ -60,7 +60,7 @@ public:
   using state_type = std::vector<value_type>;
 
   // Requires a state Jacobian from either route (an ode_jacobian() hook, or a
-  // rebind() hook + non-active scalar). Parameter sensitivity needs the AD
+  // rebind_from() hook + non-active scalar). Parameter sensitivity needs the AD
   // route plus the ad_parameters() hook. Callers gate on these; the class
   // instantiates regardless.
   static constexpr bool supported = Jacobian<System>::supported;
@@ -102,7 +102,7 @@ public:
                   "tape by attaching sensitivity() as a supplied derivative.");
     if constexpr (!supported) {
       util::stop("Steady-state solve needs a Jacobian: the system must provide "
-                 "an ode_jacobian() hook, or a rebind() hook and a non-active "
+                 "an ode_jacobian() hook, or a rebind_from() hook and a non-active "
                  "scalar type.");
       return Result();
     } else {
@@ -127,7 +127,7 @@ public:
 
         // Newton direction: solve (df/dy) dy = -f, factoring df/dy afresh. `f`
         // is f(y) already in hand, which a hook (finite differences) can reuse.
-        // A singular df/dy at the iterate is a refusal (#55) from the LU; here
+        // A singular df/dy at the iterate is a refusal from the LU; here
         // it means Newton cannot proceed from this point, so the solve stops
         // unconverged and a warm start (below) can take over.
         jac.compute(system, y, t_eval, f, J);
@@ -297,7 +297,7 @@ public:
 
   // Self-check of the ad_parameters() contract at the equilibrium: the largest
   // relative discrepancy, over every entry, between the forward-AD df/dtheta
-  // and a central difference of f taken through rebind(). The difference
+  // and a central difference of f taken through rebind_from(). The difference
   // perturbs a parameter on a copy of the System and then *rebuilds* the System
   // from that copy's values, so anything the constructor derives from the
   // parameter is derived afresh; the AD column, which seeds the parameter in
@@ -318,7 +318,7 @@ public:
       std::vector<value_type> Jp;
       jac.compute_params(system, y_star, t_eval, Jp, n_params);
 
-      System probe = system.template rebind<value_type>();
+      System probe = system.template rebind_from<value_type>();
       std::vector<value_type*> params = probe.ad_parameters();
       state_type f_plus(n), f_minus(n);
       double worst = 0.0;
@@ -327,10 +327,10 @@ public:
         const double h =
             rel_step * std::max(std::fabs(util::to_passive(p0)), 1.0);
         *params[c] = p0 + value_type(h);
-        System up = probe.template rebind<value_type>();
+        System up = probe.template rebind_from<value_type>();
         ode::derivs(up, y_star, f_plus, t_eval);
         *params[c] = p0 - value_type(h);
-        System down = probe.template rebind<value_type>();
+        System down = probe.template rebind_from<value_type>();
         ode::derivs(down, y_star, f_minus, t_eval);
         *params[c] = p0;
         for (size_t r = 0; r < n; ++r) {

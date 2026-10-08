@@ -33,72 +33,68 @@ System_rates <- function(system_xp) {
     .Call(`_odelia_System_rates`, system_xp)
 }
 
-Solver_new <- function(system_xp, control_xp, active = FALSE, method = "rkck") {
-    .Call(`_odelia_Solver_new`, system_xp, control_xp, active, method)
+Solver_new <- function(system_xp, control_xp, method = "rkck") {
+    .Call(`_odelia_Solver_new`, system_xp, control_xp, method)
 }
 
-Solver_reset <- function(solver_xp, active = FALSE) {
-    invisible(.Call(`_odelia_Solver_reset`, solver_xp, active))
+Solver_reset <- function(solver_xp) {
+    invisible(.Call(`_odelia_Solver_reset`, solver_xp))
 }
 
-Solver_time <- function(solver_xp, active = FALSE) {
-    .Call(`_odelia_Solver_time`, solver_xp, active)
+Solver_time <- function(solver_xp) {
+    .Call(`_odelia_Solver_time`, solver_xp)
 }
 
-Solver_state <- function(solver_xp, active = FALSE) {
-    .Call(`_odelia_Solver_state`, solver_xp, active)
+Solver_state <- function(solver_xp) {
+    .Call(`_odelia_Solver_state`, solver_xp)
 }
 
-Solver_times <- function(solver_xp, active = FALSE) {
-    .Call(`_odelia_Solver_times`, solver_xp, active)
+Solver_times <- function(solver_xp) {
+    .Call(`_odelia_Solver_times`, solver_xp)
 }
 
-Solver_set_state <- function(solver_xp, y, time, active = FALSE) {
-    invisible(.Call(`_odelia_Solver_set_state`, solver_xp, y, time, active))
+Solver_set_state <- function(solver_xp, y, time) {
+    invisible(.Call(`_odelia_Solver_set_state`, solver_xp, y, time))
 }
 
-Solver_advance_adaptive <- function(solver_xp, times, active = FALSE) {
-    invisible(.Call(`_odelia_Solver_advance_adaptive`, solver_xp, times, active))
+Solver_advance_adaptive <- function(solver_xp, times) {
+    invisible(.Call(`_odelia_Solver_advance_adaptive`, solver_xp, times))
 }
 
-Solver_advance_fixed <- function(solver_xp, times, active = FALSE) {
-    invisible(.Call(`_odelia_Solver_advance_fixed`, solver_xp, times, active))
+Solver_advance_fixed <- function(solver_xp, times) {
+    invisible(.Call(`_odelia_Solver_advance_fixed`, solver_xp, times))
 }
 
-Solver_advance_euler <- function(solver_xp, times, active = FALSE) {
-    invisible(.Call(`_odelia_Solver_advance_euler`, solver_xp, times, active))
+Solver_advance_euler <- function(solver_xp, times) {
+    invisible(.Call(`_odelia_Solver_advance_euler`, solver_xp, times))
 }
 
-Solver_step <- function(solver_xp, active = FALSE) {
-    invisible(.Call(`_odelia_Solver_step`, solver_xp, active))
+Solver_step <- function(solver_xp) {
+    invisible(.Call(`_odelia_Solver_step`, solver_xp))
 }
 
-Solver_get_collect <- function(solver_xp, active = FALSE) {
-    .Call(`_odelia_Solver_get_collect`, solver_xp, active)
+Solver_get_collect <- function(solver_xp) {
+    .Call(`_odelia_Solver_get_collect`, solver_xp)
 }
 
-Solver_set_collect <- function(solver_xp, x, active = FALSE) {
-    invisible(.Call(`_odelia_Solver_set_collect`, solver_xp, x, active))
+Solver_set_collect <- function(solver_xp, x) {
+    invisible(.Call(`_odelia_Solver_set_collect`, solver_xp, x))
 }
 
-Solver_get_history_size <- function(solver_xp, active = FALSE) {
-    .Call(`_odelia_Solver_get_history_size`, solver_xp, active)
+Solver_get_history_size <- function(solver_xp) {
+    .Call(`_odelia_Solver_get_history_size`, solver_xp)
 }
 
-Solver_get_history_step <- function(solver_xp, i, active = FALSE) {
-    .Call(`_odelia_Solver_get_history_step`, solver_xp, i, active)
+Solver_get_history_step <- function(solver_xp, i) {
+    .Call(`_odelia_Solver_get_history_step`, solver_xp, i)
 }
 
-Solver_get_history <- function(solver_xp, active = FALSE) {
-    .Call(`_odelia_Solver_get_history`, solver_xp, active)
+Solver_get_history <- function(solver_xp) {
+    .Call(`_odelia_Solver_get_history`, solver_xp)
 }
 
-Solver_set_target <- function(solver_xp, times, target, obs_indices, active = FALSE) {
-    invisible(.Call(`_odelia_Solver_set_target`, solver_xp, times, target, obs_indices, active))
-}
-
-Solver_fit <- function(solver_xp, ic = NULL, params = NULL) {
-    .Call(`_odelia_Solver_fit`, solver_xp, ic, params)
+Solver_fit <- function(solver_xp, times, target, obs_indices, ic = NULL, params = NULL) {
+    .Call(`_odelia_Solver_fit`, solver_xp, times, target, obs_indices, ic, params)
 }
 
 lorenz_rhs <- function(t, state, pars) {

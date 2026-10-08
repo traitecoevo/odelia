@@ -9,14 +9,29 @@
 namespace odelia {
 namespace drivers {
 
+// How a driver given as values alone gets its knot slopes. `natural` is the
+// natural cubic spline, the default and what odelia has always read. `monotone`
+// (Fritsch-Carlson) keeps every span inside the two values bracketing it, so a
+// series that is never negative -- rainfall -- is never read negative between its
+// points; a natural spline beside a wet day can dip below zero.
+enum class Slopes { natural, monotone };
+
 class Function
 {
 public:
   Function() = default;
 
-  Function(std::vector<double> const &x, std::vector<double> const &y)
+  Function(std::vector<double> const &x, std::vector<double> const &y,
+           Slopes slopes = Slopes::natural)
   {
-    variable.init(x, y);
+    if (slopes == Slopes::monotone)
+    {
+      variable.init(x, y, interpolator::monotone_slopes<double>(x, y));
+    }
+    else
+    {
+      variable.init(x, y);
+    }
     variable.set_extrapolate(false);
     is_variable = true;
   }
@@ -75,13 +90,16 @@ public:
     drivers.insert({driver_name, drivers::Function(k)});
   }
 
-  // initialise spline of driver with x, y control points
-  void set_variable(std::string driver_name, std::vector<double> const &x, std::vector<double> const &y) {
+  // initialise spline of driver with x, y control points; `slopes` says how the
+  // knot slopes are chosen (see Slopes)
+  void set_variable(std::string driver_name, std::vector<double> const &x,
+                    std::vector<double> const &y,
+                    Slopes slopes = Slopes::natural) {
     if (drivers.find(driver_name) != drivers.end())
     {
       drivers.erase(driver_name);
     }
-    drivers.insert({driver_name, drivers::Function(x, y)});
+    drivers.insert({driver_name, drivers::Function(x, y, slopes)});
   }
 
   void set_extrapolate(std::string driver_name, bool extrapolate) {

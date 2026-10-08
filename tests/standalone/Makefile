@@ -12,8 +12,16 @@
 # one object file by design (ARCHITECTURE.md); anything that instantiates Solver
 # has to link it. It is R-free too.
 
+# `?=`, so a CXX exported into the environment wins. That is deliberate, and it is
+# also how these probes stop running: an environment naming a compiler that is not
+# installed fails with `No such file or directory` from make rather than from the
+# compiler, which reads as a broken Makefile. `make CXX=g++ <probe>` overrides it,
+# and g++ is what the packages themselves build with.
 CXX     ?= c++
-CXXSTD  ?= -std=c++17
+# The core uses concepts, so this must stay at C++20 or later: below it every
+# `concept` in the headers reads as `'concept' does not name a type` and the
+# hundred errors after that are cascade.
+CXXSTD  ?= -std=c++20
 OPT     ?= -O0
 WARN    ?= -Wall -Wextra -Wno-unused-parameter
 

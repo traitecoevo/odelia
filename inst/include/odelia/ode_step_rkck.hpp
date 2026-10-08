@@ -2,8 +2,11 @@
 #ifndef ODELIA_ODE_STEP_RKCK_HPP_
 #define ODELIA_ODE_STEP_RKCK_HPP_
 
+#include <array>
 #include <vector>
 #include <cstddef>
+#include <XAD/XAD.hpp>
+#include <odelia/adjoint.hpp>
 #include <odelia/ode_interface.hpp>
 
 namespace odelia {
@@ -12,31 +15,91 @@ namespace ode {
 template <class System>
 class Step {
 public:
-  // Extract scalar type from System using traits
   using value_type = typename System::value_type;
   using state_type = std::vector<value_type>;
   
+  // What one step's rate evaluations solve for. One name, because the forward
+  // walk, the sweep and the record (step_record::solved) all have to agree on the
+  // shape.
+  //
+  // ⚠️ SIX AND NOT FIVE. Five are the stages; the sixth is the evaluation at the
+  // state the step ends at, which first-same-as-last hands the next step as its
+  // own k1. A SWEEP re-derives that one (see step_adjoint) and reads only 0..4 --
+  // but a FORWARD replay cannot re-derive it, because re-deriving is exactly what
+  // it is replaying to avoid, and a step whose k1 was re-derived is wrong at first
+  // order in h.
+  using solved_row = std::array<solved_values_t<System>, 6>;
+
   void resize(size_t size_);
   size_t order() const;
-  void step(System& system,
+  // `solved` is the row this step is about to create: what its rate evaluations
+  // solve for goes in, in solved_row's order, and nothing is asked of the System
+  // about where it is.
+  //
+  // Or the row an earlier run already created, where a caller hands a CONST one:
+  // the stages then LOAD what that run solved instead of solving again. Which of
+  // the two happens is the constness of what was handed over and nothing else --
+  // the rule `solved_scope` already follows one level down -- so there is no mode
+  // here to keep, and none to hold a stale answer to.
+  template <class Row>
+  void step(System& system, Row& solved,
             double time, double step_size,
 	    state_type &y,
 	    state_type &yerr,
 	    const state_type &dydt_in,
 	    state_type &dydt_out);
-      
-  void derivs(System& system, const state_type& y, state_type& dydt, double t, int index) {
-    return ode::derivs(system, y, dydt, t, index);
-  }
 
-  // These are defined in rkck_type
+  // The step transposed, for as many seeds as are handed in: one recording of the
+  // whole step, swept once per seed (see adjoint_rows). The active System is the
+  // walk's, held across every step of one width.
+  void step_adjoint(active_system<System>& active,
+                    const solved_row& solved,
+                    double time, double step_size,
+                    const state_type &y, const adjoint_rows& lambda_out,
+                    adjoint_rows& lambda_in, adjoint_rows& parameter_adjoint);
+
+  // Rate evaluations the sweeps since the last clear have recorded, counted where
+  // they are recorded rather than added up as a total the loop could disagree
+  // with. Six a step, whatever the seed count, because the step is recorded once
+  // and swept per seed. A term entering once a step where it belongs once a stage
+  // divides this by six, and no gradient check can see that, because a tangent and
+  // a sweep apply the same multiplier.
+  std::size_t recorded_rates = 0;
+
   static const bool can_use_dydt_in = true;
   static const bool first_same_as_last = true;
 
 private:
-  // Intermediate storage, representing state (was GSL rkck_state_t)
+  // The tableau, written once and used at whatever scalar the caller holds its
+  // rates in: the forward step and the recording its transpose is taken from
+  // both step through these, so the two cannot come apart.
+  //
+  // Y_i for stage i, into `out`: y at stage 0, and y plus the combination of the
+  // earlier stage rates above that. Callers pass 1..5; see stage_row for why the
+  // stage-0 arms stay.
+  template <class S>
+  void stage_state(int i, const std::vector<S>& y,
+                   const std::vector<std::vector<S>>& k, double h,
+                   std::vector<S>& out) const;
+  // And the state the step ends at, y + h * (c1 k1 + c3 k3 + c4 k4 + c6 k6).
+  // k2 and k5 reach it only through the later stages. `out` may be `y`.
+  template <class S>
+  void step_end(const std::vector<S>& y, const std::vector<std::vector<S>>& k,
+                double h, std::vector<S>& out) const;
+  double stage_time(int i, double time, double h) const;
+  const double* stage_row(int i) const;
+  // stage_state for a stage count known at compile time: the same sums in the
+  // same order, with the earlier-stage count a constant so the inner loop
+  // unrolls, and the data pointers held rather than re-read through the nested
+  // vectors after every store. stage_state dispatches here for stages 1..5.
+  template <int I, class S>
+  void stage_state_fixed(const std::vector<S>& y,
+                         const std::vector<std::vector<S>>& k, double h,
+                         std::vector<S>& out) const;
+
   size_t size;
-  state_type k1, k2, k3, k4, k5, k6, ytmp;
+  std::vector<state_type> k{6};
+  state_type ytmp;
 
   // Cash carp constants, from GSL.
   static const double ah[];
@@ -58,12 +121,9 @@ private:
 template <class System>
 void Step<System>::resize(size_t size_) {
   size = size_;
-  k1.resize(size);
-  k2.resize(size);
-  k3.resize(size);
-  k4.resize(size);
-  k5.resize(size);
-  k6.resize(size);
+  for (state_type& stage_rate : k) {
+    stage_rate.resize(size);
+  }
   ytmp.resize(size);
 }
 
@@ -73,88 +133,205 @@ size_t Step<System>::order() const {
   return 5;
 }
 
-template <typename System>
-typename std::enable_if<has_cache<System>::value, void>::type
-cache(System& system, int rk_step) {
-  system.cache_RK45_step(rk_step);
-}
-
-
-template <typename System>
-typename std::enable_if<!has_cache<System>::value, void>::type
-cache(System& system, int /* rk_step */) {}
-
-
-// Think carefully about ownership of data, draw a diagram, and go
-// from there.
 template <class System>
+template <class Row>
 void Step<System>::step(System& system,
+                        Row& solved,
                         double time, double step_size,
                         state_type &y,
                         state_type &yerr,
                         const state_type &dydt_in,
                         state_type &dydt_out) {
-  const double h = step_size; // Historical reasons.
+  const double h = step_size;
 
-  // k1 step:
-  std::copy(dydt_in.begin(), dydt_in.end(), k1.begin());
-  for (size_t i = 0; i < size; ++i) {
-    ytmp[i] = y[i] + b21 * h * k1[i];
+  // First-same-as-last: k1 is the previous step's dydt_out, so the step costs five
+  // rate evaluations and a sixth at its end to hand the next step its own k1.
+  //
+  // A stage's rates, handed the slot it stores what it solves for into. A System
+  // that solves for nothing is handed nothing and the branch compiles away.
+  auto rates_at = [&](int i, const state_type& at, state_type& into) -> void {
+    if constexpr (SolvesForValues<System>) {
+      ode::derivs(system, at, into, stage_time(i, time, h), solved[i - 1]);
+    } else {
+      ode::derivs(system, at, into, stage_time(i, time, h));
+    }
+  };
+
+  std::copy(dydt_in.begin(), dydt_in.end(), k[0].begin());
+  // The stages written out, each at a compile-time stage count, so the kernel
+  // inlines into this function: a run-time stage index kept it out of line, a
+  // call per stage. The same kernels stage_state dispatches to, so the sweep
+  // still reverses exactly this arithmetic.
+  stage_state_fixed<1>(y, k, h, ytmp); rates_at(1, ytmp, k[1]);
+  stage_state_fixed<2>(y, k, h, ytmp); rates_at(2, ytmp, k[2]);
+  stage_state_fixed<3>(y, k, h, ytmp); rates_at(3, ytmp, k[3]);
+  stage_state_fixed<4>(y, k, h, ytmp); rates_at(4, ytmp, k[4]);
+  stage_state_fixed<5>(y, k, h, ytmp); rates_at(5, ytmp, k[5]);
+
+  step_end(y, k, h, y);
+  // The sixth evaluation, with a slot of its own: see `solved_row`.
+  if constexpr (SolvesForValues<System>) {
+    ode::derivs(system, y, dydt_out, time + h, solved[5]);
+  } else {
+    ode::derivs(system, y, dydt_out, time + h);
   }
-
-  // k2 step:
-  derivs(system, ytmp, k2, time + ah[0] * h, 0);
-  cache(system, 0);
-  
-  for (size_t i = 0; i < size; ++i) {
-    ytmp[i] = y[i] + h * (b3[0] * k1[i] + b3[1] * k2[i]);
-  }
-
-  // k3 step:
-  derivs(system, ytmp, k3, time + ah[1] * h, 1);
-  cache(system, 1);
-
-  for (size_t i = 0; i < size; ++i) {
-    ytmp[i] = y[i] + h * (b4[0] * k1[i] + b4[1] * k2[i] + b4[2] * k3[i]);
-  }
-
-  // k4 step:
-  derivs(system, ytmp, k4, time + ah[2] * h, 2);
-  cache(system, 2);
-
-  for (size_t i = 0; i < size; ++i) {
-    ytmp[i] = y[i] + h * (b5[0] * k1[i] + b5[1] * k2[i] + b5[2] * k3[i] +
-			  b5[3] * k4[i]);
-  }
-
-  // k5 step
-  derivs(system, ytmp, k5, time + ah[3] * h, 3);
-  cache(system, 3);
-
-  for (size_t i = 0; i < size; ++i) {
-    ytmp[i] = y[i] + h * (b6[0] * k1[i] + b6[1] * k2[i] + b6[2] * k3[i] +
-			  b6[3] * k4[i] + b6[4] * k5[i]);
-  }
-
-  // k6 step and final sum
-  derivs(system, ytmp, k6, time + ah[4] * h, 4);
-  cache(system, 4);
-
-  for (size_t i = 0; i < size; ++i) {
-    // GSL does this in two steps, but not sure why.
-    const value_type d_i = c1 * k1[i] + c3 * k3[i] + c4 * k4[i] + c6 * k6[i];
-    y[i] += h * d_i;
-  }
-
-  // Evaluate dydt_out.
-  derivs(system, y, dydt_out, time + h, 5);
-  cache(system, 5);
 
   // Difference between 4th and 5th order, for error calculations
-  for (size_t i = 0; i < size; ++i) {
-    yerr[i] = h * (ec[1] * k1[i] + ec[3] * k3[i] + ec[4] * k4[i] +
-		   ec[5] * k5[i] + ec[6] * k6[i]);
+  const value_type* const k0 = k[0].data();
+  const value_type* const k2 = k[2].data();
+  const value_type* const k3 = k[3].data();
+  const value_type* const k4 = k[4].data();
+  const value_type* const k5 = k[5].data();
+  for (size_t q = 0; q < size; ++q) {
+    yerr[q] = h * (ec[1] * k0[q] + ec[3] * k2[q] + ec[4] * k3[q] +
+                   ec[5] * k4[q] + ec[6] * k5[q]);
   }
+}
+
+// The tableau row stage i's state combines the earlier stage rates with.
+//
+// The stage-0 entry is kept although no caller passes 0, and so are the stage-0
+// arms of stage_time and stage_state. Dropping them and re-basing this table at
+// stage 2 reads as tidying away unreachable code, and it is not: this function is
+// pure and inlined, so the compiler may evaluate it above stage_state's own
+// `i == 1` early return, and `rows[i - 2]` is then an out-of-bounds read of a
+// stack array at i == 1. It costs nothing to keep the index at i - 1 and one
+// entry in the table.
+template <class System>
+const double* Step<System>::stage_row(int i) const {
+  const double* const rows[] = {&b21, b3, b4, b5, b6};
+  return rows[i - 1];
+}
+
+template <class System>
+double Step<System>::stage_time(int i, double time, double h) const {
+  return i == 0 ? time : time + ah[i - 1] * h;
+}
+
+template <class System>
+template <class S>
+void Step<System>::stage_state(int i, const std::vector<S>& y,
+                               const std::vector<std::vector<S>>& k, double h,
+                               std::vector<S>& out) const {
+  if (i == 0) {
+    std::copy(y.begin(), y.end(), out.begin());
+    return;
+  }
+  switch (i) {
+    case 1: return stage_state_fixed<1>(y, k, h, out);
+    case 2: return stage_state_fixed<2>(y, k, h, out);
+    case 3: return stage_state_fixed<3>(y, k, h, out);
+    case 4: return stage_state_fixed<4>(y, k, h, out);
+    default: return stage_state_fixed<5>(y, k, h, out);
+  }
+}
+
+template <class System>
+template <int I, class S>
+void Step<System>::stage_state_fixed(const std::vector<S>& y,
+                                     const std::vector<std::vector<S>>& k,
+                                     double h, std::vector<S>& out) const {
+  // Stage 1 keeps its single term grouped as b21 * h * k1: h * (b21 * k1)
+  // rounds differently, and the reference numbers were blessed on this one.
+  if constexpr (I == 1) {
+    const S* const k0 = k[0].data();
+    const S* const yp = y.data();
+    S* const op = out.data();
+    for (size_t q = 0; q < size; ++q) {
+      op[q] = yp[q] + b21 * h * k0[q];
+    }
+    return;
+  }
+  const double* const b = stage_row(I);
+  const S* kp[I];
+  for (int m = 0; m < I; ++m) kp[m] = k[m].data();
+  const S* const yp = y.data();
+  S* const op = out.data();
+  for (size_t q = 0; q < size; ++q) {
+    // Summed in ascending stage, then one h. Cash-Karp's rows are dense, so
+    // this is a sum over every earlier stage rather than a term for the
+    // immediate predecessor.
+    S combination = b[0] * kp[0][q];
+    for (int m = 1; m < I; ++m) {
+      combination += b[m] * kp[m][q];
+    }
+    op[q] = yp[q] + h * combination;
+  }
+}
+
+template <class System>
+template <class S>
+void Step<System>::step_end(const std::vector<S>& y,
+                            const std::vector<std::vector<S>>& k, double h,
+                            std::vector<S>& out) const {
+  const S* const k0 = k[0].data();
+  const S* const k2 = k[2].data();
+  const S* const k3 = k[3].data();
+  const S* const k5 = k[5].data();
+  const S* const yp = y.data();
+  S* const op = out.data();
+  for (size_t q = 0; q < size; ++q) {
+    const S combination = c1 * k0[q] + c3 * k2[q] + c4 * k3[q] + c6 * k5[q];
+    op[q] = yp[q] + h * combination;
+  }
+}
+
+// lambda_in[m] = (d y_end / d y)^T lambda_out[m] for the one step step() takes
+// from y, and the parameter rows alongside it.
+//
+// ONE recording spans the whole step: its six rate evaluations and the
+// combination closing them. What the sweep transposes is therefore the
+// arithmetic the stepper performs, and no tableau is transposed by hand. The
+// stage states are intermediates of the recording, so the step costs six model
+// evaluations.
+//
+// The recording is derivs(), which is what the forward pass calls, so no System
+// writes a transpose of its own; and the parameters ride in the same recording,
+// so a stage the parameters reach carries their rows too.
+template <class System>
+void Step<System>::step_adjoint(active_system<System>& active,
+                                const solved_row& solved,
+                                double time, double step_size,
+                                const state_type &y, const adjoint_rows& lambda_out,
+                                adjoint_rows& lambda_in,
+                                adjoint_rows& parameter_adjoint) {
+  using scalar = active_scalar<double>;
+  const double h = step_size;
+  if (lambda_out.empty()) {
+    util::stop("step_adjoint: needs at least one seed");
+  }
+  // The recording hands the whole state buffer to the slice below, and `size` is
+  // what resize() set -- so a state of another width is checked here rather than
+  // in the two callers above that happen to check it.
+  util::check_length(y.size(), size);
+
+  auto whole_step = [&](auto& sys,
+                        typename std::vector<scalar>::const_iterator x,
+                        std::vector<scalar>& y_end) -> void {
+    const std::vector<scalar> y0(x, x + static_cast<std::ptrdiff_t>(size));
+    std::vector<std::vector<scalar>> rate(6, std::vector<scalar>(size));
+    std::vector<scalar> stage(size);
+    // k1 is re-derived at this step's own start state, and unaddressed on purpose:
+    // the run took its first rates either at the end of the step before this one or,
+    // where it widened in between, at a state no record holds. A descent that starts
+    // at an arbitrary step cannot tell those apart, so it asks for neither.
+    ode::derivs(sys, y0, rate[0], time);
+    ++recorded_rates;
+    for (int i = 1; i < 6; ++i) {
+      stage_state(i, y0, rate, h, stage);
+      if constexpr (SolvesForValues<System>) {
+        ode::derivs(sys, stage, rate[i], stage_time(i, time, h),
+                    std::as_const(solved[i - 1]));
+      } else {
+        ode::derivs(sys, stage, rate[i], stage_time(i, time, h));
+      }
+      ++recorded_rates;
+    }
+    step_end(y0, rate, h, y_end);
+  };
+
+  ode::state_and_parameter_adjoints(active, y, lambda_out, whole_step, lambda_in,
+                                    parameter_adjoint);
 }
 
 // RKCK coefficients, from GSL

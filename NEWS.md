@@ -1,3 +1,27 @@
+## odelia 0.7.0
+
+**A recorded run can now be differentiated in reverse mode, so one solve yields the derivative with respect to every parameter at once.** Forward mode answers for one parameter per solve; reverse mode answers for all of them, but it must first record every operation the solve performed, and a run of several thousand adaptive steps performs far more of them than memory will hold. The solver stores its state at each accepted step and replays one step's arithmetic at a time while the derivative is taken, so what is held is bounded by a single step rather than by the run. Memory then grows with the number of steps, which is cheap, rather than with the arithmetic, which is not.
+
+A value a submodel solved for rather than computed is lifted onto the record carrying a derivative obtained by other means — `implicit_value` and `record_with_derivatives` — which keeps an iterative solver's own iterations out of the answer. What *selects* rather than *moves* (a step size, a knot position, an arm) stays a plain `double` and is replayed, because differentiating a selector manufactures a discontinuity the model does not have.
+
+**A forward pass can now REPLAY a recording instead of only taking one.** The store/load channel already picked its direction by the constness of what a walk handed over, and `step_adjoint` already handed a const row — but every forward entry point funnelled through one place that zeroed its scratch and passed it mutable, so nothing on the way forward could load. `Step::step`'s row parameter is templated, so a const row loads and a mutable one stores with no change to the body; `advance_recorded()` gains an overload taking a **recording** rather than a program, pairing each step with its own row so the two cannot be crossed. No new concept and no new name. `method='rodas'` refuses rather than silently re-deriving: the Rosenbrock stepper keeps no per-stage row.
+
+What this is for: a pass that must take the run's answers rather than its own. The first consumer is plant's invasion run, where an invader stands in a resident's recorded field — exogenous to it, so its derivative is zero rather than severed.
+
+**⚠️ The recorded row is six long, not five, and that changes `step_record`.** Five of the six are a step's stages; the sixth is the evaluation at the state the step ends at, which first-same-as-last hands the next step as its own k1. A sweep re-derives that one at the state it was handed and still reads only the first five. A forward replay cannot — re-deriving is the thing it replays to avoid — and a step whose k1 was re-derived is wrong at first order in `h`.
+
+The forward-mode scalar lives in `tangent.hpp`, apart from the reverse-mode machinery in `adjoint.hpp`, so a consumer wanting a directional derivative and no record is never handed vocabulary for one. `tangent.hpp` rejects a forward scalar nested above a reverse one at compile time: three kernels costing 31 statements flat cost 566 nested.
+
+`ode_fit.hpp` is removed; `compute_gradient` has no drop-in, and `vector_jacobian_product` plus `sweep.hpp` replace it in C++. The R fitting interface is kept on the new machinery: `$set_target(times, target, obs_indices)` and `$fit(ic, params)` return the same least-squares loss and gradient as before, now by one reverse sweep over a replay of `times`, for both the Lorenz and the leaf thermal examples. What goes is the `active` argument on the `Solver_*` bindings and the separate AD solver it made, since every solver can now fit. A System needs `set_recorded_state()` and `for_each_active()` to be swept. The System contract becomes C++20 concepts (`HasOdeTime`, `SolvesForValues`, `ChecksState`, `Rebindable`), and `rebind()` becomes `rebind_from()`.
+
+A pinned step the domain refused is crossed in several sub-steps (0.4.0) and recorded as one row of the interval, holding the last sub-step's solved values; one Runge–Kutta step of that interval is not the step the run took, and a sweep of it gave a derivative forty orders of magnitude off with every number finite. The row now carries `subdivided`, and `solve_adjoint` and a replay refuse it by name. `solve_adjoint` also refuses one batch handed as both seed and accumulator, which the width check let through whenever the state and parameter counts matched. The variadic `implicit_value` returned rows that included an input's pre-existing adjoint; they are now the theorem's alone.
+
+Only `method = "rkck"` records a run: `"dopri"` and `"rodas"` refuse a sweep or a replay rather than re-deriving one.
+
+A consumer that `LinkingTo` odelia now compiles as C++20 (`CXX_STD = CXX20`) and must set the same two XAD defines as `src/Makevars`, `-DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE`: the storage class of the active tape does not change the symbol's name, so a translation unit built without them reaches the same tape through the other storage class.
+
+A **minor** bump: `rebind()` becomes `rebind_from()`, the trait probes become concepts, `ode_fit.hpp` and the `active` argument on the `Solver_*` bindings go, and `step_record` changes shape, so a System or a consumer that touched any of those recompiles differently. 0.6.0, 0.6.1 and 0.6.2 shipped between this change's first draft and its merge; the reverse-mode machinery sits on top of all three.
+
 ## odelia 0.6.2
 
 **Resizing a solver no longer costs the square of the state length when RODAS is not the stepper (plant#656).** `SolverInternal::resize()` resizes every stepper the solver holds, and `RodasStep::resize()` zero-filled its two dense n×n buffers (`J`, `W`) each time, whatever the method. A consumer that changes its state length often paid that on every change: plant grows its state at each cohort introduction, so a run over n unknowns cost O(n²) per introduction for a stepper it never calls. The buffers are now sized on RODAS's first step at a new length, and `W` without a fill, since every step overwrites it. Results are bit-identical; only allocation moved. In plant, `run_mutant()` over 51 FF16 mutants against one resident fell from 45 s to 0.72 s (63×), now cheaper per mutant than running them one at a time, and a three-species FF16 resident run from 0.76 s to 0.37 s.
@@ -66,116 +90,60 @@ A **minor** bump, so downstreams can pin against the capability (`odelia (>= 0.4
 
 ## odelia 0.3.1
 
-**Removes `util::to_string_g()`, added in 0.3.0 an hour earlier as a duplicate of
-`util::format_double()`.** Both formatted a double for an error message with six
-significant figures — `"%g"` and `"%.6g"` are the same format string, since `%g`'s
-default precision is 6 — and they were byte-identical on every value tried. The one
-call site, in the invariant-rejection failure message, now uses `format_double`; its
-output is unchanged.
+**Removes `util::to_string_g()`, added in 0.3.0 an hour earlier as a duplicate of `util::format_double()`.** Both formatted a double for an error message with six significant figures — `"%g"` and `"%.6g"` are the same format string, since `%g`'s default precision is 6 — and they were byte-identical on every value tried. The one call site, in the invariant-rejection failure message, now uses `format_double`; its output is unchanged.
 
-The duplicate arose because #55 was developed on a branch stacked below the 0.2.2 work
-that introduced `format_double`. Worth recording as a hazard rather than a review miss:
-two helpers with *different names* in different parts of the same file merge with no
-textual conflict, so neither the rebase nor the diff had anything to show.
+The duplicate arose because #55 was developed on a branch stacked below the 0.2.2 work that introduced `format_double`. Worth recording as a hazard rather than a review miss: two helpers with *different names* in different parts of the same file merge with no textual conflict, so neither the rebase nor the diff had anything to show.
 
-A **patch** bump, although the header core lost a public symbol — the situation that
-earned 0.2.0 a minor one. The difference is what a version number can usefully say.
-0.2.0's removals had been reachable across released versions, so the bump warned of a
-break a consumer could actually hit. `to_string_g` never left this repository:
-**0.3.0 was never tagged** — `v0.2.1` remains the only tag and the only release — and
-both consumers are still on `odelia (>= 0.2.x)` with `@v0.2.1` remotes. Nothing can
-have compiled against it, so a minor bump would announce an incompatibility that has
-no possible victim, and spend the signal for nothing.
+A **patch** bump, although the header core lost a public symbol — the situation that earned 0.2.0 a minor one. The difference is what a version number can usefully say. 0.2.0's removals had been reachable across released versions, so the bump warned of a break a consumer could actually hit. `to_string_g` never left this repository: **0.3.0 was never tagged** — `v0.2.1` remains the only tag and the only release — and both consumers are still on `odelia (>= 0.2.x)` with `@v0.2.1` remotes. Nothing can have compiled against it, so a minor bump would announce an incompatibility that has no possible victim, and spend the signal for nothing.
 
-Downstream floors are deliberately **not** raised. Neither `plant` nor `phylloptim`
-uses `ode_state_valid()` yet, and per the precedent set for `leaf` in 0.2.1 — checked
-rather than aligned for symmetry — raising a floor forces an upgrade for a change the
-consumer does not use. They should move to `odelia (>= 0.3.0)` when plant#609 or
-plant#599 actually adopts the domain check; 0.3.0 is the version that introduced it,
-and this release does not change it.
+Downstream floors are deliberately **not** raised. Neither `plant` nor `phylloptim` uses `ode_state_valid()` yet, and per the precedent set for `leaf` in 0.2.1 — checked rather than aligned for symmetry — raising a floor forces an upgrade for a change the consumer does not use. They should move to `odelia (>= 0.3.0)` when plant#609 or plant#599 actually adopts the domain check; 0.3.0 is the version that introduced it, and this release does not change it.
 
-The 0.3.0 entry below has been corrected accordingly; it advertised a function that
-no longer exists.
+The 0.3.0 entry below has been corrected accordingly; it advertised a function that no longer exists.
 
 ## odelia 0.3.0
 
-**Invariant-aware step rejection (#55).** A system may now declare the domain its
-state lives in, and the adaptive stepper will refuse to commit a step that leaves it.
-Two ways to say so, both opt-in:
+**Invariant-aware step rejection (#55).** A system may now declare the domain its state lives in, and the adaptive stepper will refuse to commit a step that leaves it. Two ways to say so, both opt-in:
 
-- an optional `bool ode_state_valid(const state_type&) const` on the system, checked
-  after each completed step;
-- `util::stop_domain(msg)`, which throws the new `util::DomainError`, from anywhere in
-  a stage.
+- an optional `bool ode_state_valid(const state_type&) const` on the system, checked after each completed step;
+- `util::stop_domain(msg)`, which throws the new `util::DomainError`, from anywhere in a stage.
 
-Either one turns the step into a *rejection* — shrink and retry — rather than a
-committed out-of-domain state or, in the throwing case, a dead solve. Previously a
-throw from a stage ended the whole integration even though the pre-step state was
-still on the stack one frame up.
+Either one turns the step into a *rejection* — shrink and retry — rather than a committed out-of-domain state or, in the throwing case, a dead solve. Previously a throw from a stage ended the whole integration even though the pre-step state was still on the stack one frame up.
 
-Only `DomainError` is caught. `util::stop()` and everything else still propagate,
-which is the point: absorbing them would turn a programming error into step-shrinking
-until "Cannot achieve the desired accuracy", a diagnostic that points at the solver
-instead of at the bug.
+Only `DomainError` is caught. `util::stop()` and everything else still propagate, which is the point: absorbing them would turn a programming error into step-shrinking until "Cannot achieve the desired accuracy", a diagnostic that points at the solver instead of at the bug.
 
-This matters for bounded quantities that a finite RK step can overshoot even when the
-exact flow cannot — a carbon pool at zero, soil water at saturation, a probability at
-one. It is a discretisation guard, **not** a way to fix a model whose exact flow leaves
-its domain: that case shrinks to the minimum step and raises, now naming the reason and
-the location rather than blaming accuracy.
+This matters for bounded quantities that a finite RK step can overshoot even when the exact flow cannot — a carbon pool at zero, soil water at saturation, a probability at one. It is a discretisation guard, **not** a way to fix a model whose exact flow leaves its domain: that case shrinks to the minimum step and raises, now naming the reason and the location rather than blaming accuracy.
 
-Version bumped so downstreams can pin against the capability
-(`odelia (>= 0.3.0)`); systems declaring neither hook are unaffected, and a Lorenz
-trajectory over 4127 steps is bit-identical across the change.
+Version bumped so downstreams can pin against the capability (`odelia (>= 0.3.0)`); systems declaring neither hook are unaffected, and a Lorenz trajectory over 4127 steps is bit-identical across the change.
 
-Numbers in that message are rendered with `util::format_double()`, so a step size at
-its floor reads `1e-08` rather than the `"0.000000"` `std::to_string` would give.
+Numbers in that message are rendered with `util::format_double()`, so a step size at its floor reads `1e-08` rather than the `"0.000000"` `std::to_string` would give.
 
 
 ## odelia 0.2.2
 
-**An out-of-domain interpolator lookup now says which point, how far out, and what
-the domain was.** `Interpolator::eval()` had all three in hand — `u`, `min()`
-and `max()` — and reported none of them:
+**An out-of-domain interpolator lookup now says which point, how far out, and what the domain was.** `Interpolator::eval()` had all three in hand — `u`, `min()` and `max()` — and reported none of them:
 
 ```
 Extrapolation disabled and evaluation point outside of interpolated domain.
 ```
 
-That sentence is the same whichever spline threw it, so a consumer holding several
-of them learns nothing about which one, and nothing about whether the point missed
-the near end or the far end. It cost real time downstream: localising
-[traitecoevo/plant#576](https://github.com/traitecoevo/plant/issues/576) meant
-instrumenting four call sites by hand to discover which spline was being asked and
-at what value, and the answer — the **lower** end, not past the far end as everyone
-had assumed — inverted the fix. Now:
+That sentence is the same whichever spline threw it, so a consumer holding several of them learns nothing about which one, and nothing about whether the point missed the near end or the far end. It cost real time downstream: localising [traitecoevo/plant#576](https://github.com/traitecoevo/plant/issues/576) meant instrumenting four call sites by hand to discover which spline was being asked and at what value, and the answer — the **lower** end, not past the far end as everyone had assumed — inverted the fix. Now:
 
 ```
 Extrapolation disabled and evaluation point outside of interpolated domain:
 u = -0.0023 lies 0.0023 beyond the lower end of [0, 6.8918].
 ```
 
-Which spline, and which caller, is the one thing this layer cannot know; consumers
-that build several should catch and add it. A patch bump so downstreams can pin
-against the message.
+Which spline, and which caller, is the one thing this layer cannot know; consumers that build several should catch and add it. A patch bump so downstreams can pin against the message.
 
-Behaviour is otherwise unchanged. In particular the guard is still written
-`u < min() || u > max()` rather than the negation of an in-range test, because every
-comparison against NaN is false and a non-finite `u` must keep falling through to the
-spline — plant relies on that.
+Behaviour is otherwise unchanged. In particular the guard is still written `u < min() || u > max()` rather than the negation of an in-range test, because every comparison against NaN is false and a non-finite `u` must keep falling through to the spline — plant relies on that.
 
 
 
 ## odelia 0.2.1
 
-A patch bump for one reason: **#46 has no version number, and a downstream needs
-one.** `d8235d1` ("Let a system compute its rates when the solver reads them", #46)
-landed *after* `3bdfcf7` bumped the version to 0.2.0, and the version has not moved
-since — so `0.2.0` names two different header sets, one with #46 and one without, and
-no `>= ` requirement can tell them apart.
+A patch bump for one reason: **#46 has no version number, and a downstream needs one.** `d8235d1` ("Let a system compute its rates when the solver reads them", #46) landed *after* `3bdfcf7` bumped the version to 0.2.0, and the version has not moved since — so `0.2.0` names two different header sets, one with #46 and one without, and no `>= ` requirement can tell them apart.
 
-That is not academic. `traitecoevo/plant`'s `develop` **does not compile** against the
-released 0.2.0:
+That is not academic. `traitecoevo/plant`'s `develop` **does not compile** against the released 0.2.0:
 
 ```
 odelia/ode_interface.hpp:212:3: error: 'this' argument to member function 'ode_rates'
@@ -183,38 +151,20 @@ odelia/ode_interface.hpp:212:3: error: 'this' argument to member function 'ode_r
   but function is not marked const
 ```
 
-plant #585 made `Patch::ode_rates` non-const; `r_ode_rates(const T& obj)` and
-`ode_solver_internal.hpp:155` both call it on a `const&`. #46 is the fix. Eight errors,
-four templated `<Strategy, Environment>` pairs × two call sites, and they surface
-*inside these headers*, which points nowhere near the cause. Confirmed pre-existing by
-syntax-checking plant's `origin/develop` unmodified.
+plant #585 made `Patch::ode_rates` non-const; `r_ode_rates(const T& obj)` and `ode_solver_internal.hpp:155` both call it on a `const&`. #46 is the fix. Eight errors, four templated `<Strategy, Environment>` pairs × two call sites, and they surface *inside these headers*, which points nowhere near the cause. Confirmed pre-existing by syntax-checking plant's `origin/develop` unmodified.
 
-This is the same job 0.2.0 was bumped for, and the 0.2.0 entry below says so in as many
-words: it exists "to give downstream packages something to pin against ... so a build
-against an older odelia fails at dependency resolution with a clear message rather than
-at compile time". #46 needed the same courtesy and did not get it.
+This is the same job 0.2.0 was bumped for, and the 0.2.0 entry below says so in as many words: it exists "to give downstream packages something to pin against ... so a build against an older odelia fails at dependency resolution with a clear message rather than at compile time". #46 needed the same courtesy and did not get it.
 
 **No header changes.** Only `DESCRIPTION`. Downstream floors after this:
 
 - `plant` -> `odelia (>= 0.2.1)`, because it links the ODE solver and needs #46.
-- `leaf` stays at `odelia (>= 0.2.0)`. Checked rather than aligned for symmetry: leaf
-  includes exactly one odelia header, `odelia/interpolator.hpp`, and never touches
-  `ode_rates` or the solver. Raising its floor would force an upgrade for a fix in a
-  header it does not include.
+- `leaf` stays at `odelia (>= 0.2.0)`. Checked rather than aligned for symmetry: leaf includes exactly one odelia header, `odelia/interpolator.hpp`, and never touches `ode_rates` or the solver. Raising its floor would force an upgrade for a fix in a header it does not include.
 
 Closes #48.
 
 ## odelia 0.2.0
 
-A minor-version bump rather than a patch, because the header core lost public
-symbols: `util::index`, `util::index_vector()` and the `base_1_to_0` /
-`base_0_to_1` helpers are gone, and `util::stop` / `util::warning` no longer call
-into Rcpp. Nothing in the family used them — `plant` has its own `plant::util`
-equivalents — but a consumer that did would fail to compile, which is exactly what
-a version number is for. It also gives downstream packages something to pin
-against: `leaf` now requires `odelia (>= 0.2.0)`, so a build against an older
-odelia fails at dependency resolution with a clear message rather than at compile
-time with `RcppCommon.h: No such file or directory`.
+A minor-version bump rather than a patch, because the header core lost public symbols: `util::index`, `util::index_vector()` and the `base_1_to_0` / `base_0_to_1` helpers are gone, and `util::stop` / `util::warning` no longer call into Rcpp. Nothing in the family used them — `plant` has its own `plant::util` equivalents — but a consumer that did would fail to compile, which is exactly what a version number is for. It also gives downstream packages something to pin against: `leaf` now requires `odelia (>= 0.2.0)`, so a build against an older odelia fails at dependency resolution with a clear message rather than at compile time with `RcppCommon.h: No such file or directory`.
 
 * The **header-only solver core is now free of R** (#43). `ode_util.hpp` no longer includes `RcppCommon.h`, so everything reachable through `interpolator.hpp`, `ode_control.hpp` and `ode_solver.hpp` compiles and runs as plain C++ with no R installation — see `tests/standalone/`, which integrates the Lorenz system on a runner that has no R on it. `util::stop()` now throws `std::runtime_error` instead of calling `Rcpp::stop()`; Rcpp converts that into an ordinary R error with the same message at the package boundary, so R-level behaviour is unchanged apart from the condition's class vector, which gains `std::runtime_error` in place of `Rcpp::exception`. `util::warning()` writes to `std::cerr` rather than raising an R warning; it had no callers. The unused `util::index` struct, its undefined `Rcpp::as`/`wrap` specializations, `util::index_vector()` and the `base_1_to_0`/`base_0_to_1` helpers are removed — `plant` has its own. R remains where it belongs, in `src/` and in `solver_interface.hpp` / `rcpp_interface_helpers.hpp`.
 

@@ -14,30 +14,24 @@ namespace odelia {
 // reduction -- this is the type.
 //
 // WHAT THE SLOPE IS WITH RESPECT TO is the caller's, and this type does not name
-// it. plant's competition path carries d(value)/d(height); phylloptim's operating
-// point carries d(value)/d(collar potential). Naming the variable here would make
-// one of them wrong.
+// it: one caller's is a height, another's a potential. Naming the variable here
+// would make one of them wrong.
 //
-// ⚠️ IT LIVES HERE BECAUSE OF for_each_active, NOT BECAUSE IT IS SHARED. visit_active
-// passes over any shape it does not open, without refusing it, and it does not open
-// an aggregate of two scalars -- so a pair that does not say what it holds loses
-// both members from the walk, silently, and active_system::release is what reports
-// the miss. That obligation is this library's, so a model defining the pair itself
-// is a model carrying this library's problem.
+// It lives here because of for_each_active, not because it is shared. visit_active
+// does not open an aggregate of two scalars, so a pair that does not say what it
+// holds loses both members from the walk in silence (see visit_active). That
+// obligation is this library's, so a model defining the pair itself is a model
+// carrying this library's problem.
 //
 // No includes of its own, so a header on any path can take it without taking
 // anything else with it.
 template <typename T>
-struct with_slope {
+struct value_with_slope {
   T value;
   T slope;
 
-  // Both, because visit_active dispatches on whether the call compiles: handed a
-  // const object it drops an arm that is non-const and passes over the whole
-  // shape in silence. The rewinding forms in implicit_node.hpp take
-  // `const Inputs&...` -- they read and clear through the tape by slot, so const
-  // is what they want -- and without the const overload here a pair handed to one
-  // of them contributes NO rows, which arrives as an exact zero in a column.
+  // Both, because visit_active refuses a type that declares the non-const walk
+  // without the const one.
   template <class F>
   void for_each_active(F&& f) {
     f(value);

@@ -3,6 +3,8 @@
 
 #include <odelia/ode_solver.hpp>
 #include <XAD/XAD.hpp>
+#include <vector>
+#include <string>
 
 using namespace odelia;
 
@@ -12,7 +14,11 @@ class LorenzSystem {
 public:
   using value_type = T; 
   
-  LorenzSystem(T sigma_, T R_, T b_)
+  // Every scalar's LorenzSystem is one class, so assign_from reaches the source's
+  // members.
+  template <typename> friend class LorenzSystem;
+
+  LorenzSystem(T sigma_ = T(0.0), T R_ = T(0.0), T b_ = T(0.0))
     : y0_init(1.0), y1_init(1.0), y2_init(1.0),
       t0(0.0),
       sigma(sigma_), R(R_), b(b_),
@@ -20,7 +26,30 @@ public:
     reset();  // initialises state & time
   }
 
-  // ODE interface
+  // --- For a sweep (see Sweepable in odelia/ode_interface.hpp) ---------------
+  //
+  // rebind_from<S2>() is this System on scalar S2, values only: the sweep builds
+  // the adjoint-scalar copy with it and seeds that copy's inputs afterwards.
+  // assign_from is the one map it is a line over: the parameters and the initial
+  // state, read back to plain double (xad::value) so only values cross.
+  template <class S1>
+  void assign_from(const LorenzSystem<S1>& src) {
+    sigma = T(xad::value(src.sigma));
+    R     = T(xad::value(src.R));
+    b     = T(xad::value(src.b));
+    const double ic[] = {xad::value(src.y0_init), xad::value(src.y1_init),
+                         xad::value(src.y2_init)};
+    set_initial_state(ic, src.t0);
+  }
+
+  template <class S2>
+  LorenzSystem<S2> rebind_from() const {
+    LorenzSystem<S2> out;
+    out.assign_from(*this);
+    return out;
+  }
+
+  // --- For solving: what Solver<System> calls -------------------------------
   size_t ode_size() const { return ode_dimension; }
 
   double ode_time() const { return time; }
@@ -39,6 +68,12 @@ public:
     return it;
   }
 
+  // Stand on a state a run recorded. The width never changes, so this is
+  // set_ode_state.
+  void set_recorded_state(const std::vector<T>& y, double time_) {
+    set_ode_state(y.begin(), time_);
+  }
+
   void compute_rates() {
     dy0dt = sigma * (y1 - y0);
     dy1dt = R * y0 - y1 - y0 * y2;
@@ -54,21 +89,6 @@ public:
     return it;
   }
 
-  // Registers initial state on tape for AD gradient computation
-  template <typename Tape, typename Iterator>
-  std::vector<T*> set_initial_state(Tape& tape, Iterator it, double t0_) {
-    t0 = t0_;
-    y0_init = *it++;
-    y1_init = *it++;
-    y2_init = *it++;
-    
-    tape.registerInput(y0_init);
-    tape.registerInput(y1_init);
-    tape.registerInput(y2_init);
-    
-    return {&y0_init, &y1_init, &y2_init};
-  }
-
   template <typename Iterator>
   Iterator set_params(Iterator it) {
     sigma = *it++;
@@ -77,16 +97,19 @@ public:
     return it;
   }
 
-  // Registers inputs, returns pointers for AD gradient computation
-  template <typename Tape, typename Iterator>
-  std::vector<T*> set_params(Tape& tape, Iterator it) {
-    sigma = *it++;
-    R = *it++;
-    b = *it++;
-    tape.registerInput(sigma);
-    tape.registerInput(R);
-    tape.registerInput(b);
-    return {&sigma, &R, &b};
+  // The parameters a sweep accumulates adjoints for, in the order it indexes
+  // them.
+  std::vector<T*> ad_parameters() { return {&sigma, &R, &b}; }
+
+  // Every member carrying the scalar, so the sweep can hand their tape slots
+  // back before it clears the tape. A member left out contributes nothing to
+  // the gradient, with every number finite.
+  template <class F>
+  void for_each_active(F&& f) {
+    f(sigma); f(R); f(b);
+    f(y0); f(y1); f(y2);
+    f(dy0dt); f(dy1dt); f(dy2dt);
+    f(y0_init); f(y1_init); f(y2_init);
   }
 
   template <typename Iterator>
@@ -111,6 +134,11 @@ public:
     *it++ = dy1dt;
     *it++ = dy2dt;
     return it;
+  }
+
+  // --- For the R binding (solver_interface.hpp); not part of either contract --
+  std::vector<std::string> record_colnames() const {
+    return {"time", "x", "y", "z", "dxdt", "dydt", "dzdt"};
   }
 
   std::vector<double> record_step() const {
@@ -142,22 +170,6 @@ public:
     y2 = y2_init;
     time = t0;
     compute_rates();
-  }
-
-  // Return a copy of this system with the scalar type swapped to U. Required by
-  // the implicit (RODAS) stepper, which differentiates the RHS on an active twin
-  // (U = a forward-AD type). Parameters and state are carried across via
-  // xad::value (stripping any active layer to a plain number) and rebuilt as U.
-  template <typename U>
-  LorenzSystem<U> rebind() const {
-    LorenzSystem<U> s(U(xad::value(sigma)), U(xad::value(R)), U(xad::value(b)));
-    std::vector<U> init{U(xad::value(y0_init)), U(xad::value(y1_init)),
-                        U(xad::value(y2_init))};
-    s.set_initial_state(init.begin(), t0);
-    std::vector<U> state{U(xad::value(y0)), U(xad::value(y1)),
-                         U(xad::value(y2))};
-    s.set_ode_state(state.begin(), time);
-    return s;
   }
 
 private:

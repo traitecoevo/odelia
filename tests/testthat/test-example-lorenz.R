@@ -103,64 +103,51 @@ testthat::test_that("lorenz system runs and produces expected results", {
 
 })
 
-testthat::test_that("lorenz AD IC gradients are NON-ZERO", {
+# $fit() against a reference run observed at eleven output times: the reverse sweep
+# is taken one interval between observations at a time, so several observations
+# are what exercise it. Refereed against a central difference of the loss.
+lorenz_fit_setup <- function() {
+  lz <- LorenzSystem$new(10, 28, 8 / 3)
+  lz$set_initial_state(c(1, 1, 1), 0)
+  ctrl <- odelia:::OdeControl$new()
+  runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
+  runner$advance_adaptive(seq(0, 1, by = 0.1))
+  times <- runner$times()
+  hist <- runner$history()
+  fitter <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
+  fitter$set_target(times, as.matrix(hist[, c("x", "y", "z")]),
+                    match(hist$time, times))
+  fitter
+}
 
-  lz_true <- LorenzSystem$new(10, 28, 8/3)
-  lz_true$set_initial_state(c(1, 1, 1), 0)
+lorenz_central_difference <- function(f, x) {
+  vapply(seq_along(x), function(i) {
+    h <- 1e-6 * max(1, abs(x[[i]]))
+    up <- x; dn <- x
+    up[[i]] <- up[[i]] + h
+    dn[[i]] <- dn[[i]] - h
+    (f(up) - f(dn)) / (2 * h)
+  }, numeric(1))
+}
 
-  ctrl <- OdeControl$new()
-  runner_true <- Lorenz_Solver$new(lz_true$ptr, ctrl$ptr, active = FALSE)
-  runner_true$advance_adaptive(seq(0, 5, by=0.25))
-  hist_true <- runner_true$history()
-
-  target_times <- hist_true$time
-  target_vals <- as.matrix(hist_true[, c("x", "y", "z")])
-
-  lz_fit <- LorenzSystem$new(10, 28, 8/3)
-  lz_fit$set_initial_state(c(1, 1, 1), 0)
-
-  ad_runner <- Lorenz_Solver$new(lz_fit$ptr, ctrl$ptr, active = TRUE)
-  ad_runner$set_target(target_times, target_vals, c(1L, 2L, 3L))
-
-  wrong_ic <- c(2, 2, 2)
-  result <- ad_runner$fit(ic = wrong_ic, params = NULL)
-
-  expect_true(is.finite(result$loss))
-  expect_true(all(is.finite(result$gradient)))
-  expect_equal(length(result$gradient), 3)
-  
-  expect_true(any(result$gradient != 0),
-    info = "IC gradients are all zero - AD tape not capturing IC dependencies!")
+testthat::test_that("lorenz fit's initial-state gradient matches a central difference", {
+  fitter <- lorenz_fit_setup()
+  ic <- c(1.1, 0.9, 1.05)
+  res <- fitter$fit(ic = ic)
+  expect_length(res$gradient, 3)
+  fd <- lorenz_central_difference(function(y) fitter$fit(ic = y)$loss, ic)
+  expect_equal(res$gradient, fd, tolerance = 1e-6)
+  expect_equal(fitter$fit(ic = c(1, 1, 1))$loss, 0, tolerance = 1e-20)
 })
-testthat::test_that("lorenz AD parameter gradients are NON-ZERO", {
 
-  true_pars <- c(sigma = 10.0, R = 28.0, b = 8.0/3.0)
-  
-  lz_true <- LorenzSystem$new(true_pars[1], true_pars[2], true_pars[3])
-  lz_true$set_initial_state(c(1, 1, 1), 0)
-
-  ctrl <- OdeControl$new()
-  runner_true <- Lorenz_Solver$new(lz_true$ptr, ctrl$ptr, active = FALSE)
-  runner_true$advance_adaptive(seq(0, 10, by=0.5))
-  hist_true <- runner_true$history()
-
-  target_times <- hist_true$time
-  target_vals <- as.matrix(hist_true[, c("x", "y", "z")])
-
-  wrong_pars <- c(sigma = 5.0, R = 20.0, b = 2.0)
-  lz_fit <- LorenzSystem$new(wrong_pars[1], wrong_pars[2], wrong_pars[3])
-  lz_fit$set_initial_state(c(1, 1, 1), 0)
-  lz_fit$set_params(wrong_pars)
-
-  ad_runner <- Lorenz_Solver$new(lz_fit$ptr, ctrl$ptr, active = TRUE)
-  ad_runner$set_target(target_times, target_vals, c(1L, 2L, 3L))
-
-  result <- ad_runner$fit(ic = NULL, params = wrong_pars)
-
-  expect_true(is.finite(result$loss))
-  expect_true(all(is.finite(result$gradient)))
-  expect_equal(length(result$gradient), 3)
-  
-  expect_true(any(result$gradient != 0),
-    info = "Lorenz parameter gradients should be non-zero (this is the only working AD gradient!)")
+testthat::test_that("lorenz fit's parameter gradient matches a central difference", {
+  fitter <- lorenz_fit_setup()
+  p <- c(11, 27, 2.5)
+  res <- fitter$fit(params = p)
+  expect_length(res$gradient, 3)
+  fd <- lorenz_central_difference(function(q) fitter$fit(params = q)$loss, p)
+  expect_equal(res$gradient, fd, tolerance = 1e-6)
+  # Both at once: parameters first, then the initial state.
+  both <- fitter$fit(ic = c(1.1, 0.9, 1.05), params = p)
+  expect_length(both$gradient, 6)
 })

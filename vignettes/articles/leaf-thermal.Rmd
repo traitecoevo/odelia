@@ -64,8 +64,14 @@ public:
 };
 ```
 
-Templating on `T` is what makes the system **AD-ready** — see the
-[parameter-fitting vignette](../articles/parameter-fitting.html).
+Templating on `T` is what makes the system **AD-ready**: the same code runs at
+`double` and at an active scalar. That is all a System needs to be *solved*. To
+have a run *swept* for its gradient it adds four members, stated as the concept
+`Sweepable` in `odelia/ode_interface.hpp`: `rebind_from<U>()`, `ad_parameters()`,
+`for_each_active(f)` and `set_recorded_state(y, time)`. The shipped header has
+them under a comment marking that tier, and the article
+[Reverse mode](reverse-mode.html) says what each is for. The remaining members of
+the header (`record_colnames`, `record_step`, `pars`) serve the R binding only.
 
 ### Drivers
 
@@ -95,8 +101,12 @@ library(odelia)
 
 ex_dir <- system.file("examples/leaf_thermal", package = "odelia")
 
-# Put the odelia headers on the include path for sourceCpp
-Sys.setenv(PKG_CPPFLAGS = paste0("-I", system.file("include", package = "odelia")))
+# The odelia headers, and the two XAD defines the package itself is built with
+# (a translation unit without them reaches the tape through the other storage
+# class).
+Sys.setenv(PKG_CPPFLAGS = paste0(
+  "-I", shQuote(system.file("include", package = "odelia")),
+  " -DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE"))
 
 # Compile the model-specific interface, then load the R6 wrappers
 Rcpp::sourceCpp(file.path(ex_dir, "src", "leaf_thermal_interface.cpp"), verbose = FALSE)
@@ -189,5 +199,3 @@ closer to — or below — air temperature at the hottest part of the day.
 - The full, copy-able sources are in
   `system.file("examples/leaf_thermal", package = "odelia")` — start there when
   building your own model.
-- To calibrate a model's parameters against data using exact gradients, see the
-  [parameter-fitting vignette](../articles/parameter-fitting.html).

@@ -6,7 +6,7 @@
 // R: `stop` throws a std::runtime_error, which Rcpp converts into an ordinary R
 // error at the package boundary, and `warning` writes to std::cerr. That is what
 // lets consumers of inst/include/ compile and run as plain C++ with no R
-// installation at all (traitecoevo/leaf_cpp#11). R belongs in src/ and in the
+// installation at all. R belongs in src/ and in the
 // interface headers -- solver_interface.hpp, rcpp_interface_helpers.hpp -- not
 // here.
 
@@ -27,21 +27,17 @@ inline bool is_finite(double x) {
   return std::isfinite(x);
 }
 
-// Strip every AD layer off a value, down to the plain double. xad::value() peels
-// one layer, which is enough for AReal<double> or FReal<double> but not for a
-// nested FReal<AReal<double>>, where it yields AReal<double>; this recurses until
-// it bottoms out at double. `value` is found by argument-dependent lookup at the
-// point of use, so this header needs no XAD include.
+// The value of an active scalar with every derivative layer removed, down to the
+// plain double. xad::value() peels one layer; this recurses until it bottoms out
+// at double. `value` is found by argument-dependent lookup at the point of use,
+// so this header needs no XAD include.
 //
-// "Passive" is the AD word for a value that carries no derivative: what is
-// left of an active scalar once every layer is stripped. The interpolant uses
-// it to place a query in its span and to compare fits during refinement, both
-// of which must happen in double whatever scalar the values carry.
-//
-// ⚠️ EVERY LAYER, NOT ONE. At a nested scalar (a tangent above a tangent) this
-// strips the inner direction as well as the outer, silently, because the
-// result is a plain double either way. A caller that needs one layer removed
-// strips it by hand.
+// ⚠️ EVERY LAYER, NOT ONE. At a nested scalar -- a tangent above a tangent -- this
+// strips the inner direction as well as the outer, and it does so silently
+// because the result is a plain double either way. The correction
+// `x - to_passive(x)` that `implicit_node.hpp` records is therefore zero in value
+// at one layer and zero in EVERY derivative at two. A second derivative that
+// needs this has to strip one layer by hand.
 inline double to_passive(double x) { return x; }
 template <typename T>
 inline double to_passive(const T& x) { return to_passive(value(x)); }
@@ -52,7 +48,7 @@ inline double to_passive(const T& x) { return to_passive(value(x)); }
   throw std::runtime_error(msg);
 }
 
-// A state outside the system's valid domain, as distinct from a bug (#55).
+// A state outside the system's valid domain, as distinct from a bug.
 //
 // The adaptive stepper catches *this type specifically* and treats it as a step
 // rejection -- shrink and retry -- rather than letting it end the solve. Anything
@@ -77,6 +73,28 @@ struct DomainError : std::runtime_error {
   throw DomainError(msg);
 }
 
+// An adjoint that left the range a double can hold: neither a bug nor a state the
+// model has no meaning for, and so neither of the two above.
+//
+// A sweep is a product of step Jacobians and has no error control, so it can pass
+// far outside the range of the answer it returns and come back. One that does not
+// come back overflows on an INTERMEDIATE while every number it computes is right.
+//
+// Its own type because the right answer to it is a refusal of the whole result:
+// what overflowed is an intermediate of a recording spanning the whole state, so
+// nothing finer has a component to attribute it to. A caller catching
+// runtime_error broadly would read a genuine length mismatch in the sweep the
+// same way, which is the distinction DomainError above exists to keep.
+struct AdjointRangeError : std::runtime_error {
+  explicit AdjointRangeError(const std::string &msg) : std::runtime_error(msg) {}
+};
+
+// As stop(), for a sweep that left the representable range. Prefer a message
+// naming the step, the entry and the magnitude the step above carried: the last
+// of those is what says whether the descent compounded into it or met it.
+[[noreturn]] inline void stop_adjoint_range(const std::string &msg) {
+  throw AdjointRangeError(msg);
+}
 
 // Not an R warning: nothing in the solver core may assume an R session exists.
 // Callers that need one should raise it from their own R-facing code. Uses
@@ -89,8 +107,7 @@ inline void warning(const std::string &msg) {
 // A double in an error message. std::to_string is fixed-point with six decimals,
 // so it renders a flux of 1e-22 as "0.000000" and a domain endpoint of 1e8 with
 // eight useless digits -- in both cases erasing the number the reader needed.
-// Six significant figures, matching plant's util::format_double so the family
-// renders numbers the same way; enough to identify a value, and short enough that
+// Six significant figures: enough to identify a value, and short enough that
 // 6.8918 does not arrive as 6.8917999999999999. Deliberately NOT round-trip
 // precision: these strings are for reading, not for reconstructing a double.
 inline std::string format_double(double x) {

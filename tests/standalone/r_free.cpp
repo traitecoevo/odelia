@@ -8,8 +8,8 @@
 //
 // It also catches the subtler version of the same bug: a header using a
 // standard-library facility (`assert`, `std::string`, ...) that it never
-// includes and only receives by accident from R's headers. That is exactly how
-// spline.hpp came to use `assert` without <cassert>.
+// includes and only receives by accident from R's headers. A retired spline
+// header came to use `assert` without <cassert>, which is how.
 //
 // The R interface headers -- solver_interface.hpp, rcpp_interface_helpers.hpp
 // -- are deliberately NOT listed here. They are meant to depend on Rcpp.
@@ -20,7 +20,6 @@
 // an R one.
 
 #include <odelia/ode_util.hpp>
-#include <odelia/spline.hpp>
 #include <odelia/interpolator.hpp>
 #include <odelia/drivers.hpp>
 #include <odelia/ode_control.hpp>
@@ -30,7 +29,9 @@
 #include <odelia/ode_step_dopri.hpp>
 #include <odelia/ode_solver_internal.hpp>
 #include <odelia/ode_solver.hpp>
-#include <odelia/ode_fit.hpp>
+#include <odelia/sweep.hpp>
+#include <odelia/implicit_node.hpp>
+#include <odelia/tangent.hpp>
 #include <odelia/ode_steady_state.hpp>
 #include <odelia/ode_callback_system.hpp>
 #include <examples/lorenz_system.hpp>
@@ -69,18 +70,42 @@ void test_stop_throws() {
 
 // The interpolator is the part of the core most downstream consumers touch.
 void test_interpolator() {
-  odelia::interpolator::Interpolator in;
-  in.init({0.0, 1.0, 2.0, 3.0}, {0.0, 1.0, 4.0, 9.0});
+  odelia::interpolator::hermite_interpolator<double> in;
+  // x^2 with its own slope at every knot, which a cubic reproduces exactly.
+  in.init({0.0, 1.0, 2.0, 3.0}, {0.0, 1.0, 4.0, 9.0}, {0.0, 2.0, 4.0, 6.0});
   check(std::abs(in.eval(2.0) - 4.0) < 1e-12, "interpolator hits its knots");
+  check(std::abs(in.eval(1.5) - 2.25) < 1e-12, "and the quadratic between them");
+  check(std::abs(in.slope(1.5) - 3.0) < 1e-12, "with the slope of the same curve");
 
   bool threw = false;
   try {
-    odelia::interpolator::Interpolator too_short;
-    too_short.init({0.0, 1.0}, {0.0, 1.0});
+    odelia::interpolator::hermite_interpolator<double> one_knot;
+    one_knot.init({0.0}, {0.0}, {0.0});
   } catch (const std::runtime_error &) {
     threw = true;
   }
-  check(threw, "interpolator rejects fewer than three points");
+  check(threw, "interpolator rejects a knot set with no span");
+}
+
+// A driver given as values alone: natural by default, monotone on request. An
+// intermittent non-negative series is the case the choice exists for -- a single
+// wet day between dry ones pulls a natural spline below zero beside it.
+void test_driver_slopes() {
+  const std::vector<double> x{0, 1, 2, 3, 4, 5, 6};
+  const std::vector<double> y{0, 0, 0, 8, 0, 0, 0};
+  odelia::drivers::Drivers d;
+  d.set_variable("natural", x, y);
+  d.set_variable("monotone", x, y, odelia::drivers::Slopes::monotone);
+  double lo_nat = 0.0, lo_mono = 0.0, hi_mono = 0.0;
+  for (double u = 0.0; u <= 6.0; u += 0.01) {
+    lo_nat = std::min(lo_nat, d.evaluate("natural", u));
+    lo_mono = std::min(lo_mono, d.evaluate("monotone", u));
+    hi_mono = std::max(hi_mono, d.evaluate("monotone", u));
+  }
+  check(lo_nat < 0.0, "a natural driver dips below an intermittent series");
+  check(lo_mono >= 0.0 && hi_mono <= 8.0,
+        "a monotone driver stays inside the values bracketing each span");
+  check(d.evaluate("monotone", 3.0) == 8.0, "and still hits its knots");
 }
 
 // Integrating a real system with no R session anywhere is the whole point.
@@ -303,9 +328,9 @@ struct Logistic {
 };
 
 // Same dynamics, but declaring the domain. Inherited rather than switched on a
-// template parameter so that the silent twin genuinely lacks the method and
-// has_state_check<> resolves to false for it -- an `if constexpr` inside one
-// struct would still leave the member there for the trait to find.
+// template parameter so that the silent copy genuinely lacks the method and
+// ChecksState resolves to false for it -- an `if constexpr` inside one
+// struct would still leave the member there for the concept to find.
 struct LogisticChecked : Logistic<OnLeave::nothing> {
   static int refusals;
   bool ode_state_valid(const std::vector<double>& state) const {
@@ -328,9 +353,10 @@ odelia::ode::OdeControl loose_control() {
 
 // A declared domain must be enforced on the committed state.
 void test_predicate_rejects_out_of_domain_step() {
-  check(odelia::ode::has_state_check<LogisticChecked>::value,
-        "has_state_check finds a declared ode_state_valid");
-  check(!odelia::ode::has_state_check<Logistic<OnLeave::nothing>>::value,
+  using domain = std::vector<double>;
+  check(odelia::ode::ChecksState<LogisticChecked, domain>,
+        "ChecksState finds a declared ode_state_valid");
+  check(!odelia::ode::ChecksState<Logistic<OnLeave::nothing>, domain>,
         "and does not invent one that is absent");
 
   Logistic<OnLeave::nothing> unguarded;
@@ -347,7 +373,7 @@ void test_predicate_rejects_out_of_domain_step() {
         "the predicate actually refused at least one step (test is not vacuous)");
   check(y >= 0.0 && y <= 1.0, "the committed state stays inside [0, 1]");
   check(s1.time() == 1.0, "and the solve still reaches the requested time");
-  std::printf("       (%d refusal(s); unguarded twin finished at y = %g)\n",
+  std::printf("       (%d refusal(s); unguarded copy finished at y = %g)\n",
               LogisticChecked::refusals, s0.state()[0]);
 }
 
@@ -455,6 +481,156 @@ void test_unreachable_domain_fails_with_a_reason() {
     std::printf("       (raised: %s)\n", msg.c_str());
   }
 }
+
+
+// A supplied row set is ONE statement, whatever the row count, and the rows it
+// carries are the ones it was handed. The count is the guard: written as a sum of
+// `out += d * (x - to_passive(x))` the same call is one recorded assignment per
+// row, which is how a submodel's whole arithmetic reaches a consumer's tape.
+void test_supplied_rows_cost_one_statement() {
+  using A = odelia::ode::active_scalar<double>;
+  using Tape = odelia::ode::adjoint_tape<double>;
+
+  for (int n : {1, 5, 31}) {
+    Tape tape;
+    std::vector<A> x(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) {
+      x[static_cast<std::size_t>(i)] = 1.0 + 0.25 * double(i);
+    }
+    // Never registered, so it holds no slot: its row must be dropped rather than
+    // pushed, and the sweep must survive it.
+    const A unregistered = 9.0;
+    tape.registerInputs(x.begin(), x.end());
+    tape.newRecording();
+
+    std::vector<odelia::input_and_derivative<A>> against;
+    for (int i = 0; i < n; ++i) {
+      against.push_back({x[static_cast<std::size_t>(i)], 1.0 / (double(i) + 2.0)});
+    }
+    against.push_back({unregistered, 4.0});
+    against.push_back({x[0], 0.0});
+
+    const std::size_t s0 = tape.getNumStatements();
+    A out;
+    const odelia::record_report report =
+        odelia::record_with_derivatives<A>(7.5, against, out);
+    const std::size_t statements = tape.getNumStatements() - s0;
+
+    tape.registerOutput(out);
+    xad::derivative(out) = 1.0;
+    tape.computeAdjoints();
+
+    double worst = std::fabs(xad::value(out) - 7.5);
+    for (int i = 0; i < n; ++i) {
+      worst = std::fmax(worst, std::fabs(xad::derivative(x[static_cast<std::size_t>(i)]) -
+                                         1.0 / (double(i) + 2.0)));
+    }
+    const std::string at = " (" + std::to_string(n) + " rows)";
+    check(report.whole, "every row is recorded" + at);
+    check(statements == 1, "one statement" + at);
+    check(worst < 1e-15, "the value and every row are the ones supplied" + at);
+  }
+}
+
+// The same call at a direction, which has no tape to hold a statement: the rows
+// are the arithmetic there, and dropping them would be silent.
+void test_supplied_rows_carry_a_direction() {
+  using T = odelia::ode::tangent_scalar<double>;
+  T x = 2.0;
+  odelia::ode::seed_direction(x, 1.0);
+  std::vector<odelia::input_and_derivative<T>> against{{x, 0.25}};
+  T out;
+  const odelia::record_report report =
+      odelia::record_with_derivatives<T>(7.5, against, out);
+  check(report.whole, "a direction records its rows");
+  check(std::fabs(odelia::util::to_passive(out) - 7.5) < 1e-15,
+        "the value is untouched at a direction");
+  check(std::fabs(odelia::ode::derivative_along(out) - 0.25) < 1e-15,
+        "and the direction carries the supplied row");
+}
+
+
+// A residual taken off the caller's tape gives the same rows as one left on it.
+//
+// F(p) = p^2 - x*y has the root p* = sqrt(x*y), so dp*/dx = y/(2p*) and
+// dp*/dy = x/(2p*) in closed form -- which is the referee here, rather than the
+// two routes agreeing with each other.
+void test_a_preaccumulated_residual_keeps_its_rows() {
+  using A = odelia::ode::active_scalar<double>;
+  using Tape = odelia::ode::adjoint_tape<double>;
+  const double x0 = 2.0, y0 = 8.0;
+  const double root = 4.0;          // sqrt(2*8)
+  const double dFdp = 2.0 * root;   // 8
+  const double want_dx = y0 / dFdp; // 1.0
+  const double want_dy = x0 / dFdp; // 0.25
+
+  double got_dx[2], got_dy[2];
+  std::size_t statements[2];
+
+
+  for (int arm = 0; arm < 2; ++arm) {
+    Tape tape;
+    A x = x0, y = y0;
+    tape.registerInput(x);
+    tape.registerInput(y);
+    tape.newRecording();
+    auto residual = [&](const A& p) -> A { return p * p - x * y; };
+    const std::size_t s0 = tape.getNumStatements();
+    A p_star = (arm == 0)
+                   ? odelia::implicit_value<A>(root, dFdp, residual)
+                   : odelia::implicit_value<A>(root, dFdp, residual, x, y);
+    statements[arm] = tape.getNumStatements() - s0;
+    tape.registerOutput(p_star);
+    xad::derivative(p_star) = 1.0;
+    tape.computeAdjoints();
+    got_dx[arm] = xad::derivative(x);
+    got_dy[arm] = xad::derivative(y);
+    check(std::fabs(xad::value(p_star) - root) < 1e-14,
+          arm == 0 ? "the value is the root (on the tape)"
+                   : "the value is the root (preaccumulated)");
+    if (arm == 1) {
+      check(odelia::ode::count_active_slots<A>(x, y) == 2,
+            "the walk had both inputs to reach");
+    }
+  }
+
+  check(std::fabs(got_dx[0] - want_dx) < 1e-12 &&
+            std::fabs(got_dy[0] - want_dy) < 1e-12,
+        "the recorded residual gives the theorem's rows");
+  check(std::fabs(got_dx[1] - want_dx) < 1e-12 &&
+            std::fabs(got_dy[1] - want_dy) < 1e-12,
+        "and so does the preaccumulated one");
+  check(statements[1] == 1, "which costs one statement");
+  check(statements[1] < statements[0],
+        "against the whole residual left on the tape");
+  std::printf("       (on the tape %zu statements, preaccumulated %zu)\n",
+              statements[0], statements[1]);
+}
+
+// The rows accumulate, so a second solve against the same inputs must not add to
+// the first. Every number stays finite when it does, which is what makes it worth
+// a check of its own.
+void test_two_preaccumulated_solves_do_not_add_up() {
+  using A = odelia::ode::active_scalar<double>;
+  using Tape = odelia::ode::adjoint_tape<double>;
+  Tape tape;
+  A x = 2.0, y = 8.0;
+  tape.registerInput(x);
+  tape.registerInput(y);
+  tape.newRecording();
+  auto residual = [&](const A& p) -> A { return p * p - x * y; };
+  const A first = odelia::implicit_value<A>(4.0, 8.0, residual, x, y);
+  const A second = odelia::implicit_value<A>(4.0, 8.0, residual, x, y);
+  A sum = first + second;
+  tape.registerOutput(sum);
+  xad::derivative(sum) = 1.0;
+  tape.computeAdjoints();
+  // Two identical solves, so each row is twice one solve's and no more.
+  check(std::fabs(xad::derivative(x) - 2.0 * 1.0) < 1e-12 &&
+            std::fabs(xad::derivative(y) - 2.0 * 0.25) < 1e-12,
+        "two solves carry two rows, not three");
+}
+
 
 // --- The same bargain on the pinned path (plant#642) ------------------------
 //
@@ -624,6 +800,358 @@ void test_pinned_step_unchanged_when_nothing_objects() {
 
 // --- A right-hand side handed in at run time (#62) ---------------------------
 //
+// --- A recorded run, swept and replayed -------------------------------------
+//
+// y' = r y (1 - y) on [0, 1], with the domain declared. Carries what a sweep
+// needs (rebind_from, ad_parameters, for_each_active, set_recorded_state), so
+// solve_adjoint can be refereed here against a central difference of the same
+// pinned run.
+namespace {
+
+template <typename T = double>
+struct Grow {
+  using value_type = T;
+  template <typename> friend struct Grow;
+  T r, y, dydt, y_init;
+  double time = 0.0, t0 = 0.0;
+  explicit Grow(T r_ = T(1.0), double y0 = 0.5)
+      : r(r_), y(y0), dydt(0.0), y_init(y0) { compute_rates(); }
+  template <class S> Grow<S> rebind_from() const {
+    Grow<S> g(S(xad::value(r)), xad::value(y_init));
+    std::vector<S> st{S(xad::value(y))};
+    g.set_ode_state(st.begin(), time);
+    return g;
+  }
+  size_t ode_size() const { return 1; }
+  double ode_time() const { return time; }
+  template <class It> It set_ode_state(It it, double t) {
+    y = *it++; time = t; compute_rates(); return it;
+  }
+  void set_recorded_state(const std::vector<T>& s, double t) {
+    set_ode_state(s.begin(), t);
+  }
+  void compute_rates() { dydt = r * y * (T(1.0) - y); }
+  template <class It> It ode_state(It it) const { *it++ = y; return it; }
+  template <class It> It ode_rates(It it) const { *it++ = dydt; return it; }
+  template <class It> It ode_initial_state(It it) const { *it++ = y_init; return it; }
+  template <class It> It set_initial_state(It it, double t0_ = 0.0) {
+    t0 = t0_; y_init = *it++; return it;
+  }
+  void reset() { y = y_init; time = t0; compute_rates(); }
+  std::vector<T*> ad_parameters() { return {&r}; }
+  template <class F> void for_each_active(F&& f) { f(r); f(y); f(dydt); f(y_init); }
+  bool ode_state_valid(const std::vector<T>& s) const {
+    return xad::value(s[0]) >= 0.0 && xad::value(s[0]) <= 1.0;
+  }
+};
+
+double grow_pinned_final(double r, const std::vector<double>& times,
+                         const odelia::ode::OdeControl& c) {
+  Grow<double> g(r, 0.5);
+  odelia::ode::Solver<Grow<double>> s(g, c);
+  s.advance_fixed(times);
+  return s.state()[0];
+}
+
+} // namespace
+
+// Pinned finely enough that nothing is refused, the sweep of a pinned run is the
+// derivative of that run: refereed against a central difference, not against
+// itself.
+void test_sweep_of_a_pinned_run_matches_a_difference() {
+  const std::vector<double> times{0.0, 0.01, 0.02, 0.03, 0.04, 0.05};
+  const double r = 50.0;
+  Grow<double> g(r, 0.5);
+  odelia::ode::Solver<Grow<double>> s(g, loose_control());
+  s.set_keep_states(true);
+  s.reset();
+  s.advance_fixed(times);
+  check(s.get_n_rejections() == 0, "no pinned interval was refused");
+  check(s.recording().size() == times.size(), "one row per pinned time");
+
+  odelia::ode::adjoint_rows lambda = odelia::ode::adjoint_rows::one_row({1.0});
+  odelia::ode::adjoint_rows dp(1, 1);
+  s.solve_adjoint(lambda, dp);
+  const double h = 1e-6;
+  const double fd = (grow_pinned_final(r + h, times, loose_control()) -
+                     grow_pinned_final(r - h, times, loose_control())) / (2 * h);
+  check(std::fabs(dp[0][0] - fd) < 1e-7 * std::fabs(fd),
+        "d y(T)/dr from the sweep is the central difference of the run");
+  std::printf("       (sweep %.10g, difference %.10g)\n", dp[0][0], fd);
+}
+
+// A pinned interval the domain refused is crossed in several sub-steps and
+// recorded as one row. Swept as one step of the interval it gave a derivative
+// forty orders of magnitude off, finitely; now the row is marked and refused.
+void test_subdivided_pinned_row_is_refused() {
+  const std::vector<double> times{0.0, 0.5, 1.0};
+  Grow<double> g(50.0, 0.5);
+  odelia::ode::Solver<Grow<double>> s(g, loose_control());
+  s.set_keep_states(true);
+  s.reset();
+  s.advance_fixed(times);
+  check(s.get_n_rejections() > 0, "at least one pinned interval was refused");
+  const auto rec = s.recording();
+  check(rec.size() == times.size(), "the record still holds one row per time");
+  bool marked = false;
+  for (const auto& row : rec) marked = marked || row.subdivided;
+  check(marked, "and the row that was subdivided says so");
+
+  odelia::ode::adjoint_rows lambda = odelia::ode::adjoint_rows::one_row({1.0});
+  odelia::ode::adjoint_rows dp(1, 1);
+  bool refused = false;
+  try {
+    s.solve_adjoint(lambda, dp);
+  } catch (const std::runtime_error& e) {
+    refused = std::string(e.what()).find("sub-steps") != std::string::npos;
+  }
+  check(refused, "the sweep refuses the subdivided row by name");
+
+  Grow<double> again(50.0, 0.5);
+  odelia::ode::Solver<Grow<double>> replay(again, loose_control());
+  refused = false;
+  try {
+    replay.advance_recorded(rec);
+  } catch (const std::runtime_error& e) {
+    refused = std::string(e.what()).find("subdivided") != std::string::npos;
+  }
+  check(refused, "and so does a replay of the recording");
+}
+
+// The two batches a sweep takes are written differently -- one replaced, one
+// accumulated -- so the same object for both loses whichever was written first.
+void test_sweep_refuses_one_batch_for_both() {
+  LorenzSystem<double> sys(10.0, 28.0, 8.0 / 3.0);
+  odelia::ode::Solver<LorenzSystem<double>> s(sys, odelia::ode::OdeControl());
+  s.set_keep_states(true);
+  s.reset();
+  s.advance_adaptive(std::vector<double>{0.0, 0.5});
+  odelia::ode::adjoint_rows lambda =
+      odelia::ode::adjoint_rows::one_row({1.0, 0.0, 0.0});
+  bool refused = false;
+  try {
+    s.solve_adjoint(lambda, lambda);
+  } catch (const std::runtime_error& e) {
+    refused = std::string(e.what()).find("same batch") != std::string::npos;
+  }
+  check(refused, "solve_adjoint refuses the same batch as seed and accumulator");
+}
+
+// An input that already carries an adjoint when a residual is taken off the
+// tape must get exactly that adjoint back and a row that does not include it.
+// With held adjoints of zero the two are indistinguishable, which is why this
+// is a case of its own.
+void test_implicit_value_leaves_the_callers_adjoint_alone() {
+  using A = odelia::ode::active_scalar<double>;
+  using Tape = odelia::ode::adjoint_tape<double>;
+  const double x0 = 2.0, y0 = 8.0, held = 9.0;
+  const double root = 4.0, dFdp = 2.0 * root;
+  Tape tape;
+  A x = x0, y = y0;
+  tape.registerInput(x);
+  tape.registerInput(y);
+  tape.newRecording();
+  xad::derivative(x) = held;
+  xad::derivative(y) = held;
+  auto residual = [&](const A& p) -> A { return p * p - x * y; };
+  A p_star = odelia::implicit_value<A>(root, dFdp, residual, x, y);
+  check(xad::derivative(x) == held && xad::derivative(y) == held,
+        "the inputs' adjoints are as the caller left them");
+  tape.registerOutput(p_star);
+  xad::derivative(p_star) = 1.0;
+  tape.computeAdjoints();
+  // The theorem's rows on top of what was held: dp*/dx = y/(2p*), dp*/dy = x/(2p*).
+  check(std::fabs(xad::derivative(x) - (held + y0 / dFdp)) < 1e-12 &&
+            std::fabs(xad::derivative(y) - (held + x0 / dFdp)) < 1e-12,
+        "the rows add the theorem's derivative and nothing of the held adjoint");
+}
+
+// --- A run whose state widens -------------------------------------------------
+//
+// Cells of y' = r y (1 - y), one more inserted mid-run with a size set by r, so
+// the newborn's initial condition is a channel of parameter derivative of its
+// own, beside the dynamics'.
+namespace {
+
+template <typename T = double>
+struct Cells {
+  using value_type = T;
+  template <typename> friend struct Cells;
+  T r;
+  std::vector<T> y, dydt;
+  std::vector<double> y_init;
+  double time = 0.0;
+  explicit Cells(T r_ = T(1.0), std::vector<double> y0 = {0.5})
+      : r(r_), y_init(std::move(y0)) { reset(); }
+  template <class S> Cells<S> rebind_from() const {
+    std::vector<double> v;
+    for (const T& c : y) v.push_back(xad::value(c));
+    Cells<S> out(S(xad::value(r)), y_init);
+    out.y.assign(v.begin(), v.end());
+    out.dydt.resize(v.size());
+    out.time = time;
+    out.compute_rates();
+    return out;
+  }
+  size_t ode_size() const { return y.size(); }
+  double ode_time() const { return time; }
+  template <class It> It set_ode_state(It it, double t) {
+    for (T& c : y) c = *it++;
+    time = t; compute_rates(); return it;
+  }
+  void set_recorded_state(const std::vector<T>& s, double t) {
+    y.resize(s.size()); dydt.resize(s.size());
+    set_ode_state(s.begin(), t);
+  }
+  void compute_rates() {
+    for (size_t i = 0; i < y.size(); ++i) dydt[i] = r * y[i] * (T(1.0) - y[i]);
+  }
+  template <class It> It ode_state(It it) const { for (const T& c : y) *it++ = c; return it; }
+  template <class It> It ode_rates(It it) const { for (const T& c : dydt) *it++ = c; return it; }
+  void reset() {
+    y.assign(y_init.begin(), y_init.end()); dydt.resize(y.size());
+    time = 0.0; compute_rates();
+  }
+  std::vector<T*> ad_parameters() { return {&r}; }
+  template <class F> void for_each_active(F&& f) {
+    f(r); for (T& c : y) f(c); for (T& c : dydt) f(c);
+  }
+  // The cells as they were, then a newborn of size r / 100.
+  template <class It> void apply_insertion(double, It x, std::vector<T>& out) {
+    const size_t n = y.size();
+    y.resize(n + 1); dydt.resize(n + 1);
+    for (size_t i = 0; i < n; ++i) y[i] = *x++;
+    y[n] = T(0.01) * r;
+    compute_rates();
+    out.resize(n + 1);
+    ode_state(out.begin());
+  }
+};
+
+// Widen the solver's System at its current time and record the row.
+void insert_cell(odelia::ode::Solver<Cells<double>>& s) {
+  Cells<double>& sys = s.get_system_ref();
+  std::vector<double> before(sys.ode_size());
+  sys.ode_state(before.begin());
+  std::vector<double> widened;
+  sys.apply_insertion(s.time(), before.begin(), widened);
+  s.set_state_from_system();
+  s.push_insertion();
+}
+
+// The run: to 0.5, insert, to t_end. Pinned to `seg1`/`seg2` when given.
+double cells_sum(double r, const std::vector<double>* seg1,
+                 const std::vector<double>* seg2, double t_end = 1.0) {
+  Cells<double> c(r, {0.5});
+  odelia::ode::Solver<Cells<double>> s(c, odelia::ode::OdeControl());
+  if (seg1) s.advance_fixed(*seg1); else s.advance_adaptive(std::vector<double>{0.0, 0.5});
+  insert_cell(s);
+  if (seg2) s.advance_fixed(*seg2); else s.advance_adaptive(std::vector<double>{0.5, t_end});
+  double sum = 0.0;
+  for (double v : s.state()) sum += v;
+  return sum;
+}
+
+} // namespace
+
+void test_sweep_across_an_insertion() {
+  const double r = 2.0;
+  Cells<double> c(r, {0.5});
+  odelia::ode::Solver<Cells<double>> s(c, odelia::ode::OdeControl());
+  s.set_keep_states(true);
+  s.reset();
+  s.advance_adaptive(std::vector<double>{0.0, 0.5});
+  insert_cell(s);
+  s.advance_adaptive(std::vector<double>{0.5, 1.0});
+  const auto rec = s.recording();
+  size_t insertions = 0;
+  for (const auto& row : rec) insertions += row.insertion;
+  check(insertions == 1, "the recording holds the insertion row");
+  check(rec.front().state.size() == 1 && rec.back().state.size() == 2,
+        "and widens from one cell to two");
+
+  // The same steps, pinned, for the difference.
+  std::vector<double> seg1, seg2;
+  for (const auto& ins : s.schedule()) {
+    if (ins.time <= 0.5) seg1.push_back(ins.time);
+    if (ins.time >= 0.5) seg2.push_back(ins.time);
+  }
+  odelia::ode::adjoint_rows lambda = odelia::ode::adjoint_rows::one_row({1.0, 1.0});
+  odelia::ode::adjoint_rows dp(1, 1);
+  const size_t ranges = s.solve_adjoint(lambda, dp);
+  check(ranges == 2, "two ranges, one each side of the insertion");
+  check(lambda.width() == 1, "the adjoint comes back at the width the run started at");
+  const double h = 1e-6;
+  const double fd = (cells_sum(r + h, &seg1, &seg2) - cells_sum(r - h, &seg1, &seg2)) / (2 * h);
+  check(std::fabs(dp[0][0] - fd) < 1e-7 * std::fabs(fd),
+        "d(sum of cells)/dr across the insertion is the central difference");
+  std::printf("       (sweep %.10g, difference %.10g)\n", dp[0][0], fd);
+
+  // The newborn's size is r / 100, so its own row carries a derivative that is
+  // not the dynamics'.
+  odelia::ode::adjoint_rows newborn = odelia::ode::adjoint_rows::one_row({0.0, 1.0});
+  odelia::ode::adjoint_rows dp_newborn(1, 1);
+  s.solve_adjoint(newborn, dp_newborn);
+  check(dp_newborn[0][0] != 0.0 && std::fabs(dp_newborn[0][0]) < std::fabs(dp[0][0]),
+        "the newborn's initial condition contributes a parameter derivative");
+
+  // After the sweep the solver stands where the run left it, at the run's width,
+  // and steps on from there as a run that was never swept does.
+  check(s.state().size() == 2, "the solver's state is at the run's width after the sweep");
+  s.advance_adaptive(std::vector<double>{1.0, 1.5});
+  Cells<double> c2(r, {0.5});
+  odelia::ode::Solver<Cells<double>> unswept(c2, odelia::ode::OdeControl());
+  unswept.advance_adaptive(std::vector<double>{0.0, 0.5});
+  insert_cell(unswept);
+  unswept.advance_adaptive(std::vector<double>{0.5, 1.0});
+  unswept.advance_adaptive(std::vector<double>{1.0, 1.5});
+  check(s.state() == unswept.state() && s.time() == unswept.time(),
+        "and a step taken after the sweep is the step an unswept run takes");
+
+  // A replay of the recording records the insertion row too, so its own
+  // recording can be swept.
+  Cells<double> again(r, {0.5});
+  odelia::ode::Solver<Cells<double>> replay(again, odelia::ode::OdeControl());
+  replay.set_keep_states(true);
+  replay.reset();
+  replay.advance_recorded(rec);
+  const auto rec2 = replay.recording();
+  check(rec2.size() == rec.size(), "a replay's recording has the run's rows");
+  bool same = true;
+  for (size_t k = 0; k < rec.size(); ++k) {
+    same = same && rec2[k].insertion == rec[k].insertion &&
+           rec2[k].state.size() == rec[k].state.size();
+  }
+  check(same, "with the insertion where the run had it");
+}
+
+// A scalar that already carries an adjoint is closed to the forward-AD Jacobian,
+// and naming the Jacobian at it must not be a compile error: the implicit
+// stepper refuses at run time, as it did before the tangent scalar was named.
+void test_jacobian_is_closed_at_an_adjoint_scalar() {
+  using A = odelia::ode::active_scalar<double>;
+  using Sys = LorenzSystem<A>;
+  check(odelia::ode::Jacobian<Sys>::value_is_adjoint,
+        "the Jacobian sees an adjoint scalar");
+  check(!odelia::ode::Jacobian<Sys>::ad_supported && !odelia::ode::Jacobian<Sys>::supported,
+        "and offers no route to a Jacobian there");
+  check(!odelia::ode::RodasStep<Sys>::supported, "so RODAS is closed to it");
+  // The step-size controller reads doubles, so an adjoint-scalar run is pinned;
+  // the adaptive path at such a scalar has never compiled.
+  Sys sys(A(10.0), A(28.0), A(8.0 / 3.0));
+  odelia::ode::Solver<Sys> s(sys, odelia::ode::OdeControl(), odelia::ode::Method::rodas);
+  bool refused = false;
+  try {
+    s.advance_fixed(std::vector<double>{0.0, 0.1});
+  } catch (const std::runtime_error& e) {
+    refused = std::string(e.what()).find("not available") != std::string::npos;
+  }
+  check(refused, "and a RODAS step at an adjoint scalar is refused at run time");
+  odelia::ode::Solver<Sys> rk(sys, odelia::ode::OdeControl());
+  rk.advance_fixed(std::vector<double>{0.0, 0.1});
+  check(rk.time() == 0.1, "while the explicit stepper steps at it as before");
+}
+
 // CallbackSystem wraps a std::function as a System, so an R closure (or a
 // Python callable, or a lambda as here) can be stepped by the same solver as a
 // compiled system. The implicit stepper needs a Jacobian, which such a system
@@ -650,7 +1178,7 @@ void lorenz_jac(double, const State& y, const State&, State& J) {
   J[2 * 3 + 0] = y[1];       J[2 * 3 + 1] = y[0];  J[2 * 3 + 2] = -BETA;
 }
 
-// A compiled system with its own Jacobian hook and no rebind(): the hook alone
+// A compiled system with its own Jacobian hook and no rebind_from(): the hook alone
 // must open the implicit stepper to it.
 struct HookedLorenz {
   using value_type = double;
@@ -695,12 +1223,13 @@ double max_abs_diff(const State& a, const State& b) {
 
 void test_jacobian_hook_is_detected() {
   using odelia::ode::has_jacobian;
-  using odelia::ode::has_rebind;
+  using odelia::ode::Rebindable;
+  using odelia::ode::tangent_scalar;
   using odelia::ode::Jacobian;
   using odelia::ode::RodasStep;
 
   check(has_jacobian<HookedLorenz>::value, "has_jacobian finds a declared ode_jacobian");
-  check(!has_rebind<HookedLorenz>::value, "on a system with no rebind()");
+  check(!Rebindable<HookedLorenz, tangent_scalar<double>>, "on a system with no rebind_from()");
   check(Jacobian<HookedLorenz>::supported && !Jacobian<HookedLorenz>::ad_supported,
         "so the Jacobian is supported through the hook, not AD");
   check(RodasStep<HookedLorenz>::supported, "and RODAS is open to it");
@@ -710,9 +1239,9 @@ void test_jacobian_hook_is_detected() {
 
   check(!has_jacobian<LorenzSystem<double>>::value &&
             Jacobian<LorenzSystem<double>>::ad_supported,
-        "the compiled Lorenz keeps its AD route (no hook, has rebind)");
+        "the compiled Lorenz keeps its AD route (no hook, has rebind_from)");
   check(!Jacobian<Logistic<OnLeave::nothing>>::supported,
-        "a system with neither hook nor rebind is not supported");
+        "a system with neither hook nor rebind_from is not supported");
 
   check(odelia::ode::has_autonomous<CallbackSystem>::value,
         "has_autonomous finds CallbackSystem's declaration");
@@ -1166,7 +1695,7 @@ void test_dopri() {
     check(max_abs_diff(s_dp.state(), s_rk.state()) < 1e-5,
           "a compiled system steps under Dormand-Prince from C++");
     check(max_abs_diff(s_ro.state(), s_rk.state()) < 1e-5,
-          "and under RODAS, through its rebind() and AD Jacobian");
+          "and under RODAS, through its rebind_from() and AD Jacobian");
     std::printf("       (compiled Lorenz, t = 2 at 1e-10: rkck %zu, dopri %zu, rodas %zu steps)\n",
                 s_rk.times().size() - 1, s_dp.times().size() - 1, s_ro.times().size() - 1);
   }
@@ -1293,6 +1822,7 @@ int main() {
   std::printf("odelia solver core, standalone (no R, no Rcpp)\n");
   test_stop_throws();
   test_interpolator();
+  test_driver_slopes();
   test_solver_runs();
   test_control_rejects_nonfinite_error();
   test_solver_refuses_nonfinite_state();
@@ -1300,11 +1830,22 @@ int main() {
   test_domain_error_becomes_a_rejection();
   test_non_domain_throw_is_not_absorbed();
   test_unreachable_domain_fails_with_a_reason();
+  test_supplied_rows_cost_one_statement();
+  test_supplied_rows_carry_a_direction();
+  test_a_preaccumulated_residual_keeps_its_rows();
+  test_two_preaccumulated_solves_do_not_add_up();
+
   test_pinned_step_domain_error_is_a_rejection();
   test_pinned_step_predicate_is_enforced();
   test_pinned_step_non_domain_throw_is_not_absorbed();
   test_pinned_step_unreachable_domain_fails_with_a_reason();
   test_pinned_step_unchanged_when_nothing_objects();
+  test_sweep_of_a_pinned_run_matches_a_difference();
+  test_subdivided_pinned_row_is_refused();
+  test_sweep_refuses_one_batch_for_both();
+  test_implicit_value_leaves_the_callers_adjoint_alone();
+  test_sweep_across_an_insertion();
+  test_jacobian_is_closed_at_an_adjoint_scalar();
   test_jacobian_hook_is_detected();
   test_callback_rodas_matches_compiled();
   test_callback_call_budget();

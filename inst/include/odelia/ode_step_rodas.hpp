@@ -8,7 +8,7 @@
 //
 // A Rosenbrock (linearly-implicit) method: each stage is one RHS evaluation plus
 // one linear solve against a single matrix W = (1/(h*gamma)) I - J, factorized
-// once per step. No Newton iteration, so no convergence machinery -- the only
+// once per step. No Newton iteration, so no convergence loop to control -- the only
 // adaptivity is the existing accuracy-based step-size controller in OdeControl,
 // which consumes the embedded error estimate exactly as it does for the explicit
 // RKCK stepper.
@@ -18,7 +18,7 @@
 // through the same adaptive loop.
 //
 // The Jacobian J = df/dy comes from the System's own ode_jacobian() hook when it
-// has one, else by forward-mode AD on a rebind()-able system (ode_jacobian.hpp).
+// has one, else by forward-mode AD on a rebind_from()-able system (ode_jacobian.hpp).
 // The time derivative df/dt is a finite difference, because the System stores
 // time as a plain double; a system declaring ode_autonomous() is not asked for
 // it. Both are formed once per (t_n, y_n) and kept across a retry of the same
@@ -40,7 +40,7 @@ public:
   using state_type = std::vector<value_type>;
 
   // True when a Jacobian can be had: the system's own hook, or the exact-AD
-  // route for a rebind()-able system on the passive double solver. False for
+  // route for a rebind_from()-able system on the passive double solver. False for
   // nested AD types until that path lands.
   static constexpr bool supported = Jacobian<System>::supported;
 
@@ -189,8 +189,7 @@ public:
   static const bool can_use_dydt_in = true;
   // dydt_out is f(t_n + h, y_{n+1}), evaluated explicitly above at the new
   // point, which is exactly the next step's f(t_n, y_n): the solver may carry it
-  // across as dydt_in. Until #62 this was declared false and the same vector was
-  // recomputed at the start of every step.
+  // across as dydt_in.
   static const bool first_same_as_last = true;
 
 private:

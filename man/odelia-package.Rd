@@ -8,5 +8,4 @@
 \section{Package Content}{\packageIndices{odelia}}
 \author{\packageAuthor{odelia}}
 \section{Maintainer}{\packageMaintainer{odelia}}
-\references{http://www.boost.org/}
 \keyword{ package }

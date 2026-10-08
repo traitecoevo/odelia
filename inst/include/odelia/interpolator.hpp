@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <limits>
+#include <type_traits>
 #include <odelia/spline.hpp>
 #include <odelia/ode_util.hpp>
 
@@ -58,18 +59,16 @@ public:
     // ⚠️ Do NOT "tidy" this into `not (u >= min() and u <= max())`. Every
     // comparison against NaN is false, so as written a non-finite `u` falls
     // *through* to the spline and comes back non-finite -- which callers rely on
-    // (traitecoevo/plant#576 documents a `profit_psi_stem_TF(NA, .) -> NA`
-    // contract built on it). Negating an in-range test turns that into a throw:
+    // to carry an NA input through as NA. Negating an in-range test turns that
+    // into a throw:
     // it reads as a tightening and is a behaviour change.
     if (not extrapolate and (u < min() or u > max()))
     {
       const bool below = u < min();
-      // The point, how far out it fell, and the domain. Reporting none of the
-      // three used to make an out-of-domain failure a bisect rather than a read:
-      // localising plant#576 meant instrumenting four call sites by hand to
-      // discover which spline was being asked and at what value, and the answer
-      // (the LOWER end, not past the far end as everyone assumed) inverted the
-      // fix. The caller's own identity is the one thing this layer cannot know --
+      // The point, how far out it fell, and the domain, so an out-of-domain
+      // failure is read rather than bisected: without them, which end was crossed
+      // and by how much is found only by instrumenting the callers. The caller's
+      // own identity is the one thing this layer cannot know --
       // consumers that build several splines should catch and say which.
       util::stop(std::string("Extrapolation disabled and evaluation point "
                              "outside of interpolated domain: u = ") +
@@ -84,9 +83,18 @@ public:
 
   // eval() without its checks: no domain refusal and no initialisation check, so
   // reading an empty interpolator is undefined. For hot loops whose caller has
-  // already bounded u, as plant's light field does per quadrature point.
-  S operator()(double u) const {
-    return base::eval_unchecked(u);
+  // already bounded u.
+  //
+  // Any scalar, not double only: a caller reading at an ACTIVE position needs the
+  // query's own derivative to reach the value, and the backend's eval carries it.
+  // A plain number takes the unchecked read.
+  template <typename U>
+  S operator()(const U& u) const {
+    if constexpr (std::is_arithmetic_v<U>) {
+      return base::eval_unchecked(static_cast<double>(u));
+    } else {
+      return base::eval(u);
+    }
   }
 
   // Analytic first derivative dy/du at u (exact derivative of the interpolating
@@ -156,8 +164,7 @@ private:
   bool extrapolate = true;
 };
 
-// Default interpolator (knot values in double): the production type used by
-// the drivers, plant's ResourceSpline, the leaf model, etc.
+// Default interpolator (knot values in double), the type the drivers use.
 using Interpolator = hermite_interpolator<double>;
 
 }

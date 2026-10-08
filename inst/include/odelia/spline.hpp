@@ -45,8 +45,8 @@ namespace interpolator {
 // simply has no third channel to supply.
 //
 // ⚠️ IT IS NOT A SETTING TO BE COLLAPSED, and the reason is the tape rather than the
-// clock. Reading every span as a quintic costs 19% of the read time, which is
-// arguable -- but a cubic's top two coefficients would then be ACTIVE zeros holding
+// clock. Reading every span as a quintic costs read time, which is arguable --
+// but a cubic's top two coefficients would then be ACTIVE zeros holding
 // tape slots, so each read would record two operations whose adjoints are
 // structurally zero. That doubles nothing and adds half again to the sparsest,
 // hottest recorded read in the model.
@@ -351,10 +351,9 @@ private:
     // already, so u is strictly inside.
     //
     // ⚠️ Do not replace this with std::upper_bound, and do not cap the steps with a
-    // binary-search fallback. Both were measured on plant's adaptive light field,
-    // whose queries arrive in height order: a whole-grid search made FF16 17%
-    // slower, and a 3-step cap before a search made it 50% slower. A synthetic
-    // benchmark with random queries favours the search and is the wrong test.
+    // binary-search fallback. Queries typically arrive in order, so the walk from
+    // the guess is short and either replacement is slower; a synthetic benchmark
+    // with random queries favours the search and is the wrong test.
     std::size_t k = static_cast<std::size_t>((u - x.front()) * inv_mean_h);
     if (k > ns - 1) k = ns - 1;
     while (k > 0 && x[k] > u) --k;
@@ -476,8 +475,8 @@ inline std::vector<S> natural_slopes(const std::vector<double>& x,
 //
 // ⚠️ THE REGION IS NOT THE CIRCLE alpha^2 + beta^2 <= 9. That circle sits inside
 // it, so testing against it fires on spans that were already monotone and flattens
-// them: measured on a sine at 100 knots, the circle reads 5.3e-04 against 1.6e-05
-// for the region below. Both keep an intermittent series inside its own values.
+// them, costing accuracy on smooth data. Both keep an intermittent series inside
+// its own values.
 template <class S>
 inline std::vector<S> monotone_slopes(const std::vector<double>& x,
                                       const std::vector<S>& y) {

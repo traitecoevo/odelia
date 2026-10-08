@@ -1,15 +1,16 @@
 # odelia: ODE solver with automatic differentiation, in C++ header files
 
 <!-- badges: start -->
-[![R-CMD-check](https://github.com/traitecoevo/odelia/workflows/R-CMD-check/badge.svg)](https://github.com/traitecoevo/odelia/master)
+[![R-CMD-check](https://github.com/traitecoevo/odelia/workflows/R-CMD-check/badge.svg)](https://github.com/traitecoevo/odelia/actions)
 <!-- badges: end -->
 
-`odelia` is an ODE solver implemented in C++ header files, using an adaptive-step
-Runge-Kutta 4-5 method, with an interface to R via Rcpp. The solver runs entirely
-in compiled code, so it is fast, and ODE systems can be templated on their scalar
-type to support **automatic differentiation (AD)** — letting you compute exact
-gradients of a solution with respect to its parameters for use in optimisation and
-calibration.
+`odelia` is an ODE solver implemented in C++ header files, with an interface to R
+via Rcpp. Three adaptive steppers (Cash-Karp RK4(5), Dormand-Prince 5(4), and
+RODAS4(3) for stiff systems) run entirely in compiled code, so it is fast. ODE
+systems are templated on their scalar type, so a run can be recorded and
+differentiated in **reverse mode**: one sweep over the recorded run gives the
+exact derivative of a solution with respect to every parameter and initial
+condition at once, for optimisation and calibration.
 
 The core solver was first developed by Rich FitzJohn as part of the
 [plant package](https://github.com/traitecoevo/plant/). This package spins that
@@ -17,14 +18,19 @@ code out so it can be used more widely.
 
 ## Features
 
-- Adaptive-step **RK4-5** integrator running entirely in C++ (~30-90x faster than
-  the equivalent solved via `deSolve`; see the Lorenz example).
-- **Automatic differentiation** of ODE solutions w.r.t. parameters and initial
-  conditions, via the vendored [XAD](https://github.com/auto-differentiation/xad)
-  library — enabling gradient-based parameter fitting.
-- **External drivers**: time-varying forcing variables, smoothly interpolated with
-  cubic splines and queried by the system at each step.
-- Header-only C++ core that other Rcpp packages can link against.
+- Three adaptive steppers running entirely in C++: explicit Cash-Karp RK4(5),
+  Dormand-Prince 5(4) with dense output, and the implicit RODAS4(3) for stiff
+  systems. A compiled system solves about a hundred times faster than the same
+  right-hand side written in R (Lorenz: 1 ms against 25-60 ms under `deSolve`).
+- **Reverse-mode automatic differentiation** of a recorded run, via the vendored
+  [XAD](https://github.com/auto-differentiation/xad) library: one sweep, every
+  parameter and initial condition. Forward mode supplies the implicit stepper's
+  Jacobian. See the article
+  [Reverse mode](https://traitecoevo.github.io/odelia/articles/reverse-mode.html).
+- **External drivers**: time-varying forcing variables, interpolated with a cubic
+  Hermite spline and queried by the system at each step.
+- A C++ core (header-only but for the XAD tape runtime) that other packages link
+  against, with no R needed to compile or test it.
 - Friendly **R6** wrappers around the C++ objects.
 - A right-hand side **written in R** can be solved by the same steppers, through
   `ode_solve()` (shaped like `deSolve::ode()`) or the step-at-a-time `OdeSolver`,
@@ -90,28 +96,67 @@ And the worked examples:
   — a leaf-thermal model showing how to define your own ODE system in C++ and
   drive it with time-varying forcing
   ([source](vignettes/articles/leaf-thermal.Rmd)).
-- [Lorenz system](examples/lorenz/readme.qmd) — also includes a speed comparison
-  against `deSolve`.
+- [Reverse mode: one solve, every parameter](https://traitecoevo.github.io/odelia/articles/reverse-mode.html)
+  — the gradient machinery from C++: what a run records, how the sweep walks it,
+  what a System must provide ([source](vignettes/articles/reverse-mode.Rmd)).
+
+## From C++
+
+A System is a class templated on its scalar type that holds parameters and
+state and knows its rates. The solver drives it:
+
+```cpp
+// [[Rcpp::plugins(cpp20)]]   (or CXX_STD = CXX20 in a package's Makevars)
+#include <odelia/ode_solver.hpp>
+#include <examples/lorenz_system.hpp>   // the shipped example System
+
+LorenzSystem<double> system(10.0, 28.0, 8.0 / 3.0);
+odelia::ode::Solver<LorenzSystem<double>> s(system, odelia::ode::OdeControl());
+s.advance_adaptive({0.0, 10.0});
+std::vector<double> y = s.state();
+```
+
+A gradient of that run is three more lines: keep the record, seed the output
+wanted, and sweep.
+
+```cpp
+s.set_keep_states(true);                       // before the run
+s.advance_adaptive({0.0, 10.0});
+auto lambda = odelia::ode::adjoint_rows::one_row({1.0, 0.0, 0.0});   // d x(10)
+odelia::ode::adjoint_rows dp(1, 3);            // one row per seed, zeroed
+s.solve_adjoint(lambda, dp);                   // dp[0][j] = d x(10) / d parameter j
+```
+
+A package that uses the headers adds `odelia` to `LinkingTo` and `Imports`,
+compiles as C++20 with `-DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE`, and on
+Windows links against odelia's DLL; [ARCHITECTURE.md](ARCHITECTURE.md) has the
+details and a map of the headers. `inst/include/examples/lorenz_system.hpp` is
+the template for a System of your own, with its members marked by which
+contract they serve; the article
+[Building your own model](https://traitecoevo.github.io/odelia/articles/leaf-thermal.html)
+walks through one with external drivers.
 
 ## Parameter fitting with automatic differentiation
 
-Because the solver can be templated on an AD scalar type, you can recover exact
-gradients of a loss (the mismatch between the solution and a set of target
-observations) with respect to the system parameters, and hand them to a
-gradient-based optimiser such as `optim()`:
+The shipped Lorenz and leaf-thermal runners expose a `$fit()` method that
+returns the least-squares loss against a target trajectory and its exact
+gradient with respect to the parameters (and initial conditions), by one
+reverse sweep over a replay of the reference run. Hand it to a gradient-based
+optimiser such as `optim()`:
 
 ```r
-# An AD-enabled runner exposes a $fit() method returning loss and gradient
-ad_runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr, active = TRUE)
-ad_runner$set_target(times, target_vals, obs_index)
+fit_runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
+fit_runner$set_target(times, target_vals, obs_index)
 
-res <- ad_runner$fit(params = c(sigma = 12, R = 30, b = 3))
+res <- fit_runner$fit(params = c(sigma = 12, R = 30, b = 3))
 res$loss      # scalar mismatch with the target trajectory
 res$gradient  # exact gradient w.r.t. each parameter
 ```
 
 A complete optimisation workflow (recovering known Lorenz parameters) is walked
-through in `vignette("parameter-fitting")`.
+through in `vignette("parameter-fitting")`. A runner for your own System gets
+`$fit()` by instantiating `Solver_fit_impl` from `solver_interface.hpp`, as the
+leaf-thermal example does.
 
 ## Vocabulary
 
@@ -120,15 +165,31 @@ through in `vignette("parameter-fitting")`.
 - **System** — your ODE model. A C++ class that holds parameters and state and
   knows how to compute its rates (right-hand side) `dy/dt`. Templated on its scalar
   type so it works with both `double` and AD types.
-- **Stepper** — the numerical integration scheme (adaptive RK4-5) that takes one
-  step of the system, estimating the error to choose the next step size.
-- **Solver / runner** — drives the stepper forward over a requested set of times,
-  applying step-size control and collecting the solution history.
+- **Stepper** — the numerical integration scheme (Cash-Karp RK4(5), Dormand-Prince
+  5(4) or RODAS4(3)) that takes one step of the system, estimating the error to
+  choose the next step size.
+- **Solver** — `Solver<System>` in C++ drives the stepper forward over a requested
+  set of times, applying step-size control, and sweeps a recorded run backward
+  for its gradient. In R, `Lorenz_Solver` wraps that for the shipped system and
+  `OdeSolver` steps a right-hand side written in R.
 - **Drivers** — external, time-varying forcing variables (e.g. air temperature)
   that the system queries during integration. Supplied as time series and
-  interpolated with cubic splines.
+  interpolated with a cubic Hermite spline.
 - **Control** (`OdeControl`) — the solver's tuning knobs: absolute and relative
-  tolerances, state/derivative scaling, and minimum/maximum/initial step sizes.
+  tolerances, state/derivative scaling, minimum/maximum/initial step sizes, and
+  the step-size rule.
+- **Recording** — what a run keeps when asked (`set_keep_states`): one row per
+  accepted step with its time, step size, state, and whatever the step solved
+  for inside a stage. A sweep reads it; a replay reproduces the run from it.
+- **Sweep** — the backward pass over a recording (`solve_adjoint`). It is seeded
+  with the derivative wanted of the final state, one **seed** per output, and
+  returns one **row** of derivatives per seed against the parameters and the
+  initial state; `adjoint_rows` is the batch.
+- **Insertion** — a scheduled growth of the state vector mid-run. The sweep
+  transposes the System's own widening map across it.
+- **Supplied derivative** — a value put on the tape with rows obtained by other
+  means (`record_with_derivatives`, `implicit_value`), for a quantity a submodel
+  solved for by iteration.
 
 ## License
 
@@ -150,34 +211,33 @@ you agree to the terms of the [Contributor License Agreement](CLA.md).
 
 An ODE system in odelia consists of:
 
-- **A system header** (`inst/include/odelia/examples/*.hpp`) — C++ class defining the ODE. Must implement `ode_size()`, `set_ode_state()`, `ode_state()`, and `ode_rates()`. Template on scalar type for AD support.
+- **A system header** (`inst/include/examples/lorenz_system.hpp`, `inst/examples/leaf_thermal/src/leaf_thermal_system.hpp`) — a C++ class templated on its scalar type. To be solved it implements `ode_size()`, `set_ode_state()`, `ode_state()` and `ode_rates()`; to be swept it adds `rebind_from<U>()`, `ad_parameters()`, `for_each_active(f)` and `set_recorded_state(y, time)` (the `Sweepable` concept in `ode_interface.hpp`).
 
-- **An Rcpp interface** (`src/*_interface.cpp`) — `[[Rcpp::export]]` functions exposing the system to R.
+- **An Rcpp interface** (`src/*_interface.cpp`, `inst/examples/leaf_thermal/src/*_interface.cpp`) — `[[Rcpp::export]]` functions exposing the system to R, built on the `Solver_*_impl` templates in `solver_interface.hpp`.
 
 - **An R wrapper** (`R/*-interface.R`, optional) — R6 classes providing a friendlier API around the external pointers.
 
-- **A demo script** (`examples/*/demo.R`) — Runnable demonstration.
-### Testing variants
+- **A worked example** — the article for the leaf-thermal model, built by pkgdown.
 
-Use the Makefile targets below depending on the level of test coverage you want.
+### Testing
 
 ```bash
 make test
 ```
 
-Runs package tests after local compile. Fast default for day-to-day work.
+Installs the package with its tests and runs the full suite against the installed copy. The AD and DLL-lifecycle tests need an installed package.
 
 ```bash
 make test-local
 ```
 
-Runs `testthat::test_local()` from the source tree.
+The fast development loop: `testthat::test_local()` via `load_all()`, skipping those tests.
 
 ```bash
-make test-installed
+make test-cpp
 ```
 
-Installs with tests and runs `testthat::test_package()` against the installed package copy.
+Builds and runs the solver core as plain C++ with no R on the include path (`tests/standalone/`), and compiles every core header on its own. Anything compiled against the headers outside the package's own `src/` needs C++20 and `-DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE`, matching `src/Makevars`.
 
 ## Plant family
 

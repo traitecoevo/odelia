@@ -1,2 +1,7 @@
 PKG_CXXFLAGS = -I../inst/include
-CXX_STD = CXX17
+CXX_STD = CXX20
+
+## Must match plant/src/Makevars exactly -- see the note there. XAD's active tape
+## is a __thread variable defined in this package and read from plant, and a
+## storage-class mismatch does not change the mangled name.
+PKG_CPPFLAGS = -DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE

@@ -5,7 +5,7 @@
 // Jacobian J = d(dydt)/dy for the implicit (Rosenbrock) stepper, from one of two
 // sources, in order of preference:
 //
-//   1. The System's own hook (#62),
+//   1. The System's own hook,
 //        void ode_jacobian(const state_type& y, double t,
 //                          const state_type& dydt, state_type& J);
 //      written row-major, J[row * n + col] = d f_row / d y_col. Whatever the
@@ -14,17 +14,18 @@
 //      f(t, y), already in hand at the start of a step, so a finite-difference
 //      implementation costs n evaluations rather than n + 1.
 //
-//   2. Forward-mode (tangent) automatic differentiation on an active "twin" of
-//      the System whose scalar type is FReal<value_type>. Forward mode is used
+//   2. Forward-mode (tangent) automatic differentiation on the System rebound
+//      to the tangent scalar FReal<value_type>. Forward mode is used
 //      (not adjoint) because: for a square N->N Jacobian both cost N sweeps, but
 //      forward mode needs no tape (no recording, no allocation, no interaction
 //      with the single thread-local active-tape pointer). It therefore composes
 //      cleanly as FReal<AReal<double>> when the solver itself is being
 //      differentiated by an outer adjoint fit -- the tangent layer never contends
-//      with the outer tape. Obtaining the twin requires the System to expose
-//        template <class U> System<U> rebind() const;
+//      with the outer tape. Rebinding requires the System to expose
+//        template <class U> Self<U> rebind_from() const;
 //      which returns a copy of itself with the scalar type swapped to U
-//      (parameters carried over via xad::value + U(...)).
+//      (parameters carried over via xad::value + U(...)) -- the same double->AD
+//      rebind the gradient driver uses.
 //
 // A system declaring neither cannot use the implicit stepper: `supported` says so
 // at compile time and the stepper raises a clear error. When both exist the hook
@@ -32,13 +33,14 @@
 //
 // The AD route also yields the parameter Jacobian d(dydt)/dtheta, used by the
 // implicit-function-theorem steady-state sensitivity in ode_steady_state.hpp:
-// the same forward sweep on the same twin, differing only in where the unit
-// tangent seed is placed. It needs the twin (a hook knows nothing about
-// parameters) and the System's `ad_parameters()` hook naming them, so it is
-// gated on `params_supported` below.
+// the same forward sweep on the same rebound System, differing only in where
+// the unit tangent seed is placed. It needs the rebound System (a hook knows
+// nothing about parameters) and the System's `ad_parameters()` hook naming
+// them, so it is gated on `params_supported` below.
 
 #include <algorithm>
 #include <cmath>
+#include <concepts>
 #include <cstddef>
 #include <type_traits>
 #include <utility>
@@ -49,19 +51,8 @@
 namespace odelia {
 namespace ode {
 
-// Detect `template<class U> ... rebind()` on a System, probed at the System's own
-// scalar type (every system can at least rebind to itself).
-template <typename S, typename = void>
-struct has_rebind : std::false_type {};
-
-template <typename S>
-struct has_rebind<
-    S, std::void_t<decltype(std::declval<const S>()
-                                .template rebind<typename S::value_type>())>>
-    : std::true_type {};
-
-// Detect the `ode_jacobian(y, t, dydt, J)` hook (#62). Same shape of probe as
-// has_state_check in ode_interface.hpp: a system that omits the member is
+// Detect the `ode_jacobian(y, t, dydt, J)` hook. Same shape of probe as
+// has_autonomous in ode_interface.hpp: a system that omits the member is
 // unaffected, and nothing is called on its behalf.
 template <typename S>
 class has_jacobian {
@@ -77,15 +68,15 @@ public:
 // system's differentiable parameters, in a fixed order, used to seed parameter
 // tangents for the forward-mode parameter Jacobian df/dtheta. The same hook,
 // with the same shape, names the parameters a reverse-mode sweep accumulates
-// adjoints for (#59), so a System declares them once. A system that omits it
-// simply cannot have its parameter sensitivity taken (gated below).
+// adjoints for (adjoint.hpp), so a System declares them once. A system that
+// omits it simply cannot have its parameter sensitivity taken (gated below).
 //
 // Contract: the rates must read each named parameter *live*. The seed is placed
-// on the parameter after the twin is built, so a quantity the constructor
-// derived from it (a product, a rate scaled by it, a hyperparameter) carries no
-// tangent, and that parameter's column of df/dtheta comes back as zero with no
-// error. A System that caches such quantities must recompute them in
-// compute_rates(), or point ad_parameters() at the cached quantities instead
+// on the parameter after the rebound System is built, so a quantity the
+// constructor derived from it (a product, a rate scaled by it, a hyperparameter)
+// carries no tangent, and that parameter's column of df/dtheta comes back as
+// zero with no error. A System that caches such quantities must recompute them
+// in compute_rates(), or point ad_parameters() at the cached quantities instead
 // (and own the chain rule). SteadyState::check_parameters() detects a breach.
 template <typename S, typename = void>
 struct has_ad_parameters : std::false_type {};
@@ -95,37 +86,41 @@ struct has_ad_parameters<
     S, std::void_t<decltype(std::declval<S&>().ad_parameters())>>
     : std::true_type {};
 
-// The System type rebound to scalar U, i.e. decltype(system.rebind<U>()). When
-// the System has no rebind() the type is not evaluated (a harmless placeholder
-// is used instead), so that Jacobian<System> can still be *class*-instantiated
-// for systems that will never use the AD route -- the actual use is gated on
-// `ad_supported` below.
-template <typename S, typename U, bool = has_rebind<S>::value>
-struct rebound_system {
-  using type = decltype(std::declval<const S>().template rebind<U>());
+// The tangent scalar a Jacobian differentiates on, formed lazily so that naming
+// it at an adjoint scalar does not instantiate tangent_over's refusal: there it
+// is the scalar itself, which Jacobian::ad_supported then rules out.
+template <typename T, bool = xad::ExprTraits<T>::isReverse>
+struct jacobian_tangent {
+  using type = tangent_scalar<T>;
 };
-template <typename S, typename U>
-struct rebound_system<S, U, false> {
-  using type = S;
+template <typename T>
+struct jacobian_tangent<T, true> {
+  using type = T;
 };
 
-// Jacobian helper. Owns the active twin's scratch buffers so that repeated
+// Jacobian helper. Owns the rebound System's scratch buffers so that repeated
 // evaluations (once per accepted step) reuse storage.
 template <typename System>
 class Jacobian {
 public:
   using value_type = typename System::value_type;
+  // Whether the solver's scalar already carries an adjoint. A tangent is never
+  // put above one (tangent.hpp refuses it at compile time), so the AD route is
+  // closed to such a System and the alias below must not name that scalar: a
+  // class-scope alias is formed when the class is, before any `if constexpr`
+  // can decline it.
+  static constexpr bool value_is_adjoint = xad::ExprTraits<value_type>::isReverse;
   // Tangent scalar: one forward-mode layer on top of the solver's scalar type.
-  using tangent_type = typename xad::fwd<value_type>::active_type;
-  using twin_type = typename rebound_system<System, tangent_type>::type;
+  // At an adjoint scalar it is a placeholder the gate below never lets run.
+  using tangent_type = typename jacobian_tangent<value_type>::type;
+  using tangent_system_type = typename rebound_system<System, tangent_type>::type;
 
   // Whether the forward-AD route is instantiable and usable for this System.
-  // Requires (a) a rebind() hook and (b) that the tangent twin can be built from
-  // the current scalar type. (b) is currently false when value_type is itself an
-  // active AD type (nested tangent-over-adjoint, e.g. FReal<AReal<double>>, is
-  // not yet wired up -- see issue #36).
+  // Requires (a) a rebind_from() hook, (b) a scalar that does not already carry
+  // an adjoint (see value_is_adjoint), and (c) that the tangent System can be
+  // built from the current scalar type.
   static constexpr bool ad_supported =
-      has_rebind<System>::value &&
+      !value_is_adjoint && Rebindable<System, tangent_type> &&
       std::is_constructible<tangent_type, value_type>::value;
 
   // Whether a Jacobian can be had at all: the system's own hook, or the AD
@@ -134,11 +129,11 @@ public:
   static constexpr bool supported = has_jacobian<System>::value || ad_supported;
 
   // Whether the parameter Jacobian df/dtheta is additionally available: needs
-  // the AD route (a twin to differentiate on; a hook says nothing about
-  // parameters) plus an `ad_parameters()` hook on that twin exposing pointers
-  // to the differentiable parameters to seed.
+  // the AD route (a rebound System to differentiate on; a hook says nothing
+  // about parameters) plus an `ad_parameters()` hook on that System exposing
+  // pointers to the differentiable parameters to seed.
   static constexpr bool params_supported =
-      ad_supported && has_ad_parameters<twin_type>::value;
+      ad_supported && has_ad_parameters<tangent_system_type>::value;
 
   void resize(size_t size_) {
     size = size_;
@@ -160,10 +155,11 @@ public:
       J.assign(size * size, value_type(0.0));
       system.ode_jacobian(y, t, dydt, J);
     } else {
-      // Refresh the twin from the live system each call so current parameters
-      // are reflected (cheap: a small value copy). The twin's scalar is the
-      // tangent type; its parameters carry zero derivative.
-      twin_type twin = system.template rebind<tangent_type>();
+      // Rebuild from the live system each call so current parameters are
+      // reflected (cheap: a small value copy). Its scalar is the tangent type;
+      // its parameters carry zero derivative.
+      tangent_system_type tangent_system =
+          system.template rebind_from<tangent_type>();
 
       for (size_t j = 0; j < size; ++j) {
         v[j] = tangent_type(y[j]);
@@ -171,12 +167,12 @@ public:
 
       J.assign(size * size, value_type(0.0));
       for (size_t col = 0; col < size; ++col) {
-        xad::derivative(v[col]) = 1.0;
-        ode::derivs(twin, v, dydt_ad, t);
+        seed_direction(v[col], 1.0);
+        ode::derivs(tangent_system, v, dydt_ad, t);
         for (size_t row = 0; row < size; ++row) {
-          J[row * size + col] = xad::derivative(dydt_ad[row]);
+          J[row * size + col] = derivative_along(dydt_ad[row]);
         }
-        xad::derivative(v[col]) = 0.0;
+        seed_direction(v[col], 0.0);
       }
     }
   }
@@ -187,41 +183,44 @@ public:
   // System exposes via ad_parameters().
   //
   // Same forward-mode sweep as compute()'s AD route, but the tangent seed is
-  // placed on a *parameter* of the twin rather than a state component: state
-  // carries zero derivative, one parameter carries unit derivative per column,
-  // so the output tangent is exactly that parameter's column of df/dtheta. This
-  // reuses the twin and buffers and keeps the sweep tape-free: it records
-  // nothing, so it can run beside an outer adjoint recording without touching
-  // it. The rows it yields are plain numbers, which is the form a supplied
-  // derivative record takes (#59, implicit_node.hpp) if the solve that uses
-  // them is later to sit on an outer tape -- never a tangent nested above an
-  // adjoint scalar.
+  // placed on a *parameter* of the rebound System rather than a state
+  // component: state carries zero derivative, one parameter carries unit
+  // derivative per column, so the output tangent is exactly that parameter's
+  // column of df/dtheta. This reuses the rebound System and buffers and keeps
+  // the sweep tape-free: it records nothing, so it can run beside an outer
+  // adjoint recording without touching it. The rows it yields are plain
+  // numbers, which is the form a supplied derivative record takes
+  // (implicit_node.hpp) if the solve that uses them is later to sit on an outer
+  // tape -- never a tangent nested above an adjoint scalar, which tangent.hpp
+  // refuses.
   void compute_params(const System& system, const std::vector<value_type>& y,
                       double t, std::vector<value_type>& Jp,
                       size_t& n_params) {
     static_assert(params_supported,
-                  "compute_params requires rebind() and an ad_parameters() "
-                  "hook on the System twin");
-    twin_type twin = system.template rebind<tangent_type>();
+                  "compute_params requires rebind_from() and an ad_parameters() "
+                  "hook on the rebound System");
+    tangent_system_type tangent_system =
+        system.template rebind_from<tangent_type>();
 
     for (size_t j = 0; j < size; ++j) {
       v[j] = tangent_type(y[j]);
     }
 
-    // Pointers into the twin's own parameter storage; valid for the lifetime of
-    // `twin`. Seeding a tangent here propagates through compute_rates(), and
-    // only through it: see the contract at has_ad_parameters.
-    std::vector<tangent_type*> params = twin.ad_parameters();
+    // Pointers into the rebound System's own parameter storage; valid for the
+    // lifetime of `tangent_system`. Seeding a tangent here propagates through
+    // compute_rates(), and only through it: see the contract at
+    // has_ad_parameters.
+    std::vector<tangent_type*> params = tangent_system.ad_parameters();
     n_params = params.size();
     Jp.assign(size * n_params, value_type(0.0));
 
     for (size_t col = 0; col < n_params; ++col) {
-      xad::derivative(*params[col]) = 1.0;
-      ode::derivs(twin, v, dydt_ad, t);
+      seed_direction(*params[col], 1.0);
+      ode::derivs(tangent_system, v, dydt_ad, t);
       for (size_t row = 0; row < size; ++row) {
-        Jp[row * n_params + col] = xad::derivative(dydt_ad[row]);
+        Jp[row * n_params + col] = derivative_along(dydt_ad[row]);
       }
-      xad::derivative(*params[col]) = 0.0;
+      seed_direction(*params[col], 0.0);
     }
   }
 
@@ -232,7 +231,7 @@ private:
 };
 
 // Forward-difference Jacobian of the right-hand side, for a system that has no
-// rebind() to differentiate through: the one-line body of an ode_jacobian() hook
+// rebind_from() to differentiate through: the one-line body of an ode_jacobian() hook
 // on such a system. One evaluation per column, at y + h_j e_j with
 // h_j = rel_step * max(|y_j|, y_floor), against the `dydt` already known at y,
 // written row-major like Jacobian::compute(). The system is left on the last
@@ -290,7 +289,7 @@ void fd_jacobian(System& system,
 // Finite-difference partial derivative of the RHS with respect to time,
 // d f / d t at (y, t), against `dydt` = f(t, y) already in hand. The System
 // stores time as a plain double (not the scalar type), so this term cannot be
-// seeded through an AD twin; a one-sided difference is used. It is (near) zero
+// seeded through the rebound System; a one-sided difference is used. It is (near) zero
 // for autonomous systems, and a system that declares ode_autonomous() is not
 // asked for it at all (see ode_step_rodas.hpp). Uses value_type arithmetic
 // throughout, so it tapes correctly under an outer adjoint fit.

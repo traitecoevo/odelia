@@ -33,6 +33,7 @@
 #include <XAD/UnaryOperators.hpp>
 
 #include <iostream>
+#include <type_traits>
 #include <numeric>
 #include <sstream>
 
@@ -530,6 +531,25 @@ void Tape<T, N>::computeAdjointsTo(position_type pos)
         computeAdjointsToImpl(pos, start);
 }
 
+// A zero adjoint contributes nothing to the statement below it, so the sweep
+// skips walking that statement's operations. The test has to see every layer of
+// the scalar: with a tangent inside the adjoint, a value of zero can still carry
+// a derivative, and skipping on the value alone drops every second-order cross
+// term the sweep exists to produce -- silently, and only where a partial happens
+// to be zero. At a plain double this is the comparison it replaces.
+template <class D>
+inline bool adjoint_is_zero(D& a)
+{
+    if constexpr (std::is_floating_point<D>::value)
+    {
+        return a == D();
+    }
+    else
+    {
+        return adjoint_is_zero(a.value()) && adjoint_is_zero(a.derivative());
+    }
+}
+
 template <class T, std::size_t N>
 void Tape<T, N>::computeAdjointsToImpl(position_type pos, position_type start)
 {
@@ -562,7 +582,7 @@ void Tape<T, N>::computeAdjointsToImpl(position_type pos, position_type start)
             auto st = *it;
             auto a = derivatives_[st.second];
             derivatives_[st.second] = derivative_type();
-            if (a != derivative_type())
+            if (!adjoint_is_zero(a))
             {
                 operations_.for_each(it[-1].first, st.first, [&](const T& mul, slot_type slot)
                                      { derivatives_[slot] += mul * a; });
@@ -575,7 +595,7 @@ void Tape<T, N>::computeAdjointsToImpl(position_type pos, position_type start)
             auto st = chunk_it[0][endidx];
             auto a = derivatives_[st.second];
             derivatives_[st.second] = derivative_type();
-            if (a != derivative_type())
+            if (!adjoint_is_zero(a))
             {
                 operations_.for_each(prevendpoint, st.first, [&](const T& mul, slot_type slot)
                                      { derivatives_[slot] += mul * a; });
