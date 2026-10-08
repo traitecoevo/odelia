@@ -12,7 +12,7 @@ R6 wrapper for external forcing data (drivers)
 
 ### Public methods
 
-- [`Drivers$new()`](#method-Drivers-new)
+- [`Drivers$new()`](#method-Drivers-initialize)
 
 - [`Drivers$set_constant()`](#method-Drivers-set_constant)
 
@@ -32,7 +32,7 @@ R6 wrapper for external forcing data (drivers)
 
 ------------------------------------------------------------------------
 
-### Method `new()`
+### `Drivers$new()`
 
 Initialize a \`Drivers\` instance.
 
@@ -42,7 +42,7 @@ Initialize a \`Drivers\` instance.
 
 ------------------------------------------------------------------------
 
-### Method `set_constant()`
+### `Drivers$set_constant()`
 
 Set a constant driver value.
 
@@ -62,7 +62,7 @@ Set a constant driver value.
 
 ------------------------------------------------------------------------
 
-### Method `set_variable()`
+### `Drivers$set_variable()`
 
 Set a variable driver from paired vectors.
 
@@ -86,7 +86,7 @@ Set a variable driver from paired vectors.
 
 ------------------------------------------------------------------------
 
-### Method `set_extrapolate()`
+### `Drivers$set_extrapolate()`
 
 Configure extrapolation behavior for a driver.
 
@@ -106,7 +106,7 @@ Configure extrapolation behavior for a driver.
 
 ------------------------------------------------------------------------
 
-### Method `evaluate()`
+### `Drivers$evaluate()`
 
 Evaluate a driver at one input value.
 
@@ -126,7 +126,7 @@ Evaluate a driver at one input value.
 
 ------------------------------------------------------------------------
 
-### Method `evaluate_range()`
+### `Drivers$evaluate_range()`
 
 Evaluate a driver over a vector of input values.
 
@@ -146,7 +146,7 @@ Evaluate a driver over a vector of input values.
 
 ------------------------------------------------------------------------
 
-### Method `get_names()`
+### `Drivers$get_names()`
 
 Return names of configured drivers.
 
@@ -156,7 +156,7 @@ Return names of configured drivers.
 
 ------------------------------------------------------------------------
 
-### Method `clear()`
+### `Drivers$clear()`
 
 Remove all configured drivers.
 
@@ -166,7 +166,7 @@ Remove all configured drivers.
 
 ------------------------------------------------------------------------
 
-### Method `clone()`
+### `Drivers$clone()`
 
 The objects of this class are cloneable with this method.
 

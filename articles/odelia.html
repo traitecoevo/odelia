@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,6 +36,7 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="../articles/parameter-fitting.html">Parameter fitting with automatic differentiation</a></li>
     <li><a class="dropdown-item" href="../articles/leaf-thermal.html">Building your own model with external drivers</a></li>
+    <li><a class="dropdown-item" href="../articles/reverse-mode.html">Reverse mode: one solve, every parameter</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -84,9 +85,9 @@ pieces:</p>
 and a rule for the rates <code>dy/dt</code>);</li>
 <li>a <strong>control</strong> object (<code>OdeControl</code>) — the
 solver’s tolerances and step sizes;</li>
-<li>a <strong>solver</strong> (or <em>runner</em>) — which drives the
-adaptive RK4-5 stepper forward over the times you request and collects
-the solution history.</li>
+<li>a <strong>solver</strong> (or <em>runner</em>) — which drives a
+stepper forward over the times you request and collects the solution
+history.</li>
 </ul>
 </div>
 <div class="section level2">
@@ -221,7 +222,7 @@ classical rule of Hairer’s codes and <code>deSolve</code>, which rejects
 far fewer attempts; see the package NEWS for 0.6.0).</p>
 <p>To use <code>method = "rodas"</code> with your own C++ system, give
 it either a
-<code>template&lt;class U&gt; System&lt;U&gt; rebind() const</code>
+<code>template&lt;class U&gt; System&lt;U&gt; rebind_from() const</code>
 method (a one-liner that copies the system with its scalar type swapped)
 so its right-hand side can be differentiated for the Jacobian, as the
 Lorenz example does, or an <code>ode_jacobian(y, t, dydt, J)</code>

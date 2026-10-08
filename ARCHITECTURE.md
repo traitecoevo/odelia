@@ -6,6 +6,45 @@
 > it produces *link-time* or *load-time* failures in downstream packages
 > (e.g. plant) that do not show up in odelia’s own checks.
 
+> For **automatic differentiation**, read the article [Reverse mode: one
+> solve, every
+> parameter](https://traitecoevo.github.io/odelia/articles/reverse-mode.html)
+> (`vignettes/articles/reverse-mode.Rmd`): what a run records, how the
+> sweep walks it, what a System must provide, and the order to read the
+> headers in. The contract a System implements is the set of concepts in
+> `inst/include/odelia/ode_interface.hpp`, which the compiler checks.
+> This document is about how the headers fit together and how the `Tape`
+> runtime compiles and links.
+
+## Map of the headers
+
+`inst/include/odelia/`, in dependency order; a header includes only
+those above it.
+
+| Header | Holds |
+|----|----|
+| `ode_util.hpp` | `util::stop` / `util::warning` (R-free), `to_passive`, `DomainError` |
+| `tangent.hpp` | `tangent_scalar<T>`, the forward-mode scalar; refuses a tangent above an adjoint |
+| `value_with_slope.hpp` | `value_with_slope<T>`, a value paired with its slope; no includes |
+| `spline.hpp` → `interpolator.hpp` → `drivers.hpp` | cubic Hermite backend, `hermite_interpolator`, `Drivers` (time-varying forcing) |
+| `ode_control.hpp` | `OdeControl`: tolerances, step bounds, the `gsl` / `hairer` controller |
+| `ode_interface.hpp` | the System concepts (`HasOdeTime`, `Rebindable`, `SolvesForValues`, `ChecksState`, `Sweepable`), `active_scalar<T>`, `instruction`, `step_record`, `visit_active`, `be_at_step`, `apply_insertion` |
+| `adjoint.hpp` | `adjoint_rows`, `active_system`, `vector_jacobian_product`, `state_and_parameter_adjoints`: the transpose of one map |
+| `implicit_node.hpp` | `record_with_derivatives`, `implicit_value`: a value on the tape carrying rows obtained elsewhere; independent of the solver |
+| `ode_linalg.hpp`, `ode_jacobian.hpp` | dense LU and eigenvalues; the Jacobian from a System’s hook or by forward AD |
+| `ode_step_rkck.hpp`, `ode_step_dopri.hpp`, `ode_step_rodas.hpp` | the three steppers; only `rkck` records a run and carries `Step::step_adjoint` |
+| `ode_callback_system.hpp` | `CallbackSystem`, a System over `std::function`s |
+| `ode_solver_internal.hpp` → `ode_solver.hpp` | `SolverInternal` (stepping, the record), `Solver<System>` (`advance_*`, `recording()`, `solve_adjoint`, `advance_recorded`) |
+| `sweep.hpp`, `ode_steady_state.hpp` | range helpers for a consumer driving a sweep itself; Newton to a fixed point with implicit-function-theorem sensitivity |
+| `rcpp_interface_helpers.hpp`, `solver_interface.hpp` | the two headers that need R: `Solver_*_impl` behind the R bindings, including `Solver_fit_impl` |
+
+Everything is C++20 (concepts). A consumer compiles with
+`CXX_STD = CXX20` and the two XAD defines from `src/Makevars`,
+`-DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE`, on every platform: the
+storage class of the active tape does not change the symbol’s name, so a
+translation unit built without them reaches the same tape through the
+other storage class.
+
 ## Why there is compiled code at all
 
 odelia is *almost* header-only — the ODE `Solver`, interpolator, and ODE
@@ -84,7 +123,8 @@ above. The consumer adds a Windows-only `src/Makevars.win`:
 
 ``` make
 CXX_STD = CXX20
-PKG_CPPFLAGS = -isystem../inst/include/
+## The two XAD defines must match odelia's src/Makevars on every platform.
+PKG_CPPFLAGS = -isystem../inst/include/ -DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE
 ## odelia's DLL is at <odelia>/libs/<arch>/odelia.dll. Resolve the base libs dir
 ## in R, then append R's $(R_ARCH) make-variable (e.g. /x64). Do the arch in make
 ## -- putting $r_arch inside the Rscript -e quotes lets the shell expand it away.
@@ -92,10 +132,10 @@ ODELIA_LIBDIR = $(shell "${R_HOME}/bin/Rscript" -e "cat(system.file('libs', pack
 PKG_LIBS = "$(ODELIA_LIBDIR)$(R_ARCH)/odelia.dll"
 ```
 
-(plant uses exactly this; verified green on `windows-latest`
-R-CMD-check.) odelia must therefore keep **exporting** these symbols
-from its DLL — do not add a restrictive `.def` or
-`-Wl,--exclude-all-symbols` to odelia’s build.
+(plant uses this; verified green on `windows-latest` R-CMD-check.)
+odelia must therefore keep **exporting** these symbols from its DLL — do
+not add a restrictive `.def` or `-Wl,--exclude-all-symbols` to odelia’s
+build.
 
 ## A right-hand side handed in at run time
 
@@ -112,8 +152,8 @@ does), and the last call of an accepted step is at the accepted state.
 
 The implicit stepper takes its Jacobian from a System’s own
 `ode_jacobian()` hook when there is one, else by forward-mode AD on a
-`rebind()`-able system (`ode_jacobian.hpp`); `fd_jacobian()` there is
-the one-line finite-difference body for a hook. A system declaring
+`rebind_from()`-able system (`ode_jacobian.hpp`); `fd_jacobian()` there
+is the one-line finite-difference body for a hook. A system declaring
 `ode_autonomous()` is not asked for a `df/dt` term.
 
 `ode_steady_state.hpp` reuses that Jacobian and the dense LU away from
@@ -126,10 +166,10 @@ seed on a parameter instead of a state component; which parameters is
 the System’s `ad_parameters()` hook, a vector of pointers to them in a
 fixed order, which the rates must read live (a quantity cached from a
 parameter at construction carries no tangent and yields a zero column;
-`check_parameters()` detects that through `rebind()`). Newton finds any
-root, attracting or not; `solve_with_warmup()` integrates the transient
-when the root it finds is not attracting. Endpoint-only and tape-free by
-design: the transient is never differentiated,
+`check_parameters()` detects that through `rebind_from()`). Newton finds
+any root, attracting or not; `solve_with_warmup()` integrates the
+transient when the root it finds is not attracting. Endpoint-only and
+tape-free by design: the transient is never differentiated,
 [`solve()`](https://rdrr.io/r/base/solve.html) refuses an active scalar
 type, and a consumer that needs `y*` on its own adjoint tape attaches
 the sensitivity rows as a supplied derivative rather than taping the
@@ -177,6 +217,8 @@ somewhere.
 ## Contract for `LinkingTo: odelia` consumers
 
 - Add `odelia` to `LinkingTo:` **and** `Imports:` in `DESCRIPTION`.
+- Compile as C++20 with `-DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE`
+  in `src/Makevars` (and `Makevars.win`), matching odelia’s own.
 - Add a real NAMESPACE import from odelia
   (e.g. `@importFrom odelia odelia_load_dll`) so odelia’s namespace —
   and its global-load `.onLoad` — runs before your package’s

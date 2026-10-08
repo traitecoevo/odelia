@@ -1,6 +1,6 @@
 # Lorenz Solver R6 Class
 
-R6 wrapper for Lorenz ODE solver with optional AD support
+R6 wrapper for the Lorenz ODE solver.
 
 ## Public fields
 
@@ -8,15 +8,11 @@ R6 wrapper for Lorenz ODE solver with optional AD support
 
   External pointer to the underlying C++ solver object.
 
-- `active`:
-
-  Logical flag indicating whether AD mode is enabled.
-
 ## Methods
 
 ### Public methods
 
-- [`Lorenz_Solver$new()`](#method-Lorenz_Solver-new)
+- [`Lorenz_Solver$new()`](#method-Lorenz_Solver-initialize)
 
 - [`Lorenz_Solver$time()`](#method-Lorenz_Solver-time)
 
@@ -29,6 +25,8 @@ R6 wrapper for Lorenz ODE solver with optional AD support
 - [`Lorenz_Solver$advance_adaptive()`](#method-Lorenz_Solver-advance_adaptive)
 
 - [`Lorenz_Solver$advance_fixed()`](#method-Lorenz_Solver-advance_fixed)
+
+- [`Lorenz_Solver$advance_euler()`](#method-Lorenz_Solver-advance_euler)
 
 - [`Lorenz_Solver$step()`](#method-Lorenz_Solver-step)
 
@@ -50,13 +48,13 @@ R6 wrapper for Lorenz ODE solver with optional AD support
 
 ------------------------------------------------------------------------
 
-### Method `new()`
+### `Lorenz_Solver$new()`
 
 Initialize a solver for a Lorenz system.
 
 #### Usage
 
-    Lorenz_Solver$new(System_xp, control_xp, active = FALSE, method = "rkck")
+    Lorenz_Solver$new(System_xp, control_xp, method = "rkck")
 
 #### Arguments
 
@@ -68,10 +66,6 @@ Initialize a solver for a Lorenz system.
 
   External pointer to the ODE control object.
 
-- `active`:
-
-  Logical flag for AD-enabled solver mode.
-
 - `method`:
 
   Integration method: `"rkck"` (default, explicit Cash-Karp RK 4(5)) or
@@ -79,7 +73,7 @@ Initialize a solver for a Lorenz system.
 
 ------------------------------------------------------------------------
 
-### Method [`time()`](https://rdrr.io/r/stats/time.html)
+### `Lorenz_Solver$time()`
 
 Get current solver time.
 
@@ -89,7 +83,7 @@ Get current solver time.
 
 ------------------------------------------------------------------------
 
-### Method `state()`
+### `Lorenz_Solver$state()`
 
 Get current solver state.
 
@@ -99,7 +93,7 @@ Get current solver state.
 
 ------------------------------------------------------------------------
 
-### Method `set_state()`
+### `Lorenz_Solver$set_state()`
 
 Set current solver state and time.
 
@@ -119,7 +113,7 @@ Set current solver state and time.
 
 ------------------------------------------------------------------------
 
-### Method `times()`
+### `Lorenz_Solver$times()`
 
 Get stored solver times.
 
@@ -129,7 +123,7 @@ Get stored solver times.
 
 ------------------------------------------------------------------------
 
-### Method `advance_adaptive()`
+### `Lorenz_Solver$advance_adaptive()`
 
 Advance solver using adaptive stepping.
 
@@ -145,7 +139,7 @@ Advance solver using adaptive stepping.
 
 ------------------------------------------------------------------------
 
-### Method `advance_fixed()`
+### `Lorenz_Solver$advance_fixed()`
 
 Advance solver using fixed stepping.
 
@@ -161,7 +155,23 @@ Advance solver using fixed stepping.
 
 ------------------------------------------------------------------------
 
-### Method [`step()`](https://rdrr.io/r/stats/step.html)
+### `Lorenz_Solver$advance_euler()`
+
+Advance solver using fixed-step forward Euler.
+
+#### Usage
+
+    Lorenz_Solver$advance_euler(times)
+
+#### Arguments
+
+- `times`:
+
+  Numeric vector of requested output times.
+
+------------------------------------------------------------------------
+
+### `Lorenz_Solver$step()`
 
 Advance solver by one step.
 
@@ -171,7 +181,7 @@ Advance solver by one step.
 
 ------------------------------------------------------------------------
 
-### Method `reset()`
+### `Lorenz_Solver$reset()`
 
 Reset solver to its initial state.
 
@@ -181,7 +191,7 @@ Reset solver to its initial state.
 
 ------------------------------------------------------------------------
 
-### Method `collect()`
+### `Lorenz_Solver$collect()`
 
 Get or set history collection behavior.
 
@@ -197,7 +207,7 @@ Get or set history collection behavior.
 
 ------------------------------------------------------------------------
 
-### Method `history_size()`
+### `Lorenz_Solver$history_size()`
 
 Return number of stored history entries.
 
@@ -207,7 +217,7 @@ Return number of stored history entries.
 
 ------------------------------------------------------------------------
 
-### Method `history_step()`
+### `Lorenz_Solver$history_step()`
 
 Return one history entry by index.
 
@@ -223,7 +233,7 @@ Return one history entry by index.
 
 ------------------------------------------------------------------------
 
-### Method [`history()`](https://rdrr.io/r/utils/savehistory.html)
+### `Lorenz_Solver$history()`
 
 Return history as a tibble.
 
@@ -233,9 +243,9 @@ Return history as a tibble.
 
 ------------------------------------------------------------------------
 
-### Method `set_target()`
+### `Lorenz_Solver$set_target()`
 
-Set calibration targets for fitting.
+Set the calibration target for `$fit()`.
 
 #### Usage
 
@@ -245,21 +255,26 @@ Set calibration targets for fitting.
 
 - `times`:
 
-  Numeric vector of requested output times.
+  Numeric vector: the schedule `$fit()` replays, one entry per step.
+  Normally a reference run's `$times()`, so each fit takes the same
+  steps and the loss is a smooth function of the inputs.
 
 - `target`:
 
-  Numeric matrix of target observations.
+  Numeric matrix of observed states, one row per entry of `obs_indices`
+  and one column per state variable.
 
 - `obs_indices`:
 
-  Integer vector of observed-state indices.
+  Integer indices (1-based) into `times` at which each row of `target`
+  was observed.
 
 ------------------------------------------------------------------------
 
-### Method `fit()`
+### `Lorenz_Solver$fit()`
 
-Fit initial conditions and/or parameters.
+Least-squares loss against the target, and its exact gradient by
+reverse-mode automatic differentiation.
 
 #### Usage
 
@@ -269,15 +284,20 @@ Fit initial conditions and/or parameters.
 
 - `ic`:
 
-  Optional initial condition value(s) for fitting.
+  Initial state to fit from, or `NULL` to keep the system's.
 
 - `params`:
 
-  Optional parameter vector for fitting.
+  Parameters to fit at, or `NULL` to keep the system's.
+
+#### Returns
+
+A list with `loss` (sum of squared differences) and `gradient`:
+d(loss)/d(params), then d(loss)/d(ic), for whichever were given.
 
 ------------------------------------------------------------------------
 
-### Method `clone()`
+### `Lorenz_Solver$clone()`
 
 The objects of this class are cloneable with this method.
 

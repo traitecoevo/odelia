@@ -21,8 +21,8 @@ A simulation in `odelia` is assembled from a few pieces:
   the rates `dy/dt`);
 - a **control** object (`OdeControl`) — the solver’s tolerances and step
   sizes;
-- a **solver** (or *runner*) — which drives the adaptive RK4-5 stepper
-  forward over the times you request and collects the solution history.
+- a **solver** (or *runner*) — which drives a stepper forward over the
+  times you request and collects the solution history.
 
 ## Define the system
 
@@ -162,13 +162,13 @@ and `deSolve`, which rejects far fewer attempts; see the package NEWS
 for 0.6.0).
 
 To use `method = "rodas"` with your own C++ system, give it either a
-`template<class U> System<U> rebind() const` method (a one-liner that
-copies the system with its scalar type swapped) so its right-hand side
-can be differentiated for the Jacobian, as the Lorenz example does, or
-an `ode_jacobian(y, t, dydt, J)` method that fills the Jacobian itself –
-the header `ode_jacobian.hpp` has `fd_jacobian()` for a one-line
-finite-difference version. The implicit stepper currently runs on the
-passive (non-AD) solver; differentiating a fit *through* RODAS is
+`template<class U> System<U> rebind_from() const` method (a one-liner
+that copies the system with its scalar type swapped) so its right-hand
+side can be differentiated for the Jacobian, as the Lorenz example does,
+or an `ode_jacobian(y, t, dydt, J)` method that fills the Jacobian
+itself – the header `ode_jacobian.hpp` has `fd_jacobian()` for a
+one-line finite-difference version. The implicit stepper currently runs
+on the passive (non-AD) solver; differentiating a fit *through* RODAS is
 planned (odelia issue \#36).
 
 ## Solving a system written in R

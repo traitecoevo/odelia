@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -21,6 +21,7 @@
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="articles/parameter-fitting.html">Parameter fitting with automatic differentiation</a></li>
     <li><a class="dropdown-item" href="articles/leaf-thermal.html">Building your own model with external drivers</a></li>
+    <li><a class="dropdown-item" href="articles/reverse-mode.html">Reverse mode: one solve, every parameter</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
@@ -40,20 +41,23 @@
 
 <div id="odelia--developer-guide-for-agents" class="section level1">
 
-<p><code>odelia</code> is an <strong>ODE solver with automatic differentiation, implemented in C++ header files</strong>, with an R interface via Rcpp. It uses an adaptive-step Runge–Kutta 4–5 integrator that runs entirely in compiled code, and templates ODE systems on their scalar type so solutions can be differentiated w.r.t. parameters and initial conditions (forward-mode AD via the vendored <a href="https://github.com/auto-differentiation/xad" class="external-link">XAD</a> library). It also supports time-varying external drivers (cubic-spline interpolated).</p>
-<p>The solver core was first written by Rich FitzJohn inside <a href="https://github.com/traitecoevo/plant" class="external-link"><code>plant</code></a>; <code>odelia</code> spins it out as a reusable, header-only library that other Rcpp packages can link against. The next-generation <code>plant</code> core links against it.</p>
+<p><code>odelia</code> is an <strong>ODE solver with automatic differentiation, implemented in C++ header files</strong>, with an R interface via Rcpp. Three adaptive steppers (Cash–Karp RK4(5), Dormand–Prince 5(4), RODAS4(3) for stiff systems) run entirely in compiled code. ODE systems are templated on their scalar type, so a recorded run can be differentiated in <strong>reverse mode</strong> (one sweep gives the derivative with respect to every parameter and initial condition) and the implicit stepper’s Jacobian is taken in forward mode, both through the vendored <a href="https://github.com/auto-differentiation/xad" class="external-link">XAD</a> library. Time-varying external drivers are interpolated with a cubic Hermite spline. A right-hand side written in R can be solved by the same steppers.</p>
+<p>The solver core was first written by Rich FitzJohn inside <a href="https://github.com/traitecoevo/plant" class="external-link"><code>plant</code></a>; <code>odelia</code> spins it out as a reusable library (header-only but for the XAD tape runtime, see ARCHITECTURE.md) that other Rcpp packages link against. The next-generation <code>plant</code> core links against it.</p>
+<p><strong>Start here.</strong> <code>ARCHITECTURE.md</code> has the map of the headers in dependency order. <code>vignettes/articles/reverse-mode.Rmd</code> is the design of the gradient machinery and the reading order through the headers. The System contract is the concepts in <code>inst/include/odelia/ode_interface.hpp</code>.</p>
 <div class="section level2">
 <h2 id="layout">Layout<a class="anchor" aria-label="anchor" href="#layout"></a></h2>
 <ul><li>
-<code>inst/include/</code> — the <strong>header-only C++ core</strong> (the solver; this is the reusable artifact). <code>ode_callback_system.hpp</code> is the System over a run-time callable (<code>std::function</code>), the language-neutral half of solving an R (or any other) right-hand side.</li>
+<code>inst/include/odelia/</code> — the <strong>C++ core</strong> (the solver; this is the reusable artifact); see the map in <code>ARCHITECTURE.md</code>. <code>inst/include/examples/lorenz_system.hpp</code> is the shipped example System; <code>inst/examples/leaf_thermal/</code> the one the article builds.</li>
+<li>
+<code>inst/include/XAD/</code> — the vendored autodiff library, with local patches recorded in <code>tools/</code>. <code>src/Tape.cpp</code> is the one compiled copy of its tape runtime.</li>
 <li>
 <code>src/</code> — Rcpp glue compiled into the package. <code>r_system.h</code> / <code>r_system_interface.cpp</code> are the R adapter over the callback system and the <code>OdeSolver</code> exports.</li>
 <li>
 <code>R/</code> — friendly <strong>R6</strong> wrappers around the C++ objects.</li>
 <li>
-<code>tools/</code>, <code>vendor</code> (XAD) — the vendored autodiff library.</li>
+<code>vignettes/</code> — <code>odelia.Rmd</code> (getting started), <code>parameter-fitting.Rmd</code>; <code>articles/</code> holds the website-only pieces that compile C++ (<code>leaf-thermal</code>, <code>reverse-mode</code>).</li>
 <li>
-<code>ARCHITECTURE.md</code> — read this for the C++ design; <code>vignettes/</code> for worked examples (e.g. the Lorenz benchmark).</li>
+<code>tests/testthat/</code> — the R suite; <code>tests/standalone/</code> — the R-free C++ suite, which also holds the smallest complete sweepable System (<code>Grow</code>).</li>
 </ul></div>
 <div class="section level2">
 <h2 id="build--test-makefile">Build &amp; test (Makefile)<a class="anchor" aria-label="anchor" href="#build--test-makefile"></a></h2>
@@ -62,9 +66,10 @@
 <li>
 <code>make Rcpp</code> / <code>make roxygen</code> — regenerate Rcpp exports / roxygen docs (don’t hand-edit generated files: <code>R/RcppExports.R</code>, <code>src/RcppExports.cpp</code>, <code>NAMESPACE</code>, <code>man/</code>).</li>
 <li>
-<code>make test</code> — run the test suite (<code>testthat</code>). <code>make check</code> — <code>R CMD check</code>.</li>
+<code>make test</code> — install with tests and run the full suite against the installed package (the AD and DLL-lifecycle tests need that). <code>make test-local</code> — the fast <code>load_all</code> loop, which skips those. <code>make check</code> — <code>R CMD check</code>.</li>
 <li>
-<code>make test-cpp</code> — build and run the core as plain C++ with no R on the include path (<code>tests/standalone/</code>); fast, and the guard that keeps the headers R-free.</li>
+<code>make test-cpp</code> — build and run the core as plain C++ with no R on the include path (<code>tests/standalone/</code>), and compile every core header on its own; fast, and the guard that keeps the headers R-free.</li>
+<li>Everything is C++20. Anything compiled against the headers outside <code>src/</code> (a <code>sourceCpp</code> snippet, a consumer) needs <code>-DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE</code> to match <code>src/Makevars</code>; the tests take them from <code>odelia_cppflags()</code> in <code>tests/testthat/helper-load-odelia.R</code>.</li>
 </ul></div>
 <div class="section level2">
 <h2 id="gotchas">Gotchas<a class="anchor" aria-label="anchor" href="#gotchas"></a></h2>
@@ -73,6 +78,22 @@
 <li>
 <strong>The header core must stay free of R.</strong> Everything in <code>inst/include/odelia/</code> bar <code>solver_interface.hpp</code> and <code>rcpp_interface_helpers.hpp</code> compiles with no R installed — <code>util::stop</code> throws, it does not call <code>Rcpp::stop</code>. Consumers depend on this (<code>leaf</code> runs its C++ tests without R). Keep Rcpp in <code>src/</code> and the two interface headers, and remember that these headers no longer get <code>&lt;cassert&gt;</code>, <code>&lt;string&gt;</code> and friends for free via R — include what you use. See ARCHITECTURE.md.</li>
 </ul></div>
+<div class="section level2">
+<h2 id="code--comment-style">Code &amp; comment style<a class="anchor" aria-label="anchor" href="#code--comment-style"></a></h2>
+<p>New code should be indistinguishable from the existing header core (Rich FitzJohn’s): terse, template-heavy, <code>const</code> by default, 2-space indent. AD code is <strong>glue around the vendored XAD facilities</strong> (<code>computeJacobian</code>, <code>CheckpointCallback</code>, the tape drivers) — invoke them, don’t re-implement them. Modify the type that already exists rather than adding a parallel one, and prefer a mechanism that scales (a System hands back its fields; no per-index switch) over a special case.</p>
+<p>Comments say what the code <strong>is</strong> and what must hold — the invariant, the reason behind a non-obvious choice — and nothing else. The bar the AD surface is held to:</p>
+<ul><li>
+<strong>State the thing, not its history.</strong> No issue/PR numbers, no “was renamed from…”, no “the old X did Y”. A stable external anchor (a paper, <code>#472</code>, a GSL routine) is fine; process references drift the moment the code moves.</li>
+<li>
+<strong>Present odelia’s design as its own fact.</strong> Don’t explain it via plant, “the spike”, or how we got here.</li>
+<li>
+<strong>Plain and direct — no metaphor, no flourish.</strong> Name things for what they are; avoid decorative nouns (<code>contract</code>, <code>oracle</code>, <code>surface</code>) and cute metaphors (<code>frozen</code>/<code>mutant</code>/<code>live</code>/<code>comb</code>). If a name needs a metaphor to make sense, rename it.</li>
+<li>
+<strong>Be sparing.</strong> The code carries most of the meaning; a comment earns its place by helping the reader over a genuine hump. Don’t narrate a counter for a paragraph.</li>
+<li>
+<strong>Generic machinery is background.</strong> In a concrete System (Lorenz, leaf, canopy) the members required by the AD contract should read as ordinary code, not as the point of the file — the physics is the point. Give an example a real applied domain, not an abstract stand-in.</li>
+</ul><p>The contract a System implements is stated as concepts in <code>inst/include/odelia/ode_interface.hpp</code> – <code>HasOdeTime</code>, <code>Rebindable</code>, <code>SolvesForValues</code>, <code>ChecksState</code> for solving, and <code>Sweepable</code> for a reverse sweep, which <code>Solver::solve_adjoint</code> asserts – so a System that does not satisfy one fails to compile naming the requirement it missed. Read those rather than any prose account: a prose copy of a compiler-checked contract drifts. The two members a widening System adds (<code>apply_insertion</code>) and a System solving inside a stage adds (<code>solved_values</code>) are documented beside the concepts. Every header in <code>inst/include/odelia/</code> meets the comment standard above; keep it that way, and state an invariant once, at its owning definition, referring to it by name elsewhere. Don’t hand-edit generated files (<code>R/RcppExports.R</code>, <code>src/RcppExports.cpp</code>, <code>NAMESPACE</code>, <code>man/</code>).</p>
+</div>
 <div class="section level2">
 <h2 id="plant-family">Plant family<a class="anchor" aria-label="anchor" href="#plant-family"></a></h2>
 <p><code>odelia</code> is part of the <strong>plant family</strong> in the <a href="https://github.com/traitecoevo" class="external-link"><code>traitecoevo</code></a> org — a hub-and-spoke set of packages built around the <a href="https://github.com/traitecoevo/plant" class="external-link"><code>plant</code></a> size- and trait-structured forest model.</p>

@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,6 +36,7 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="../articles/parameter-fitting.html">Parameter fitting with automatic differentiation</a></li>
     <li><a class="dropdown-item" href="../articles/leaf-thermal.html">Building your own model with external drivers</a></li>
+    <li><a class="dropdown-item" href="../articles/reverse-mode.html">Reverse mode: one solve, every parameter</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -103,19 +104,30 @@ data we will later try to recover.</p>
 <span><span class="va">target_vals</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">hist</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"x"</span>, <span class="st">"y"</span>, <span class="st">"z"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="set-up-an-ad-enabled-solver">Set up an AD-enabled solver<a class="anchor" aria-label="anchor" href="#set-up-an-ad-enabled-solver"></a>
+<h2 id="register-the-calibration-target">Register the calibration target<a class="anchor" aria-label="anchor" href="#register-the-calibration-target"></a>
 </h2>
 <p>We move the system parameters away from the truth (this is our
-starting guess), then build a solver with <code>active = TRUE</code> to
-enable AD, and register the calibration target.</p>
+starting guess), build a solver, and register the calibration target.
+The reference run’s <code>times</code> are the schedule every fit
+replays, so each evaluation takes the same steps and the loss is a
+smooth function of the parameters.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">initial_guess</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>sigma <span class="op">=</span> <span class="fl">12.0</span>, R <span class="op">=</span> <span class="fl">30.0</span>, b <span class="op">=</span> <span class="fl">3.0</span><span class="op">)</span></span>
 <span><span class="va">lz</span><span class="op">$</span><span class="fu">set_params</span><span class="op">(</span><span class="va">initial_guess</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">ad_runner</span> <span class="op">&lt;-</span> <span class="va"><a href="../reference/Lorenz_Solver.html">Lorenz_Solver</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="va">lz</span><span class="op">$</span><span class="va">ptr</span>, <span class="va">ctrl</span><span class="op">$</span><span class="va">ptr</span>, active <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="va">ad_runner</span> <span class="op">&lt;-</span> <span class="va"><a href="../reference/Lorenz_Solver.html">Lorenz_Solver</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="va">lz</span><span class="op">$</span><span class="va">ptr</span>, <span class="va">ctrl</span><span class="op">$</span><span class="va">ptr</span><span class="op">)</span></span>
 <span><span class="va">ad_runner</span><span class="op">$</span><span class="fu">set_target</span><span class="op">(</span><span class="va">times</span>, <span class="va">target_vals</span>, <span class="va">obs_index</span><span class="op">)</span></span></code></pre></div>
 <p>The <code>$fit()</code> method solves the system for a given
-parameter vector and returns both the loss and its exact gradient:</p>
+parameter vector and returns both the loss and its exact gradient.
+Underneath, it replays the schedule in <code>times</code> step for step
+while keeping one record per step, seeds the adjoint at each observed
+index with the residual against the target, and sweeps the recording
+backwards once, which yields the derivative with respect to every
+parameter (and, when asked, every initial condition) from that single
+pass. The <code>times</code> must therefore be a step schedule rather
+than an output grid, which is why <code>obs_index</code> picks the
+observations out of it. The article <a href="articles/reverse-mode.html">Reverse mode</a> describes the
+machinery.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res0</span> <span class="op">&lt;-</span> <span class="va">ad_runner</span><span class="op">$</span><span class="fu">fit</span><span class="op">(</span>params <span class="op">=</span> <span class="va">initial_guess</span><span class="op">)</span></span>
 <span><span class="va">res0</span><span class="op">$</span><span class="va">loss</span></span>

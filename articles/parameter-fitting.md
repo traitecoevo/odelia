@@ -41,23 +41,34 @@ obs_index <- which(times %in% hist$time)
 target_vals <- as.matrix(hist[, c("x", "y", "z")])
 ```
 
-## Set up an AD-enabled solver
+## Register the calibration target
 
 We move the system parameters away from the truth (this is our starting
-guess), then build a solver with `active = TRUE` to enable AD, and
-register the calibration target.
+guess), build a solver, and register the calibration target. The
+reference run’s `times` are the schedule every fit replays, so each
+evaluation takes the same steps and the loss is a smooth function of the
+parameters.
 
 ``` r
 
 initial_guess <- c(sigma = 12.0, R = 30.0, b = 3.0)
 lz$set_params(initial_guess)
 
-ad_runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr, active = TRUE)
+ad_runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
 ad_runner$set_target(times, target_vals, obs_index)
 ```
 
 The `$fit()` method solves the system for a given parameter vector and
-returns both the loss and its exact gradient:
+returns both the loss and its exact gradient. Underneath, it replays the
+schedule in `times` step for step while keeping one record per step,
+seeds the adjoint at each observed index with the residual against the
+target, and sweeps the recording backwards once, which yields the
+derivative with respect to every parameter (and, when asked, every
+initial condition) from that single pass. The `times` must therefore be
+a step schedule rather than an output grid, which is why `obs_index`
+picks the observations out of it. The article [Reverse
+mode](https://traitecoevo.github.io/odelia/articles/articles/reverse-mode.md)
+describes the machinery.
 
 ``` r
 

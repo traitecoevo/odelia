@@ -11,8 +11,8 @@
 <script src="deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="ODE Solver with Automatic Differentiation, in C++ Header Files">
-<meta name="description" content="odelia provides an ODE solver in C++ header files, offering both an explicit adaptive-step Runge-Kutta 4-5 method and an implicit, adaptive-step RODAS4(3) Rosenbrock method for stiff systems, with an interface to R via Rcpp. ODE systems can be templated on their scalar type to support automatic differentiation, enabling exact gradients for parameter fitting and exact Jacobians for the implicit solver. A system written as an R function can be solved by the same steppers.">
-<meta property="og:description" content="odelia provides an ODE solver in C++ header files, offering both an explicit adaptive-step Runge-Kutta 4-5 method and an implicit, adaptive-step RODAS4(3) Rosenbrock method for stiff systems, with an interface to R via Rcpp. ODE systems can be templated on their scalar type to support automatic differentiation, enabling exact gradients for parameter fitting and exact Jacobians for the implicit solver. A system written as an R function can be solved by the same steppers.">
+<meta name="description" content="odelia provides an ODE solver in C++ header files, offering both an explicit adaptive-step Runge-Kutta 4-5 method and an implicit, adaptive-step RODAS4(3) Rosenbrock method for stiff systems, with an interface to R via Rcpp. ODE systems can be templated on their scalar type to support automatic differentiation, enabling exact reverse-mode gradients of a recorded run and exact Jacobians for the implicit solver. A system written as an R function can be solved by the same steppers.">
+<meta property="og:description" content="odelia provides an ODE solver in C++ header files, offering both an explicit adaptive-step Runge-Kutta 4-5 method and an implicit, adaptive-step RODAS4(3) Rosenbrock method for stiff systems, with an interface to R via Rcpp. ODE systems can be templated on their scalar type to support automatic differentiation, enabling exact reverse-mode gradients of a recorded run and exact Jacobians for the implicit solver. A system written as an R function can be solved by the same steppers.">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -22,7 +22,7 @@
 
     <a class="navbar-brand me-2" href="index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,7 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="articles/parameter-fitting.html">Parameter fitting with automatic differentiation</a></li>
     <li><a class="dropdown-item" href="articles/leaf-thermal.html">Building your own model with external drivers</a></li>
+    <li><a class="dropdown-item" href="articles/reverse-mode.html">Reverse mode: one solve, every parameter</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="news/index.html">Changelog</a></li>
@@ -59,18 +60,18 @@
 </h1></div>
 <!-- badges: start -->
 
-<p><code>odelia</code> is an ODE solver implemented in C++ header files, using an adaptive-step Runge-Kutta 4-5 method, with an interface to R via Rcpp. The solver runs entirely in compiled code, so it is fast, and ODE systems can be templated on their scalar type to support <strong>automatic differentiation (AD)</strong> — letting you compute exact gradients of a solution with respect to its parameters for use in optimisation and calibration.</p>
+<p><code>odelia</code> is an ODE solver implemented in C++ header files, with an interface to R via Rcpp. Three adaptive steppers (Cash-Karp RK4(5), Dormand-Prince 5(4), and RODAS4(3) for stiff systems) run entirely in compiled code, so it is fast. ODE systems are templated on their scalar type, so a run can be recorded and differentiated in <strong>reverse mode</strong>: one sweep over the recorded run gives the exact derivative of a solution with respect to every parameter and initial condition at once, for optimisation and calibration.</p>
 <p>The core solver was first developed by Rich FitzJohn as part of the <a href="https://github.com/traitecoevo/plant/" class="external-link">plant package</a>. This package spins that code out so it can be used more widely.</p>
 <div class="section level2">
 <h2 id="features">Features<a class="anchor" aria-label="anchor" href="#features"></a>
 </h2>
 <ul>
-<li>Adaptive-step <strong>RK4-5</strong> integrator running entirely in C++ (~30-90x faster than the equivalent solved via <code>deSolve</code>; see the Lorenz example).</li>
+<li>Three adaptive steppers running entirely in C++: explicit Cash-Karp RK4(5), Dormand-Prince 5(4) with dense output, and the implicit RODAS4(3) for stiff systems. A compiled system solves about a hundred times faster than the same right-hand side written in R (Lorenz: 1 ms against 25-60 ms under <code>deSolve</code>).</li>
 <li>
-<strong>Automatic differentiation</strong> of ODE solutions w.r.t. parameters and initial conditions, via the vendored <a href="https://github.com/auto-differentiation/xad" class="external-link">XAD</a> library — enabling gradient-based parameter fitting.</li>
+<strong>Reverse-mode automatic differentiation</strong> of a recorded run, via the vendored <a href="https://github.com/auto-differentiation/xad" class="external-link">XAD</a> library: one sweep, every parameter and initial condition. Forward mode supplies the implicit stepper’s Jacobian. See the article <a href="https://traitecoevo.github.io/odelia/articles/reverse-mode.html">Reverse mode</a>.</li>
 <li>
-<strong>External drivers</strong>: time-varying forcing variables, smoothly interpolated with cubic splines and queried by the system at each step.</li>
-<li>Header-only C++ core that other Rcpp packages can link against.</li>
+<strong>External drivers</strong>: time-varying forcing variables, interpolated with a cubic Hermite spline and queried by the system at each step.</li>
+<li>A C++ core (header-only but for the XAD tape runtime) that other packages link against, with no R needed to compile or test it.</li>
 <li>Friendly <strong>R6</strong> wrappers around the C++ objects.</li>
 <li>A right-hand side <strong>written in R</strong> can be solved by the same steppers, through <code><a href="reference/ode_solve.html">ode_solve()</a></code> (shaped like <code><a href="https://rdrr.io/pkg/deSolve/man/ode.html" class="external-link">deSolve::ode()</a></code>) or the step-at-a-time <code>OdeSolver</code>, with genuinely adaptive Runge-Kutta stepping, dense output of the method’s order (Dormand-Prince 5(4)), the accepted steps exposed, and a count of what the solve cost. On a fine output grid that is about twice as fast as <code>deSolve::ode45</code> with the same R function.</li>
 </ul>
@@ -116,22 +117,41 @@
 <li>
 <a href="https://traitecoevo.github.io/odelia/articles/leaf-thermal.html">Building your own model with external drivers</a> — a leaf-thermal model showing how to define your own ODE system in C++ and drive it with time-varying forcing (<a href="vignettes/articles/leaf-thermal.Rmd">source</a>).</li>
 <li>
-<a href="examples/lorenz/readme.qmd">Lorenz system</a> — also includes a speed comparison against <code>deSolve</code>.</li>
+<a href="https://traitecoevo.github.io/odelia/articles/reverse-mode.html">Reverse mode: one solve, every parameter</a> — the gradient machinery from C++: what a run records, how the sweep walks it, what a System must provide (<a href="vignettes/articles/reverse-mode.Rmd">source</a>).</li>
 </ul>
+</div>
+<div class="section level2">
+<h2 id="from-c">From C++<a class="anchor" aria-label="anchor" href="#from-c"></a>
+</h2>
+<p>A System is a class templated on its scalar type that holds parameters and state and knows its rates. The solver drives it:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="co">// [[Rcpp::plugins(cpp20)]]   (or CXX_STD = CXX20 in a package's Makevars)</span></span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;odelia/ode_solver.hpp&gt;</span></span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;examples/lorenz_system.hpp&gt;</span><span class="pp">   </span><span class="co">// the shipped example System</span></span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>LorenzSystem<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> system<span class="op">(</span><span class="fl">10.0</span><span class="op">,</span> <span class="fl">28.0</span><span class="op">,</span> <span class="fl">8.0</span> <span class="op">/</span> <span class="fl">3.0</span><span class="op">);</span></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>odelia<span class="op">::</span>ode<span class="op">::</span>Solver<span class="op">&lt;</span>LorenzSystem<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;&gt;</span> s<span class="op">(</span>system<span class="op">,</span> odelia<span class="op">::</span>ode<span class="op">::</span>OdeControl<span class="op">());</span></span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>s<span class="op">.</span>advance_adaptive<span class="op">({</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">10.0</span><span class="op">});</span></span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> y <span class="op">=</span> s<span class="op">.</span>state<span class="op">();</span></span></code></pre></div>
+<p>A gradient of that run is three more lines: keep the record, seed the output wanted, and sweep.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>s<span class="op">.</span>set_keep_states<span class="op">(</span><span class="kw">true</span><span class="op">);</span>                       <span class="co">// before the run</span></span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>s<span class="op">.</span>advance_adaptive<span class="op">({</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">10.0</span><span class="op">});</span></span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="kw">auto</span> lambda <span class="op">=</span> odelia<span class="op">::</span>ode<span class="op">::</span>adjoint_rows<span class="op">::</span>one_row<span class="op">({</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">});</span>   <span class="co">// d x(10)</span></span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>odelia<span class="op">::</span>ode<span class="op">::</span>adjoint_rows dp<span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">3</span><span class="op">);</span>            <span class="co">// one row per seed, zeroed</span></span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>s<span class="op">.</span>solve_adjoint<span class="op">(</span>lambda<span class="op">,</span> dp<span class="op">);</span>                   <span class="co">// dp[0][j] = d x(10) / d parameter j</span></span></code></pre></div>
+<p>A package that uses the headers adds <code>odelia</code> to <code>LinkingTo</code> and <code>Imports</code>, compiles as C++20 with <code>-DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE</code>, and on Windows links against odelia’s DLL; <a href="ARCHITECTURE.html">ARCHITECTURE.md</a> has the details and a map of the headers. <code>inst/include/examples/lorenz_system.hpp</code> is the template for a System of your own, with its members marked by which contract they serve; the article <a href="https://traitecoevo.github.io/odelia/articles/leaf-thermal.html">Building your own model</a> walks through one with external drivers.</p>
 </div>
 <div class="section level2">
 <h2 id="parameter-fitting-with-automatic-differentiation">Parameter fitting with automatic differentiation<a class="anchor" aria-label="anchor" href="#parameter-fitting-with-automatic-differentiation"></a>
 </h2>
-<p>Because the solver can be templated on an AD scalar type, you can recover exact gradients of a loss (the mismatch between the solution and a set of target observations) with respect to the system parameters, and hand them to a gradient-based optimiser such as <code><a href="https://rdrr.io/r/stats/optim.html" class="external-link">optim()</a></code>:</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># An AD-enabled runner exposes a $fit() method returning loss and gradient</span></span>
-<span><span class="va">ad_runner</span> <span class="op">&lt;-</span> <span class="va"><a href="reference/Lorenz_Solver.html">Lorenz_Solver</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="va">lz</span><span class="op">$</span><span class="va">ptr</span>, <span class="va">ctrl</span><span class="op">$</span><span class="va">ptr</span>, active <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="va">ad_runner</span><span class="op">$</span><span class="fu">set_target</span><span class="op">(</span><span class="va">times</span>, <span class="va">target_vals</span>, <span class="va">obs_index</span><span class="op">)</span></span>
+<p>The shipped Lorenz and leaf-thermal runners expose a <code>$fit()</code> method that returns the least-squares loss against a target trajectory and its exact gradient with respect to the parameters (and initial conditions), by one reverse sweep over a replay of the reference run. Hand it to a gradient-based optimiser such as <code><a href="https://rdrr.io/r/stats/optim.html" class="external-link">optim()</a></code>:</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fit_runner</span> <span class="op">&lt;-</span> <span class="va"><a href="reference/Lorenz_Solver.html">Lorenz_Solver</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="va">lz</span><span class="op">$</span><span class="va">ptr</span>, <span class="va">ctrl</span><span class="op">$</span><span class="va">ptr</span><span class="op">)</span></span>
+<span><span class="va">fit_runner</span><span class="op">$</span><span class="fu">set_target</span><span class="op">(</span><span class="va">times</span>, <span class="va">target_vals</span>, <span class="va">obs_index</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="va">ad_runner</span><span class="op">$</span><span class="fu">fit</span><span class="op">(</span>params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>sigma <span class="op">=</span> <span class="fl">12</span>, R <span class="op">=</span> <span class="fl">30</span>, b <span class="op">=</span> <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="va">fit_runner</span><span class="op">$</span><span class="fu">fit</span><span class="op">(</span>params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>sigma <span class="op">=</span> <span class="fl">12</span>, R <span class="op">=</span> <span class="fl">30</span>, b <span class="op">=</span> <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">res</span><span class="op">$</span><span class="va">loss</span>      <span class="co"># scalar mismatch with the target trajectory</span></span>
 <span><span class="va">res</span><span class="op">$</span><span class="va">gradient</span>  <span class="co"># exact gradient w.r.t. each parameter</span></span></code></pre></div>
-<p>A complete optimisation workflow (recovering known Lorenz parameters) is walked through in <code><a href="articles/parameter-fitting.html">vignette("parameter-fitting")</a></code>.</p>
+<p>A complete optimisation workflow (recovering known Lorenz parameters) is walked through in <code><a href="articles/parameter-fitting.html">vignette("parameter-fitting")</a></code>. A runner for your own System gets <code>$fit()</code> by instantiating <code>Solver_fit_impl</code> from <code>solver_interface.hpp</code>, as the leaf-thermal example does.</p>
 </div>
 <div class="section level2">
 <h2 id="vocabulary">Vocabulary<a class="anchor" aria-label="anchor" href="#vocabulary"></a>
@@ -141,13 +161,21 @@
 <li>
 <strong>System</strong> — your ODE model. A C++ class that holds parameters and state and knows how to compute its rates (right-hand side) <code>dy/dt</code>. Templated on its scalar type so it works with both <code>double</code> and AD types.</li>
 <li>
-<strong>Stepper</strong> — the numerical integration scheme (adaptive RK4-5) that takes one step of the system, estimating the error to choose the next step size.</li>
+<strong>Stepper</strong> — the numerical integration scheme (Cash-Karp RK4(5), Dormand-Prince 5(4) or RODAS4(3)) that takes one step of the system, estimating the error to choose the next step size.</li>
 <li>
-<strong>Solver / runner</strong> — drives the stepper forward over a requested set of times, applying step-size control and collecting the solution history.</li>
+<strong>Solver</strong> — <code>Solver&lt;System&gt;</code> in C++ drives the stepper forward over a requested set of times, applying step-size control, and sweeps a recorded run backward for its gradient. In R, <code>Lorenz_Solver</code> wraps that for the shipped system and <code>OdeSolver</code> steps a right-hand side written in R.</li>
 <li>
-<strong>Drivers</strong> — external, time-varying forcing variables (e.g. air temperature) that the system queries during integration. Supplied as time series and interpolated with cubic splines.</li>
+<strong>Drivers</strong> — external, time-varying forcing variables (e.g. air temperature) that the system queries during integration. Supplied as time series and interpolated with a cubic Hermite spline.</li>
 <li>
-<strong>Control</strong> (<code>OdeControl</code>) — the solver’s tuning knobs: absolute and relative tolerances, state/derivative scaling, and minimum/maximum/initial step sizes.</li>
+<strong>Control</strong> (<code>OdeControl</code>) — the solver’s tuning knobs: absolute and relative tolerances, state/derivative scaling, minimum/maximum/initial step sizes, and the step-size rule.</li>
+<li>
+<strong>Recording</strong> — what a run keeps when asked (<code>set_keep_states</code>): one row per accepted step with its time, step size, state, and whatever the step solved for inside a stage. A sweep reads it; a replay reproduces the run from it.</li>
+<li>
+<strong>Sweep</strong> — the backward pass over a recording (<code>solve_adjoint</code>). It is seeded with the derivative wanted of the final state, one <strong>seed</strong> per output, and returns one <strong>row</strong> of derivatives per seed against the parameters and the initial state; <code>adjoint_rows</code> is the batch.</li>
+<li>
+<strong>Insertion</strong> — a scheduled growth of the state vector mid-run. The sweep transposes the System’s own widening map across it.</li>
+<li>
+<strong>Supplied derivative</strong> — a value put on the tape with rows obtained by other means (<code>record_with_derivatives</code>, <code>implicit_value</code>), for a quantity a submodel solved for by iteration.</li>
 </ul>
 </div>
 <div class="section level2">
@@ -167,18 +195,21 @@
 </h3>
 <p>An ODE system in odelia consists of:</p>
 <ul>
-<li><p><strong>A system header</strong> (<code>inst/include/odelia/examples/*.hpp</code>) — C++ class defining the ODE. Must implement <code>ode_size()</code>, <code>set_ode_state()</code>, <code>ode_state()</code>, and <code>ode_rates()</code>. Template on scalar type for AD support.</p></li>
-<li><p><strong>An Rcpp interface</strong> (<code>src/*_interface.cpp</code>) — <code>[[Rcpp::export]]</code> functions exposing the system to R.</p></li>
+<li><p><strong>A system header</strong> (<code>inst/include/examples/lorenz_system.hpp</code>, <code>inst/examples/leaf_thermal/src/leaf_thermal_system.hpp</code>) — a C++ class templated on its scalar type. To be solved it implements <code>ode_size()</code>, <code>set_ode_state()</code>, <code>ode_state()</code> and <code>ode_rates()</code>; to be swept it adds <code>rebind_from&lt;U&gt;()</code>, <code>ad_parameters()</code>, <code>for_each_active(f)</code> and <code>set_recorded_state(y, time)</code> (the <code>Sweepable</code> concept in <code>ode_interface.hpp</code>).</p></li>
+<li><p><strong>An Rcpp interface</strong> (<code>src/*_interface.cpp</code>, <code>inst/examples/leaf_thermal/src/*_interface.cpp</code>) — <code>[[Rcpp::export]]</code> functions exposing the system to R, built on the <code>Solver_*_impl</code> templates in <code>solver_interface.hpp</code>.</p></li>
 <li><p><strong>An R wrapper</strong> (<code>R/*-interface.R</code>, optional) — R6 classes providing a friendlier API around the external pointers.</p></li>
-<li><p><strong>A demo script</strong> (<code>examples/*/demo.R</code>) — Runnable demonstration. ### Testing variants</p></li>
+<li><p><strong>A worked example</strong> — the article for the leaf-thermal model, built by pkgdown.</p></li>
 </ul>
-<p>Use the Makefile targets below depending on the level of test coverage you want.</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">make</span> test</span></code></pre></div>
-<p>Runs package tests after local compile. Fast default for day-to-day work.</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="fu">make</span> test-local</span></code></pre></div>
-<p>Runs <code><a href="https://testthat.r-lib.org/reference/test_package.html" class="external-link">testthat::test_local()</a></code> from the source tree.</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">make</span> test-installed</span></code></pre></div>
-<p>Installs with tests and runs <code><a href="https://testthat.r-lib.org/reference/test_package.html" class="external-link">testthat::test_package()</a></code> against the installed package copy.</p>
+</div>
+<div class="section level3">
+<h3 id="testing">Testing<a class="anchor" aria-label="anchor" href="#testing"></a>
+</h3>
+<div class="sourceCode" id="cb6"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">make</span> test</span></code></pre></div>
+<p>Installs the package with its tests and runs the full suite against the installed copy. The AD and DLL-lifecycle tests need an installed package.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">make</span> test-local</span></code></pre></div>
+<p>The fast development loop: <code><a href="https://testthat.r-lib.org/reference/test_package.html" class="external-link">testthat::test_local()</a></code> via <code>load_all()</code>, skipping those tests.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">make</span> test-cpp</span></code></pre></div>
+<p>Builds and runs the solver core as plain C++ with no R on the include path (<code>tests/standalone/</code>), and compiles every core header on its own. Anything compiled against the headers outside the package’s own <code>src/</code> needs C++20 and <code>-DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE</code>, matching <code>src/Makevars</code>.</p>
 </div>
 </div>
 <div class="section level2">
@@ -224,7 +255,7 @@
 <div class="dev-status">
 <h2 data-toc-skip>Dev status</h2>
 <ul class="list-unstyled">
-<li><a href="https://github.com/traitecoevo/odelia/master" class="external-link"><img src="https://github.com/traitecoevo/odelia/workflows/R-CMD-check/badge.svg" alt="R-CMD-check"></a></li>
+<li><a href="https://github.com/traitecoevo/odelia/actions" class="external-link"><img src="https://github.com/traitecoevo/odelia/workflows/R-CMD-check/badge.svg" alt="R-CMD-check"></a></li>
 </ul>
 </div>
 

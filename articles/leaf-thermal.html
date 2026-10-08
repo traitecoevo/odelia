@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,6 +36,7 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="../articles/parameter-fitting.html">Parameter fitting with automatic differentiation</a></li>
     <li><a class="dropdown-item" href="../articles/leaf-thermal.html">Building your own model with external drivers</a></li>
+    <li><a class="dropdown-item" href="../articles/reverse-mode.html">Reverse mode: one solve, every parameter</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -143,8 +144,18 @@ type). It must implement a small contract:</p>
 <span id="cb1-17"><a href="#cb1-17" tabindex="-1"></a>  Iterator ode_rates<span class="op">(</span>Iterator it<span class="op">)</span> <span class="at">const</span><span class="op">;</span></span>
 <span id="cb1-18"><a href="#cb1-18" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
 <p>Templating on <code>T</code> is what makes the system
-<strong>AD-ready</strong> — see the <a href="../articles/parameter-fitting.html">parameter-fitting
-vignette</a>.</p>
+<strong>AD-ready</strong>: the same code runs at <code>double</code> and
+at an active scalar. That is all a System needs to be <em>solved</em>.
+To have a run <em>swept</em> for its gradient it adds four members,
+stated as the concept <code>Sweepable</code> in
+<code>odelia/ode_interface.hpp</code>:
+<code>rebind_from&lt;U&gt;()</code>, <code>ad_parameters()</code>,
+<code>for_each_active(f)</code> and
+<code>set_recorded_state(y, time)</code>. The shipped header has them
+under a comment marking that tier, and the article <a href="reverse-mode.html">Reverse mode</a> says what each is for. The
+remaining members of the header (<code>record_colnames</code>,
+<code>record_step</code>, <code>pars</code>) serve the R binding
+only.</p>
 </div>
 <div class="section level3">
 <h3 id="drivers">Drivers<a class="anchor" aria-label="anchor" href="#drivers"></a>
@@ -175,8 +186,12 @@ symbols (including the XAD runtime) globally via the package
 <span></span>
 <span><span class="va">ex_dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"examples/leaf_thermal"</span>, package <span class="op">=</span> <span class="st">"odelia"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Put the odelia headers on the include path for sourceCpp</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>PKG_CPPFLAGS <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"-I"</span>, <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"include"</span>, package <span class="op">=</span> <span class="st">"odelia"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co"># The odelia headers, and the two XAD defines the package itself is built with</span></span>
+<span><span class="co"># (a translation unit without them reaches the tape through the other storage</span></span>
+<span><span class="co"># class).</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>PKG_CPPFLAGS <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span></span>
+<span>  <span class="st">"-I"</span>, <span class="fu"><a href="https://rdrr.io/r/base/shQuote.html" class="external-link">shQuote</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"include"</span>, package <span class="op">=</span> <span class="st">"odelia"</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  <span class="st">" -DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE"</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Compile the model-specific interface, then load the R6 wrappers</span></span>
 <span><span class="fu">Rcpp</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/Rcpp/man/sourceCpp.html" class="external-link">sourceCpp</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">ex_dir</span>, <span class="st">"src"</span>, <span class="st">"leaf_thermal_interface.cpp"</span><span class="op">)</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
@@ -278,9 +293,6 @@ the day.</p>
 <li>The full, copy-able sources are in
 <code>system.file("examples/leaf_thermal", package = "odelia")</code> —
 start there when building your own model.</li>
-<li>To calibrate a model’s parameters against data using exact
-gradients, see the <a href="../articles/parameter-fitting.html">parameter-fitting
-vignette</a>.</li>
 </ul>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

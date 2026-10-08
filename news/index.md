@@ -1,5 +1,99 @@
 # Changelog
 
+## odelia 0.7.0
+
+**A recorded run can now be differentiated in reverse mode, so one solve
+yields the derivative with respect to every parameter at once.** Forward
+mode answers for one parameter per solve; reverse mode answers for all
+of them, but it must first record every operation the solve performed,
+and a run of several thousand adaptive steps performs far more of them
+than memory will hold. The solver stores its state at each accepted step
+and replays one step’s arithmetic at a time while the derivative is
+taken, so what is held is bounded by a single step rather than by the
+run. Memory then grows with the number of steps, which is cheap, rather
+than with the arithmetic, which is not.
+
+A value a submodel solved for rather than computed is lifted onto the
+record carrying a derivative obtained by other means — `implicit_value`
+and `record_with_derivatives` — which keeps an iterative solver’s own
+iterations out of the answer. What *selects* rather than *moves* (a step
+size, a knot position, an arm) stays a plain `double` and is replayed,
+because differentiating a selector manufactures a discontinuity the
+model does not have.
+
+**A forward pass can now REPLAY a recording instead of only taking
+one.** The store/load channel already picked its direction by the
+constness of what a walk handed over, and `step_adjoint` already handed
+a const row — but every forward entry point funnelled through one place
+that zeroed its scratch and passed it mutable, so nothing on the way
+forward could load. `Step::step`’s row parameter is templated, so a
+const row loads and a mutable one stores with no change to the body;
+`advance_recorded()` gains an overload taking a **recording** rather
+than a program, pairing each step with its own row so the two cannot be
+crossed. No new concept and no new name. `method='rodas'` refuses rather
+than silently re-deriving: the Rosenbrock stepper keeps no per-stage
+row.
+
+What this is for: a pass that must take the run’s answers rather than
+its own. The first consumer is plant’s invasion run, where an invader
+stands in a resident’s recorded field — exogenous to it, so its
+derivative is zero rather than severed.
+
+**⚠️ The recorded row is six long, not five, and that changes
+`step_record`.** Five of the six are a step’s stages; the sixth is the
+evaluation at the state the step ends at, which first-same-as-last hands
+the next step as its own k1. A sweep re-derives that one at the state it
+was handed and still reads only the first five. A forward replay cannot
+— re-deriving is the thing it replays to avoid — and a step whose k1 was
+re-derived is wrong at first order in `h`.
+
+The forward-mode scalar lives in `tangent.hpp`, apart from the
+reverse-mode machinery in `adjoint.hpp`, so a consumer wanting a
+directional derivative and no record is never handed vocabulary for one.
+`tangent.hpp` rejects a forward scalar nested above a reverse one at
+compile time: three kernels costing 31 statements flat cost 566 nested.
+
+`ode_fit.hpp` is removed; `compute_gradient` has no drop-in, and
+`vector_jacobian_product` plus `sweep.hpp` replace it in C++. The R
+fitting interface is kept on the new machinery:
+`$set_target(times, target, obs_indices)` and `$fit(ic, params)` return
+the same least-squares loss and gradient as before, now by one reverse
+sweep over a replay of `times`, for both the Lorenz and the leaf thermal
+examples. What goes is the `active` argument on the `Solver_*` bindings
+and the separate AD solver it made, since every solver can now fit. A
+System needs `set_recorded_state()` and `for_each_active()` to be swept.
+The System contract becomes C++20 concepts (`HasOdeTime`,
+`SolvesForValues`, `ChecksState`, `Rebindable`), and `rebind()` becomes
+`rebind_from()`.
+
+A pinned step the domain refused is crossed in several sub-steps (0.4.0)
+and recorded as one row of the interval, holding the last sub-step’s
+solved values; one Runge–Kutta step of that interval is not the step the
+run took, and a sweep of it gave a derivative forty orders of magnitude
+off with every number finite. The row now carries `subdivided`, and
+`solve_adjoint` and a replay refuse it by name. `solve_adjoint` also
+refuses one batch handed as both seed and accumulator, which the width
+check let through whenever the state and parameter counts matched. The
+variadic `implicit_value` returned rows that included an input’s
+pre-existing adjoint; they are now the theorem’s alone.
+
+Only `method = "rkck"` records a run: `"dopri"` and `"rodas"` refuse a
+sweep or a replay rather than re-deriving one.
+
+A consumer that `LinkingTo` odelia now compiles as C++20
+(`CXX_STD = CXX20`) and must set the same two XAD defines as
+`src/Makevars`, `-DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE`: the
+storage class of the active tape does not change the symbol’s name, so a
+translation unit built without them reaches the same tape through the
+other storage class.
+
+A **minor** bump: `rebind()` becomes `rebind_from()`, the trait probes
+become concepts, `ode_fit.hpp` and the `active` argument on the
+`Solver_*` bindings go, and `step_record` changes shape, so a System or
+a consumer that touched any of those recompiles differently. 0.6.0,
+0.6.1 and 0.6.2 shipped between this change’s first draft and its merge;
+the reverse-mode machinery sits on top of all three.
+
 ## odelia 0.6.2
 
 **Resizing a solver no longer costs the square of the state length when

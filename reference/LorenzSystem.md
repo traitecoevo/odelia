@@ -12,7 +12,7 @@ R6 wrapper for Lorenz system
 
 ### Public methods
 
-- [`LorenzSystem$new()`](#method-LorenzSystem-new)
+- [`LorenzSystem$new()`](#method-LorenzSystem-initialize)
 
 - [`LorenzSystem$pars()`](#method-LorenzSystem-pars)
 
@@ -32,7 +32,7 @@ R6 wrapper for Lorenz system
 
 ------------------------------------------------------------------------
 
-### Method `new()`
+### `LorenzSystem$new()`
 
 Initialize a Lorenz system object.
 
@@ -56,7 +56,7 @@ Initialize a Lorenz system object.
 
 ------------------------------------------------------------------------
 
-### Method `pars()`
+### `LorenzSystem$pars()`
 
 Return current system parameters.
 
@@ -66,7 +66,7 @@ Return current system parameters.
 
 ------------------------------------------------------------------------
 
-### Method `set_params()`
+### `LorenzSystem$set_params()`
 
 Set model parameters.
 
@@ -82,7 +82,7 @@ Set model parameters.
 
 ------------------------------------------------------------------------
 
-### Method `set_state()`
+### `LorenzSystem$set_state()`
 
 Set system state and time.
 
@@ -102,7 +102,7 @@ Set system state and time.
 
 ------------------------------------------------------------------------
 
-### Method `state()`
+### `LorenzSystem$state()`
 
 Return current state.
 
@@ -112,7 +112,7 @@ Return current state.
 
 ------------------------------------------------------------------------
 
-### Method `rates()`
+### `LorenzSystem$rates()`
 
 Return current rates.
 
@@ -122,7 +122,7 @@ Return current rates.
 
 ------------------------------------------------------------------------
 
-### Method `set_initial_state()`
+### `LorenzSystem$set_initial_state()`
 
 Set initial state and initial time.
 
@@ -142,7 +142,7 @@ Set initial state and initial time.
 
 ------------------------------------------------------------------------
 
-### Method `reset()`
+### `LorenzSystem$reset()`
 
 Reset the system to its initial condition.
 
@@ -152,7 +152,7 @@ Reset the system to its initial condition.
 
 ------------------------------------------------------------------------
 
-### Method `clone()`
+### `LorenzSystem$clone()`
 
 The objects of this class are cloneable with this method.
 

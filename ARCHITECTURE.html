@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -21,6 +21,7 @@
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="articles/parameter-fitting.html">Parameter fitting with automatic differentiation</a></li>
     <li><a class="dropdown-item" href="articles/leaf-thermal.html">Building your own model with external drivers</a></li>
+    <li><a class="dropdown-item" href="articles/reverse-mode.html">Reverse mode: one solve, every parameter</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
@@ -43,6 +44,68 @@
 <blockquote>
 <p><strong>Read this before changing how XAD is compiled, how <code>odelia.so</code>/<code>odelia.dll</code> is loaded, or <code>R/zzz.R</code>.</strong> These pieces form a contract that packages which <code>LinkingTo: odelia</code> depend on. Breaking it produces <em>link-time</em> or <em>load-time</em> failures in downstream packages (e.g. plant) that do not show up in odelia’s own checks.</p>
 </blockquote>
+<blockquote>
+<p>For <strong>automatic differentiation</strong>, read the article <a href="https://traitecoevo.github.io/odelia/articles/reverse-mode.html">Reverse mode: one solve, every parameter</a> (<code>vignettes/articles/reverse-mode.Rmd</code>): what a run records, how the sweep walks it, what a System must provide, and the order to read the headers in. The contract a System implements is the set of concepts in <code>inst/include/odelia/ode_interface.hpp</code>, which the compiler checks. This document is about how the headers fit together and how the <code>Tape</code> runtime compiles and links.</p>
+</blockquote>
+<div class="section level2">
+<h2 id="map-of-the-headers">Map of the headers<a class="anchor" aria-label="anchor" href="#map-of-the-headers"></a></h2>
+<p><code>inst/include/odelia/</code>, in dependency order; a header includes only those above it.</p>
+<table class="table"><colgroup><col width="50%"><col width="50%"></colgroup><thead><tr><th>Header</th>
+<th>Holds</th>
+</tr></thead><tbody><tr><td><code>ode_util.hpp</code></td>
+<td>
+<code>util::stop</code> / <code>util::warning</code> (R-free), <code>to_passive</code>, <code>DomainError</code>
+</td>
+</tr><tr><td><code>tangent.hpp</code></td>
+<td>
+<code>tangent_scalar&lt;T&gt;</code>, the forward-mode scalar; refuses a tangent above an adjoint</td>
+</tr><tr><td><code>value_with_slope.hpp</code></td>
+<td>
+<code>value_with_slope&lt;T&gt;</code>, a value paired with its slope; no includes</td>
+</tr><tr><td>
+<code>spline.hpp</code> → <code>interpolator.hpp</code> → <code>drivers.hpp</code>
+</td>
+<td>cubic Hermite backend, <code>hermite_interpolator</code>, <code>Drivers</code> (time-varying forcing)</td>
+</tr><tr><td><code>ode_control.hpp</code></td>
+<td>
+<code>OdeControl</code>: tolerances, step bounds, the <code>gsl</code> / <code>hairer</code> controller</td>
+</tr><tr><td><code>ode_interface.hpp</code></td>
+<td>the System concepts (<code>HasOdeTime</code>, <code>Rebindable</code>, <code>SolvesForValues</code>, <code>ChecksState</code>, <code>Sweepable</code>), <code>active_scalar&lt;T&gt;</code>, <code>instruction</code>, <code>step_record</code>, <code>visit_active</code>, <code>be_at_step</code>, <code>apply_insertion</code>
+</td>
+</tr><tr><td><code>adjoint.hpp</code></td>
+<td>
+<code>adjoint_rows</code>, <code>active_system</code>, <code>vector_jacobian_product</code>, <code>state_and_parameter_adjoints</code>: the transpose of one map</td>
+</tr><tr><td><code>implicit_node.hpp</code></td>
+<td>
+<code>record_with_derivatives</code>, <code>implicit_value</code>: a value on the tape carrying rows obtained elsewhere; independent of the solver</td>
+</tr><tr><td>
+<code>ode_linalg.hpp</code>, <code>ode_jacobian.hpp</code>
+</td>
+<td>dense LU and eigenvalues; the Jacobian from a System’s hook or by forward AD</td>
+</tr><tr><td>
+<code>ode_step_rkck.hpp</code>, <code>ode_step_dopri.hpp</code>, <code>ode_step_rodas.hpp</code>
+</td>
+<td>the three steppers; only <code>rkck</code> records a run and carries <code>Step::step_adjoint</code>
+</td>
+</tr><tr><td><code>ode_callback_system.hpp</code></td>
+<td>
+<code>CallbackSystem</code>, a System over <code>std::function</code>s</td>
+</tr><tr><td>
+<code>ode_solver_internal.hpp</code> → <code>ode_solver.hpp</code>
+</td>
+<td>
+<code>SolverInternal</code> (stepping, the record), <code>Solver&lt;System&gt;</code> (<code>advance_*</code>, <code>recording()</code>, <code>solve_adjoint</code>, <code>advance_recorded</code>)</td>
+</tr><tr><td>
+<code>sweep.hpp</code>, <code>ode_steady_state.hpp</code>
+</td>
+<td>range helpers for a consumer driving a sweep itself; Newton to a fixed point with implicit-function-theorem sensitivity</td>
+</tr><tr><td>
+<code>rcpp_interface_helpers.hpp</code>, <code>solver_interface.hpp</code>
+</td>
+<td>the two headers that need R: <code>Solver_*_impl</code> behind the R bindings, including <code>Solver_fit_impl</code>
+</td>
+</tr></tbody></table><p>Everything is C++20 (concepts). A consumer compiles with <code>CXX_STD = CXX20</code> and the two XAD defines from <code>src/Makevars</code>, <code>-DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE</code>, on every platform: the storage class of the active tape does not change the symbol’s name, so a translation unit built without them reaches the same tape through the other storage class.</p>
+</div>
 <div class="section level2">
 <h2 id="why-there-is-compiled-code-at-all">Why there is compiled code at all<a class="anchor" aria-label="anchor" href="#why-there-is-compiled-code-at-all"></a></h2>
 <p>odelia is <em>almost</em> header-only — the ODE <code>Solver</code>, interpolator, and ODE interface are templates that compile into whichever package includes them. The exception is the <strong>XAD automatic-differentiation <code>Tape</code> runtime</strong>:</p>
@@ -80,19 +143,20 @@
 <td>✅ works (consumer <code>Makevars.win</code>, below)</td>
 </tr></tbody></table><p>On Windows the runtime global-load (step 1) cannot satisfy the linker, so the consumer links <code>plant.dll</code> directly against odelia’s one compiled <code>odelia.dll</code> — which exports the XAD <code>Tape</code> runtime (mingw exports all global symbols by default). This keeps exactly <strong>one</strong> copy of <code>Tape</code> / <code>active_tape_</code> in the process (the same single-definition guarantee macOS/Linux get at load time), so it is consistent with the invariant above. The consumer adds a Windows-only <code>src/Makevars.win</code>:</p>
 <pre class="make"><code>CXX_STD = CXX20
-PKG_CPPFLAGS = -isystem../inst/include/
+## The two XAD defines must match odelia's src/Makevars on every platform.
+PKG_CPPFLAGS = -isystem../inst/include/ -DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE
 ## odelia's DLL is at &lt;odelia&gt;/libs/&lt;arch&gt;/odelia.dll. Resolve the base libs dir
 ## in R, then append R's $(R_ARCH) make-variable (e.g. /x64). Do the arch in make
 ## -- putting $r_arch inside the Rscript -e quotes lets the shell expand it away.
 ODELIA_LIBDIR = $(shell "${R_HOME}/bin/Rscript" -e "cat(system.file('libs', package='odelia'))")
 PKG_LIBS = "$(ODELIA_LIBDIR)$(R_ARCH)/odelia.dll"</code></pre>
-<p>(plant uses exactly this; verified green on <code>windows-latest</code> R-CMD-check.) odelia must therefore keep <strong>exporting</strong> these symbols from its DLL — do not add a restrictive <code>.def</code> or <code>-Wl,--exclude-all-symbols</code> to odelia’s build.</p>
+<p>(plant uses this; verified green on <code>windows-latest</code> R-CMD-check.) odelia must therefore keep <strong>exporting</strong> these symbols from its DLL — do not add a restrictive <code>.def</code> or <code>-Wl,--exclude-all-symbols</code> to odelia’s build.</p>
 </div>
 <div class="section level2">
 <h2 id="a-right-hand-side-handed-in-at-run-time">A right-hand side handed in at run time<a class="anchor" aria-label="anchor" href="#a-right-hand-side-handed-in-at-run-time"></a></h2>
 <p><code>ode_callback_system.hpp</code> holds <code>CallbackSystem</code>, a System whose right-hand side (and optionally Jacobian and validity predicate) are <code>std::function</code>s handed in at construction, so a callable from any language is stepped by the same solver as a compiled system. It is part of the R-free core and is exercised as plain C++ in <code>tests/standalone/</code>; the R adapter in <code>src/r_system.h</code> is a few lines that wrap <code>Rcpp::Function</code>s, and a Python binding would be the same lines over a <code>py::function</code>. Two contracts the adapter relies on and the core keeps: evaluation is lazy (setting the state makes no call; reading the rates does), and the last call of an accepted step is at the accepted state.</p>
-<p>The implicit stepper takes its Jacobian from a System’s own <code>ode_jacobian()</code> hook when there is one, else by forward-mode AD on a <code>rebind()</code>-able system (<code>ode_jacobian.hpp</code>); <code>fd_jacobian()</code> there is the one-line finite-difference body for a hook. A system declaring <code>ode_autonomous()</code> is not asked for a <code>df/dt</code> term.</p>
-<p><code>ode_steady_state.hpp</code> reuses that Jacobian and the dense LU away from the stepper: <code>SteadyState&lt;System&gt;</code> solves <code>f(y*) = 0</code> by damped Newton, reads the fixed point’s stability off the eigenvalues of <code>df/dy</code> (<code>ode_linalg.hpp</code>, Hessenberg reduction then Francis QR), and takes the parameter sensitivity <code>dy*/dθ = −(df/dy)⁻¹ (df/dθ)</code> from the same factorisation. <code>df/dθ</code> is the same forward sweep as <code>df/dy</code> with the seed on a parameter instead of a state component; which parameters is the System’s <code>ad_parameters()</code> hook, a vector of pointers to them in a fixed order, which the rates must read live (a quantity cached from a parameter at construction carries no tangent and yields a zero column; <code>check_parameters()</code> detects that through <code>rebind()</code>). Newton finds any root, attracting or not; <code>solve_with_warmup()</code> integrates the transient when the root it finds is not attracting. Endpoint-only and tape-free by design: the transient is never differentiated, <code><a href="https://rdrr.io/r/base/solve.html" class="external-link">solve()</a></code> refuses an active scalar type, and a consumer that needs <code>y*</code> on its own adjoint tape attaches the sensitivity rows as a supplied derivative rather than taping the Newton iteration. The callback System reaches the same Newton through its Jacobian hook, which is how <code><a href="reference/ode_steady_state.html">ode_steady_state()</a></code> serves an R right-hand side (<code>src/r_steady_state_interface.cpp</code>); its parameter sensitivity is a finite difference through <code>func</code> done in R, since nothing differentiates R code.</p>
+<p>The implicit stepper takes its Jacobian from a System’s own <code>ode_jacobian()</code> hook when there is one, else by forward-mode AD on a <code>rebind_from()</code>-able system (<code>ode_jacobian.hpp</code>); <code>fd_jacobian()</code> there is the one-line finite-difference body for a hook. A system declaring <code>ode_autonomous()</code> is not asked for a <code>df/dt</code> term.</p>
+<p><code>ode_steady_state.hpp</code> reuses that Jacobian and the dense LU away from the stepper: <code>SteadyState&lt;System&gt;</code> solves <code>f(y*) = 0</code> by damped Newton, reads the fixed point’s stability off the eigenvalues of <code>df/dy</code> (<code>ode_linalg.hpp</code>, Hessenberg reduction then Francis QR), and takes the parameter sensitivity <code>dy*/dθ = −(df/dy)⁻¹ (df/dθ)</code> from the same factorisation. <code>df/dθ</code> is the same forward sweep as <code>df/dy</code> with the seed on a parameter instead of a state component; which parameters is the System’s <code>ad_parameters()</code> hook, a vector of pointers to them in a fixed order, which the rates must read live (a quantity cached from a parameter at construction carries no tangent and yields a zero column; <code>check_parameters()</code> detects that through <code>rebind_from()</code>). Newton finds any root, attracting or not; <code>solve_with_warmup()</code> integrates the transient when the root it finds is not attracting. Endpoint-only and tape-free by design: the transient is never differentiated, <code><a href="https://rdrr.io/r/base/solve.html" class="external-link">solve()</a></code> refuses an active scalar type, and a consumer that needs <code>y*</code> on its own adjoint tape attaches the sensitivity rows as a supplied derivative rather than taping the Newton iteration. The callback System reaches the same Newton through its Jacobian hook, which is how <code><a href="reference/ode_steady_state.html">ode_steady_state()</a></code> serves an R right-hand side (<code>src/r_steady_state_interface.cpp</code>); its parameter sensitivity is a finite difference through <code>func</code> done in R, since nothing differentiates R code.</p>
 <p><code>ode_step_dopri.hpp</code> is a third stepper, Dormand-Prince 5(4), whose value over Cash-Karp is a free continuous extension of order 4: <code>SolverInternal::interpolate</code> reads the state anywhere inside the last accepted step from the step’s own stages, and <code>Solver::advance_collect(times, dense = true)</code> uses it to report at requested times without making a step end on each. Under the other steppers the interpolant is cubic Hermite on the step’s endpoints, one order short.</p>
 </div>
 <div class="section level2">
@@ -104,6 +168,7 @@ PKG_LIBS = "$(ODELIA_LIBDIR)$(R_ARCH)/odelia.dll"</code></pre>
 <div class="section level2">
 <h2 id="contract-for-linkingto-odelia-consumers">Contract for <code>LinkingTo: odelia</code> consumers<a class="anchor" aria-label="anchor" href="#contract-for-linkingto-odelia-consumers"></a></h2>
 <ul><li>Add <code>odelia</code> to <code>LinkingTo:</code> <strong>and</strong> <code>Imports:</code> in <code>DESCRIPTION</code>.</li>
+<li>Compile as C++20 with <code>-DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE</code> in <code>src/Makevars</code> (and <code>Makevars.win</code>), matching odelia’s own.</li>
 <li>Add a real NAMESPACE import from odelia (e.g. <code>@importFrom odelia odelia_load_dll</code>) so odelia’s namespace — and its global-load <code>.onLoad</code> — runs before your package’s <code>useDynLib</code>.</li>
 <li>macOS / Linux: nothing else is required (load-time resolution via the global <code>.onLoad</code> above).</li>
 <li>Windows: add a <code>src/Makevars.win</code> linking <code>plant.dll</code> against odelia’s DLL (see the snippet in the platform table above).</li>
