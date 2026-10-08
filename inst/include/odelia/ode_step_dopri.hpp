@@ -22,7 +22,7 @@
 // Matches the `Step` interface -- resize/order/step and the two traits -- so
 // SolverInternal drives it through the same adaptive loop; `dense()` is the
 // extra. Stage evaluations use the plain 4-argument derivs: no per-stage cache
-// hook, which is RKCK's business (plant's replay).
+// hook, which is RKCK's business.
 
 #include <cstddef>
 #include <vector>

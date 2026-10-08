@@ -16,21 +16,14 @@ namespace ode {
 // tangent of a tangent -- which is the only second-order scalar this family
 // uses.
 //
-// ⚠️ NEVER NEST A TANGENT ABOVE AN ADJOINT, and never fuse an expression at a
-// nested scalar. `BinaryExpr` stores its operands and its cached value BY VALUE,
-// and `value()` and `derivative()` return the scalar by value, so at an active
-// inner scalar every one of those copies is a recorded statement. Three kernels
-// that cost 31 statements at the working scalar cost 566 nested, which is 18.3
-// times as much, and the growth is SUPERLINEAR in expression depth: one fused
-// nest measured 160 statements against 99 for the same arithmetic written flat.
-// Where a nested scalar is unavoidable, flatten the expression into named
+// A tangent above an adjoint is refused. `BinaryExpr` stores its operands and
+// its cached value BY VALUE, and `value()` and `derivative()` return the scalar
+// by value, so at an active inner scalar every one of those copies is a recorded
+// statement, and the count grows faster than the expression's depth. A slope
+// wanted AT an adjoint scalar is taken through the kernel at double and handed
+// over as supplied rows -- `record_with_derivatives`, one statement whatever the
+// row count. At any nested scalar, flatten an expression into named
 // intermediates rather than fusing it into one.
-//
-// REFUSED HERE RATHER THAN DESCRIBED, because describing it did not hold: the
-// leaf's dA/dci and dC/dsigma were taken this way and cost 521 tape statements
-// against the 17 of the kernel they differentiate. A slope wanted AT an adjoint
-// scalar is taken through the kernel at double and handed over as supplied rows
-// -- `record_with_derivatives`, one statement whatever the row count.
 template <typename T>
 struct tangent_over {
   static_assert(!xad::ExprTraits<T>::isReverse,

@@ -52,7 +52,7 @@ void lu_decompose(std::vector<T>& a, size_t n, std::vector<size_t>& piv) {
       // A domain refusal, not a bug: for the implicit stepper W = I/(h*gamma) - J
       // is singular only when 1/(h*gamma) lands on an eigenvalue of J, and a
       // different step size is the right answer. The adaptive loop treats
-      // DomainError as a rejection (#55); anywhere else it propagates as the
+      // DomainError as a rejection; anywhere else it propagates as the
       // runtime_error it also is.
       util::stop_domain("Singular matrix in LU decomposition");
     }

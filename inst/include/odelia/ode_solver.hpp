@@ -161,10 +161,8 @@ public:
   }
 
   // Step over a schedule, landing on each of its times: at the recorded size
-  // where one is known, and to the time itself where it is not. Not by
-  // differencing the times, because a size differenced back out of two recorded
-  // times is not the size that was taken; and not by adding sizes, which arrives
-  // a rounding short of where the run landed.
+  // where one is known, and to the time itself where it is not. See instruction
+  // for why neither is derived from the other.
   //
   // A row marked an insertion is followed by the System's own state map, applied
   // here. A schedule that says where its insertions are is one a walk can execute
@@ -222,13 +220,11 @@ public:
   // The same walk over a RECORDING rather than a program, which is a recording
   // minus its rows. Each step is taken at the size that run took, and its stages
   // LOAD what that run solved for instead of solving again -- so a pass that must
-  // not re-decide (an invader standing in a resident's field; anything re-running
-  // the model to tape it) traverses the function the run computed rather than a
-  // second spelling of it.
+  // not re-decide (anything re-running the model to tape it) traverses the
+  // function the run computed rather than a second spelling of it.
   //
   // The row travels WITH the step, because `step_record` is the instruction plus
-  // what the step left: a program and a row-vector side by side can be paired
-  // across different runs, and one object cannot.
+  // what the step left.
   //
   // ⚠️ `rec[k].solved` is what the stages of the step that REACHED `rec[k].time`
   // solved, which is the same pairing `solve_adjoint` walks. Off by one here and
@@ -340,8 +336,8 @@ public:
 
   // The state at each of `times`, one entry per time, the first of which must
   // be the current time. With `dense` the steps are the controller's own and
-  // each requested time is read off the interpolant of the step that spans it
-  // (#24): the integration costs what it costs, however many rows are asked
+  // each requested time is read off the interpolant of the step that spans it:
+  // the integration costs what it costs, however many rows are asked
   // for, and the last time is still landed on exactly. Without it every
   // requested time is landed on, as advance_adaptive() does.
   std::vector<ode::state_type<System>> advance_collect(const std::vector<double>& times,
@@ -474,7 +470,7 @@ public:
 
     // A insertion is a row the sweep carries an adjoint ACROSS, so it cannot be one
     // the descent starts at or the one it is left standing on. Neither happens on a
-    // recording a run made -- the schedule puts every introduction at the start of
+    // recording a run made -- the schedule puts every insertion at the start of
     // an interval that then steps -- and both are checked here rather than at each
     // be_at_step, because the width this leaves the System at is a promise and the
     // call that restores it cannot raise.
@@ -483,11 +479,11 @@ public:
                  "nothing stepped away from the state it made");
     }
 
-    // ⚠️ THE WIDTH ON EXIT IS A PROMISE, AND A THROW IS AN EXIT. The descent starts
-    // at the run's own width and narrows as it goes, so a sweep abandoned high up
-    // leaves the System at its widest -- where every caller's tail widens back from
-    // the lowest and reads the mismatch as a length error one call later, naming
-    // neither this walk nor what refused.
+    // The width on exit is a promise, and a throw is an exit, so a destructor
+    // keeps it. The descent starts at the run's own width and narrows as it goes,
+    // so a sweep abandoned high up leaves the System at its widest -- where every
+    // caller's tail widens back from the lowest and reads the mismatch as a length
+    // error one call later, naming neither this walk nor what refused.
     //
     // The solver's own buffers are re-seeded from the System at the same time:
     // a sweep sizes the stage buffers to each range it walks, so after a range
@@ -641,11 +637,11 @@ private:
     }
     // ⚠️ THE DESCENT STOPS AT THE FIRST NON-FINITE ENTRY, and must not be changed
     // to carry it. This hands its caller one number per input, so an overflow the
-    // descent picked up three thousand steps ago would arrive indistinguishable
+    // descent picked up thousands of steps earlier would arrive indistinguishable
     // from a NaN the last step made -- and a caller polling for a declared
     // refusal would find none, which is the one failure this gradient must never
-    // produce. Raised as AdjointRangeError, which the consumer turns into a
-    // refusal of every metric.
+    // produce. Raised as AdjointRangeError, so a caller can tell it from any
+    // other failure.
     //
     // ODELIA_ADJOINT_TRACE=steps prints the magnitude at every step, which is
     // what says whether the descent compounded into the failure or met it. One

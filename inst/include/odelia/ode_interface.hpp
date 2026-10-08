@@ -35,14 +35,12 @@ using state_type = std::vector<typename System::value_type>;
 // have. T is a parameter so the layer can sit on another active scalar; at the default
 // it sits on double, which is the scalar an ordinary solve is differentiated from.
 //
-// ⚠️ DO NOT WIDEN THIS TO CARRY SEVERAL SEEDS AT ONCE. `xad::adj` takes a second,
-// defaulted template argument for the derivative width, so `xad::adj<T, 3>` would
-// sweep three metrics in one walk and is one line to write. It does not pay:
-// widening triples the bytes the derivative array occupies, and the cache gives
-// back more than the shared traversal saves. Measured at width three, from 1.15x
-// SLOWER to 0.97x, decided only by whether the array still fits; width four is
-// slower than four separate walks everywhere. Every width agrees bit for bit, so
-// what is ruled out is the cost and never the answer.
+// One derivative per slot, deliberately. `xad::adj` takes a second, defaulted
+// template argument for the derivative width, so `xad::adj<T, 3>` would sweep
+// three seeds in one walk. It does not pay: widening multiplies the bytes the
+// derivative array occupies, and the cache gives back more than the shared
+// traversal saves. Every width agrees bit for bit, so what is ruled out is the
+// cost and never the answer.
 template <typename T = double>
 using active_scalar = typename xad::adj<T>::active_type;
 
@@ -60,8 +58,9 @@ using adjoint_tape = typename active_scalar<T>::tape_type;
 // derivative -- which is the judgment that makes forgetting one likely.
 //
 // The skip is what carries a passive member: the visitor takes the active scalar,
-// so a double or a bool matches no arm at all and this leaves it alone. FF16 and K93 lean on the same thing one level up -- they hold double
-// only, declare no for_each_active, and this walks past them.
+// so a double or a bool matches no arm at all and this leaves it alone. A class
+// holding doubles only declares no for_each_active, and is walked past the same
+// way.
 //
 // ⚠️ A MEMBER IN A SHAPE NOT LISTED HERE IS SKIPPED, NOT REFUSED. An active scalar
 // inside something this does not open is passed over in silence, and the count a
@@ -71,17 +70,13 @@ using adjoint_tape = typename active_scalar<T>::tape_type;
 // active_system::release, which counts the slots the walk did not reach.
 //
 // This does not open an aggregate of two scalars, so a type standing in for a
-// std::pair on a recorded path declares for_each_active -- hermite_spline
-// and value_with_slope both do, which is why value_with_slope lives here rather than in a
-// model: the obligation is this library's.
+// std::pair on a recorded path declares for_each_active, as hermite_spline and
+// value_with_slope do.
 template <class F, class T>
 void visit_active(F& f, T& x) {
-  // ⚠️ A TYPE THAT DECLARES for_each_active AND CANNOT BE WALKED CONST IS A
-  // SILENT ZERO, not a compile error, because the arm below simply stops
-  // matching. The rewinding forms in implicit_node.hpp hand their inputs over
-  // const, so such a type reaches one of them and contributes no rows at all.
-  // Refused here instead: give the type a const overload beside its non-const
-  // one, as value_with_slope and hermite_spline do.
+  // A type that declares for_each_active but cannot be walked const would stop
+  // matching the first arm and fall through in silence, and the rewinding forms
+  // in implicit_node.hpp hand their inputs over const.
   static_assert(
       !(std::is_const_v<T> &&
         requires(std::remove_const_t<T>& mutable_x) { mutable_x.for_each_active(f); } &&
@@ -210,10 +205,12 @@ concept SolvesForValues =
 // the controller chooses where that is NaN. A insertion applies the System's own
 // state map and reaches the time it started at, taking none.
 //
-// Time and size are one object because a replay adding sizes does not land where
-// the run landed -- a run sets its last step into an interval to the interval's end
-// rather than adding to it, and fl(t + (t1 - t)) is not t1. Two vectors side by
-// side can also be paired across different runs; one cannot.
+// Time and size are both kept because neither can be recovered from the other. A
+// size differenced back out of two times is not the size that was taken, since
+// fl(fl(t + h) - t) is not h; and a time reached by adding sizes is not where the
+// run landed, since a run sets its last step into an interval to the interval's
+// end and fl(t + (t1 - t)) is not t1. They are one object because two vectors side
+// by side can be paired across different runs; one cannot.
 //
 // A NaN size is a time with no size known, which is a grid point rather than a
 // recorded step: step TO it. So one type covers a grid a caller chose and a program
@@ -231,35 +228,27 @@ struct instruction {
 
 // One row of a recording: the instruction the run executed and the state it left
 // the System holding. A recording row IS a program row plus its state, so it
-// derives rather than repeating the two fields -- written out separately, they
-// were two structs differing by one member, and pairing a time from one container
-// with a state from another was a thing that compiled.
+// derives rather than repeating the two fields, and a time cannot be paired with a
+// state from another container.
 //
 // A insertion is a row like any other, and its state is what the map produced. So
 // no row carries two states and nothing has to choose between them. A insertion row
 // shares its time with the row below it, which is the row that holds the state the
 // map ran on.
-// A run of n steps on a state of width w holds n rows of w scalars and six
-// solved values, and nothing else: stage rates and stage states are recomputed
-// by the sweep, six rate evaluations a step, which is cheaper than holding them.
+// A run of n steps on a state of width w holds n rows of w scalars and one row of
+// solved values each, and nothing else: stage rates and stage states are
+// recomputed by the sweep, which is cheaper than holding them.
 template <typename System>
 struct step_record : instruction {
   state_type<System> state;
 
-  // What this step's six rate evaluations solved for, in order: its five stages,
-  // then the evaluation at the state it ends at, which first-same-as-last hands
-  // the next step as its own first rates.
-  //
-  // A SWEEP reads only the first five -- it re-derives the sixth at the state it
-  // was handed -- which is what makes "a walk cannot trust the first stage of a
-  // recording it jumped into" structural instead of a warning. A FORWARD REPLAY
-  // reads all six, because re-deriving is the thing it is replaying to avoid and
-  // a step whose k1 was re-derived is wrong at first order in h.
+  // What this step's rate evaluations solved for, in the stepper's order; see
+  // Step::solved_row for what the six entries are and which pass reads which.
   std::array<solved_values_t<System>, 6> solved;
 
   // A pinned step that was refused and crossed its interval in several sub-steps.
   // The row still holds the interval, which is what a replay of the caller's times
-  // needs, but its six solved values are the LAST sub-step's and one Runge-Kutta
+  // needs, but its solved values are the LAST sub-step's and one Runge-Kutta
   // step of the interval is not the step the run took. A sweep or a replay of
   // such a row would be wrong at every entry with every number finite, so both
   // refuse it.
@@ -334,7 +323,7 @@ bool state_valid(const System& system, const StateType& y) {
   }
 }
 
-// Opt-in declaration that the right-hand side does not depend on time (#62). A
+// Opt-in declaration that the right-hand side does not depend on time. A
 // system may declare
 //
 //   bool ode_autonomous() const;
@@ -344,7 +333,7 @@ bool state_valid(const System& system, const StateType& y) {
 // step. A runtime member rather than a compile-time trait so that one class can
 // carry systems of either kind -- the callback system is one class with a flag.
 // Systems that do not declare it are treated as time-dependent, which is the
-// safe reading and costs them exactly what they paid before.
+// safe reading.
 template <typename System>
 class has_autonomous {
   typedef char true_type;
@@ -603,10 +592,9 @@ void be_at_step(System& system, std::span<const step_record<System>> rec,
 // back the state it produced: the insertion as a map, so it runs at any scalar
 // and a sweep can transpose it.
 //
-// ⚠️ THE SYSTEM IS LEFT HOLDING THAT WIDER STATE, and no version of this leaves a
-// widening System where it was: pushing the nodes is how the state is computed. So
-// a walk rebinds again below this rather than sweeping the width below on what this
-// ran on.
+// The System is left holding that wider state -- applying the map is how the state
+// is computed -- so a walk rebinds again below this rather than sweeping the width
+// below on what this ran on.
 //
 // A System whose width never changes inserts nothing, so the state passes
 // through. That is not a fallback for a System that forgot to declare one -- it

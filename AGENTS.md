@@ -99,9 +99,10 @@ which `Solver::solve_adjoint` asserts -- so a System that does not satisfy one f
 to compile naming the requirement it missed. Read those rather than any prose
 account: a prose copy of a compiler-checked contract drifts. The two members a
 widening System adds (`apply_insertion`) and a System solving inside a stage adds
-(`solved_values`) are documented beside the concepts. The comment standard above
-is met by the gradient headers; the older solver headers still carry issue
-numbers and history, which may be removed as they are touched. Don't hand-edit
+(`solved_values`) are documented beside the concepts. Every header in
+`inst/include/odelia/` meets the comment standard above; keep it that way, and
+state an invariant once, at its owning definition, referring to it by name
+elsewhere. Don't hand-edit
 generated files (`R/RcppExports.R`, `src/RcppExports.cpp`, `NAMESPACE`, `man/`).
 
 ## Plant family

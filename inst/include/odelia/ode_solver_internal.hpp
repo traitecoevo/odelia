@@ -179,7 +179,7 @@ public:
   // this rather than guessing from where the error came from.
   bool mid_step() const { return in_step; }
 
-  // Dense output (#24): the state at any t inside the last accepted adaptive
+  // Dense output: the state at any t inside the last accepted adaptive
   // step, at no further evaluation. Under Dormand-Prince it is the method's
   // own order-4 continuous extension, from the step's stages, with an error of
   // the step's own order. Under the other steppers it is cubic Hermite on the
@@ -233,8 +233,7 @@ private:
       } else {
         // RODAS is unavailable for this System: it has neither an
         // ode_jacobian() hook nor a rebind_from() hook for the AD Jacobian, or its
-        // scalar type is itself active (nested tangent-over-adjoint is not yet
-        // wired up -- see issue #36).
+        // scalar type is itself active.
         util::stop("method='rodas' is not available for this system/scalar type "
                    "(needs an ode_jacobian() hook, or a rebind_from() hook with a "
                    "non-active scalar); use method='rkck'.");
@@ -295,26 +294,19 @@ private:
 
   double time;     // Current time
   double time_max; // Time we will not go past
-  // Each accepted step: the time it reached and the size it took. The size is
-  // recorded rather than recovered from successive times because
-  // fl(fl(t + h) - t) != h -- the addition rounds away bits of h that the
-  // subtraction cannot return, so a replay that differences the times takes
-  // different steps from the run it replays.
-  // One entry per accepted step, the first being the state the run started from,
+  // Each accepted step: the time it reached and the size it took, both recorded
+  // (see instruction). One entry per accepted step, the first being the state the run started from,
   // which no step reached and which therefore has no size.
   //
   // The state is kept BESIDE the size that reached it because the two are one
-  // record. Where they live in separate stores a walk can pair a state with a size
-  // from a different run, and nothing says so -- so the store that held the states
-  // had to be emptied as it was read, and every consumer after the first repeated
-  // the whole run to refill it.
+  // record: in separate stores a walk could pair a state with a size from a
+  // different run, and nothing would say so.
   std::vector<step_record<System>> prev_steps;
   // What every run keeps, recording or not: the time each step reached, the
   // size that reached it, and where the state widened. Separate from the
   // records so a run that is only integrating stores 24 bytes a step rather
-  // than a record with a state and a row of solved values: growing the full
-  // record on every step measured ~5% of a Lorenz solve. The two
-  // are written together, row for row, and recording() refuses if they differ.
+  // than a record with a state and a row of solved values. The two are written
+  // together, row for row, and recording() refuses if they differ.
   std::vector<instruction> prev_schedule;
   // Whether to keep the states. The caller's: a run whose gradient will be taken
   // needs them and a run that is only integrating does not. The same flag decides
@@ -333,8 +325,6 @@ private:
   bool dydt_in_is_clean;
 };
 
-// NOTE I'm setting the initial system size to 0 here, but some
-// systems are self-initialising.
 template <class System>
 SolverInternal<System>::SolverInternal(System &system, OdeControl control_,
                                        Method method_)
@@ -448,7 +438,7 @@ void SolverInternal<System>::advance_adaptive(System &system, double time_max_)
 // NOTE: We take a vector of times {t_0, t_1, ...}.  This vector
 // *must* contain a starting time, but can otherwise be empty.  We
 // will step exactly to t_1, then to t_2 up to the end point.  No step
-// size adjustments will be done.  This is used in the SCM.
+// size adjustments will be done.
 //
 // NOTE: Careful here: exact floating point comparison in determining
 // that we're starting from the right place.  However, because we take
@@ -561,11 +551,10 @@ void SolverInternal<System>::step(System& system) {
 
     // Beyond being inaccurate, a step can be *invalid* in two ways, and both are
     // rejections rather than failures: y_orig is right here, and a smaller step
-    // usually lands inside the domain (#55).
+    // usually lands inside the domain.
     //
-    //   1. A stage throws util::DomainError. This is how a model normally reports
-    //      an out-of-domain state, and until now such a throw escaped this
-    //      function and killed the whole solve.
+    //   1. A stage throws util::DomainError, which is how a model reports an
+    //      out-of-domain state.
     //   2. The completed step lands on a state the system's optional
     //      ode_state_valid() refuses.
     //
@@ -615,15 +604,12 @@ void SolverInternal<System>::step(System& system) {
           // Put the system back on the restored state explicitly. After a caught
           // DomainError it is left holding whichever intermediate stage threw, and
           // if the retry goes on to raise at the minimum step size we would exit
-          // with the system and y disagreeing -- the pattern behind the stale-state
-          // bugs (plant#585, plant#589).
+          // with the system and y disagreeing.
           //
           // Deliberately not done on an accuracy rejection: there the system sits
-          // on the completed step's final state, the retry's stage 2 overwrites it
-          // before anything reads it, and that has always been the behaviour. Doing
-          // it unconditionally would add a state-set -- for plant, an environment
-          // rebuild -- to every rejected step, for systems that gain nothing from
-          // this feature.
+          // on the completed step's final state and the retry's stage 2 overwrites
+          // it before anything reads it, so a state-set -- which can be costly for
+          // a System -- would buy nothing.
           internal::set_ode_state(system, y, time);
         }
       } else {
@@ -666,7 +652,7 @@ void SolverInternal<System>::step(System& system) {
 
 // One adaptive step that will not pass time_max_: the single-step form of
 // advance_adaptive(), for a caller that drives the integration itself and may
-// change the state between steps (#62). An infinite time_max_ removes the bound,
+// change the state between steps. An infinite time_max_ removes the bound,
 // which is what a solver has after reset(). Stepping from time_max_ itself is
 // refused: a zero-length step is not a step, and the implicit stepper divides by
 // h.
@@ -687,21 +673,14 @@ void SolverInternal<System>::step(System& system, double time_max_) {
 // integration error says.  This is used by advance_fixed
 //
 // The step is not error-controlled, but it can still be *invalid*, in the two
-// ways #55 defines: a stage throws util::DomainError, or the completed step lands
-// on a state ode_state_valid() refuses. step() answers either by rejecting the
-// step and retrying it smaller. Here the endpoint is given by the caller and
-// cannot be moved, so the interval is subdivided instead -- shrink the sub-step
-// and walk to the same endpoint in several. The endpoint is still hit exactly, so
-// the times the caller records are unchanged, and an interval that raises neither
-// objection takes exactly one step, as before.
-//
-// Without this, the rejection added in #55 was reachable only from the adaptive
-// path: advance_fixed called the stepper bare, so the first throw killed the
-// solve. That made a whole class of run impossible rather than slow -- plant's
-// mutant replay pins the stepper to a resident's recorded times, and its TF24
-// model throws here as a matter of routine (~480 rejections in a resident run
-// that goes on to complete), so a replay was near-certain to meet one
-// (plant#642).
+// ways step() refuses one: a stage throws util::DomainError, or the completed
+// step lands on a state ode_state_valid() refuses. step() answers either by
+// rejecting the step and retrying it smaller. Here the endpoint is given by the
+// caller and cannot be moved, so the interval is subdivided instead -- shrink the
+// sub-step and walk to the same endpoint in several. The endpoint is still hit
+// exactly, so the times the caller records are unchanged, and an interval that
+// raises neither objection takes exactly one step. Without it, a pinned run of a
+// System that refuses states routinely could not complete.
 //
 // A subdivided interval is still one row of the record, holding the last
 // sub-step's solved values, and the row says so (step_record::subdivided): a
@@ -728,8 +707,7 @@ void SolverInternal<System>::step_to(System& system, double time_max_) {
   while (true) {
     // Take the endpoint from time_max rather than accumulating sub_step_size,
     // so the caller's time is reproduced bit-for-bit however the interval was
-    // cut. A zero-length interval lands here immediately and steps once, as
-    // before.
+    // cut. A zero-length interval lands here immediately and steps once.
     const bool final_sub_step = !(time + sub_step_size < time_max);
     const double time_next = final_sub_step ? time_max : time + sub_step_size;
 
@@ -743,10 +721,9 @@ void SolverInternal<System>::step_to(System& system, double time_max_) {
       invalid = true;
       invalid_reason = e.what();
     }
-    // The other half of the #55 contract. Both ways of refusing a state apply
-    // here for the same reason they apply on the adaptive path; honouring only
-    // the throw would leave the predicate silently unenforced whenever the
-    // integration happens to be pinned.
+    // Both ways of refusing a state apply here, as on the adaptive path;
+    // honouring only the throw would leave the predicate silently unenforced
+    // whenever the integration happens to be pinned.
     if (!invalid && !state_valid(system, y)) {
       invalid = true;
       invalid_reason = "ode_state_valid() refused the state after the step";
@@ -764,8 +741,7 @@ void SolverInternal<System>::step_to(System& system, double time_max_) {
 
     // Undo the failed sub-step. The system is left holding whichever stage threw,
     // so put it back on the restored state explicitly -- otherwise a give-up below
-    // would exit with the system and y disagreeing, the pattern behind the
-    // stale-state bugs (plant#585, plant#589).
+    // would exit with the system and y disagreeing.
     y = y_orig;
     internal::set_ode_state(system, y, time);
 
@@ -812,9 +788,7 @@ void SolverInternal<System>::step_by(System& system, double step_size,
   save_dydt_out_as_in();
 
   // The time the run reached, where a recording says what it was, rather than
-  // this time plus this size. A run does not accumulate either: its last step
-  // into an interval is set to the interval's end, and fl(t + (t1 - t)) is not
-  // t1 -- so a replay that adds arrives a bit short and has to be nudged.
+  // this time plus this size (see instruction).
   time = util::is_finite(reached) ? reached : time + step_size;
   time_max = time;
   push_step(system, time, step_size);
@@ -864,12 +838,9 @@ void SolverInternal<System>::resize(size_t size_) {
   dydt_in.resize(size_);
   dydt_out.resize(size_);
   // Only the stepper that will run. `method` is fixed at construction and there
-  // is no setter, so the others' scratch is never read.
-  //
-  // ⚠️ THE ROSENBROCK SCRATCH IS TWO size x size MATRICES. At a stand's width
-  // that is tens of megabytes zeroed per call, and a sweep calls this once per
-  // recorded step -- so sizing a stepper no explicit run reaches was the largest
-  // single fill in the gradient's profile.
+  // is no setter, so the others' scratch is never read -- and the Rosenbrock
+  // scratch is two size x size matrices, which a sweep would otherwise zero once
+  // per recorded step.
   if (method == Method::rodas) {
     rodas_stepper.resize(size_);
   } else if (method == Method::dopri) {

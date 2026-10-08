@@ -6,7 +6,7 @@
 // R: `stop` throws a std::runtime_error, which Rcpp converts into an ordinary R
 // error at the package boundary, and `warning` writes to std::cerr. That is what
 // lets consumers of inst/include/ compile and run as plain C++ with no R
-// installation at all (traitecoevo/leaf_cpp#11). R belongs in src/ and in the
+// installation at all. R belongs in src/ and in the
 // interface headers -- solver_interface.hpp, rcpp_interface_helpers.hpp -- not
 // here.
 
@@ -27,21 +27,17 @@ inline bool is_finite(double x) {
   return std::isfinite(x);
 }
 
-// Strip every AD layer off a value, down to the plain double. xad::value() peels
-// one layer, which is enough for AReal<double> or FReal<double> but not for a
-// nested FReal<AReal<double>>, where it yields AReal<double>; this recurses until
-// it bottoms out at double. `value` is found by argument-dependent lookup at the
-// point of use, so this header needs no XAD include.
-// The value of an active scalar with every derivative layer removed.
+// The value of an active scalar with every derivative layer removed, down to the
+// plain double. xad::value() peels one layer; this recurses until it bottoms out
+// at double. `value` is found by argument-dependent lookup at the point of use,
+// so this header needs no XAD include.
 //
-// ⚠️ EVERY LAYER, NOT ONE. At a nested scalar -- a tangent above a tangent, which
-// is how a curvature is taken, since tangent.hpp refuses a tangent above an
-// adjoint -- this strips the inner direction as well as the outer, and it does so
-// silently because the result is a plain double either way.
-// The correction `x - to_passive(x)` that `implicit_node.hpp` records is therefore
-// zero in value at one layer and zero in EVERY derivative at two. Measured on a
-// mixed second derivative: exactly 0.0 against a differenced 2.97e-03. A second
-// derivative that needs this has to strip one layer by hand.
+// ⚠️ EVERY LAYER, NOT ONE. At a nested scalar -- a tangent above a tangent -- this
+// strips the inner direction as well as the outer, and it does so silently
+// because the result is a plain double either way. The correction
+// `x - to_passive(x)` that `implicit_node.hpp` records is therefore zero in value
+// at one layer and zero in EVERY derivative at two. A second derivative that
+// needs this has to strip one layer by hand.
 inline double to_passive(double x) { return x; }
 template <typename T>
 inline double to_passive(const T& x) { return to_passive(value(x)); }
@@ -52,7 +48,7 @@ inline double to_passive(const T& x) { return to_passive(value(x)); }
   throw std::runtime_error(msg);
 }
 
-// A state outside the system's valid domain, as distinct from a bug (#55).
+// A state outside the system's valid domain, as distinct from a bug.
 //
 // The adaptive stepper catches *this type specifically* and treats it as a step
 // rejection -- shrink and retry -- rather than letting it end the solve. Anything
@@ -80,16 +76,13 @@ struct DomainError : std::runtime_error {
 // An adjoint that left the range a double can hold: neither a bug nor a state the
 // model has no meaning for, and so neither of the two above.
 //
-// ⚠️ A SWEEP IS A PRODUCT OF STEP JACOBIANS AND HAS NO ERROR CONTROL. It can pass
-// far outside the range of the answer it returns and come back: measured on a
-// stand whose gradient is order 1e+03, the descent reaches 4.99978e+281 and is
-// back to 3.69e+46 one range later. So a driver that answers does so with margin
-// rather than by staying small, and one that does not overflows on an
-// INTERMEDIATE while every number it computes is right.
+// A sweep is a product of step Jacobians and has no error control, so it can pass
+// far outside the range of the answer it returns and come back. One that does not
+// come back overflows on an INTERMEDIATE while every number it computes is right.
 //
-// Its own type because the consumer's answer is a REFUSAL of every metric --
-// what overflowed is an intermediate of one recording spanning every cohort, so
-// nothing finer has a component to attribute it to. A consumer catching
+// Its own type because the right answer to it is a refusal of the whole result:
+// what overflowed is an intermediate of a recording spanning the whole state, so
+// nothing finer has a component to attribute it to. A caller catching
 // runtime_error broadly would read a genuine length mismatch in the sweep the
 // same way, which is the distinction DomainError above exists to keep.
 struct AdjointRangeError : std::runtime_error {
@@ -114,8 +107,7 @@ inline void warning(const std::string &msg) {
 // A double in an error message. std::to_string is fixed-point with six decimals,
 // so it renders a flux of 1e-22 as "0.000000" and a domain endpoint of 1e8 with
 // eight useless digits -- in both cases erasing the number the reader needed.
-// Six significant figures, matching plant's util::format_double so the family
-// renders numbers the same way; enough to identify a value, and short enough that
+// Six significant figures: enough to identify a value, and short enough that
 // 6.8918 does not arrive as 6.8917999999999999. Deliberately NOT round-trip
 // precision: these strings are for reading, not for reconstructing a double.
 inline std::string format_double(double x) {

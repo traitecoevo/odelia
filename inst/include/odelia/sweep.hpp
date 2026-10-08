@@ -69,10 +69,8 @@ double state_at_range(System& system,
 // at the beginning names row 0, and neither has to say which of them still owes a
 // state map.
 //
-// The step sizes are replayed rather than the times: a size differenced back out
-// of two recorded times is not the size that was taken, since fl(fl(t + h) - t)
-// is not h, and a walk that chose its own would be differentiating a controller
-// the model does not contain.
+// The step sizes are replayed as recorded (see instruction): a walk that chose its
+// own would be differentiating a controller the model does not contain.
 template <class Record>
 std::vector<instruction> program_from(std::span<const Record> rec,
                                       std::size_t first, instruction head) {

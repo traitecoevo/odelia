@@ -3,7 +3,7 @@
 #define ODELIA_ODE_STEADY_STATE_HPP_
 
 // Steady-state solve + implicit-function-theorem parameter sensitivity for an
-// autonomous System (issue #39, "Case B" of #36).
+// autonomous System.
 //
 // For a System whose right-hand side is f(y; theta), this:
 //   1. Solves the equilibrium  f(y*, theta) = 0  by damped Newton's method,
@@ -21,7 +21,7 @@
 // transient, and no nested AD. Everything runs at a passive scalar type; the
 // Jacobians use one tape-free forward-mode layer internally. The sensitivity
 // comes back as plain rows, so a caller whose own model sits on an adjoint tape
-// attaches them to y* as a supplied derivative (#59, implicit_node.hpp) rather
+// attaches them to y* as a supplied derivative (implicit_node.hpp) rather
 // than taping the Newton iteration, which is why solve() refuses an active
 // scalar type outright. An optional warm-start integrates the transient to
 // reach the attracting basin before Newton.
@@ -127,7 +127,7 @@ public:
 
         // Newton direction: solve (df/dy) dy = -f, factoring df/dy afresh. `f`
         // is f(y) already in hand, which a hook (finite differences) can reuse.
-        // A singular df/dy at the iterate is a refusal (#55) from the LU; here
+        // A singular df/dy at the iterate is a refusal from the LU; here
         // it means Newton cannot proceed from this point, so the solve stops
         // unconverged and a warm start (below) can take over.
         jac.compute(system, y, t_eval, f, J);

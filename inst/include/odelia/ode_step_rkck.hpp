@@ -18,22 +18,23 @@ public:
   using value_type = typename System::value_type;
   using state_type = std::vector<value_type>;
   
-  // What one step's SIX rate evaluations solve for. One name, because the forward
-  // walk, the sweep and the record all have to agree on the shape.
+  // What one step's rate evaluations solve for. One name, because the forward
+  // walk, the sweep and the record (step_record::solved) all have to agree on the
+  // shape.
   //
-  // ⚠️ SIX AND NOT FIVE, and the sixth is the one to understand. Five of them are
-  // the stages; the sixth is the evaluation at the state the step ends at, which
-  // first-same-as-last hands the next step as its own k1. A SWEEP re-derives that
-  // one at the state it was handed and reads only 0..4 -- but a FORWARD replay
-  // cannot re-derive it, because re-deriving is exactly what it is replaying to
-  // avoid, and a step whose k1 was re-derived is wrong at first order in h.
+  // ⚠️ SIX AND NOT FIVE. Five are the stages; the sixth is the evaluation at the
+  // state the step ends at, which first-same-as-last hands the next step as its
+  // own k1. A SWEEP re-derives that one (see step_adjoint) and reads only 0..4 --
+  // but a FORWARD replay cannot re-derive it, because re-deriving is exactly what
+  // it is replaying to avoid, and a step whose k1 was re-derived is wrong at first
+  // order in h.
   using solved_row = std::array<solved_values_t<System>, 6>;
 
   void resize(size_t size_);
   size_t order() const;
-  // `solved` is the row this step is about to create: what its five stages and
-  // its end-of-step evaluation solve for goes in, six entries, and nothing is
-  // asked of the System about where it is.
+  // `solved` is the row this step is about to create: what its rate evaluations
+  // solve for goes in, in solved_row's order, and nothing is asked of the System
+  // about where it is.
   //
   // Or the row an earlier run already created, where a caller hands a CONST one:
   // the stages then LOAD what that run solved instead of solving again. Which of
@@ -49,11 +50,8 @@ public:
 	    state_type &dydt_out);
 
   // The step transposed, for as many seeds as are handed in: one recording of the
-  // whole step, swept once per seed. The active System is the walk's, held across
-  // every step of one width. A caller wanting one row passes a batch of
-  // one; there is no separate entry point for that, because a second signature
-  // over the same recording is a second place for the seam between the state and
-  // the parameter halves to be got wrong.
+  // whole step, swept once per seed (see adjoint_rows). The active System is the
+  // walk's, held across every step of one width.
   void step_adjoint(active_system<System>& active,
                     const solved_row& solved,
                     double time, double step_size,
@@ -147,8 +145,8 @@ void Step<System>::step(System& system,
   const double h = step_size;
 
   // First-same-as-last: k1 is the previous step's dydt_out, so the step costs five
-  // rate evaluations and one more to hand the next step its own k1 -- which is why
-  // that last one is addressed as the next step's stage 0.
+  // rate evaluations and a sixth at its end to hand the next step its own k1.
+  //
   // A stage's rates, handed the slot it stores what it solves for into. A System
   // that solves for nothing is handed nothing and the branch compiles away.
   auto rates_at = [&](int i, const state_type& at, state_type& into) -> void {
@@ -171,9 +169,7 @@ void Step<System>::step(System& system,
   stage_state_fixed<5>(y, k, h, ytmp); rates_at(5, ytmp, k[5]);
 
   step_end(y, k, h, y);
-  // The sixth evaluation, at the state the step ends at, which first-same-as-last
-  // hands the next step as its own first rates -- so it carries a slot of its own:
-  // see `solved_row` for why a sweep never reads it and a forward replay must.
+  // The sixth evaluation, with a slot of its own: see `solved_row`.
   if constexpr (SolvesForValues<System>) {
     ode::derivs(system, y, dydt_out, time + h, solved[5]);
   } else {
@@ -200,8 +196,7 @@ void Step<System>::step(System& system,
 // pure and inlined, so the compiler may evaluate it above stage_state's own
 // `i == 1` early return, and `rows[i - 2]` is then an out-of-bounds read of a
 // stack array at i == 1. It costs nothing to keep the index at i - 1 and one
-// entry in the table, and the version that removed them returned a wrong
-// gradient on the second of two calls.
+// entry in the table.
 template <class System>
 const double* Step<System>::stage_row(int i) const {
   const double* const rows[] = {&b21, b3, b4, b5, b6};
@@ -286,11 +281,9 @@ void Step<System>::step_end(const std::vector<S>& y,
 //
 // ONE recording spans the whole step: its six rate evaluations and the
 // combination closing them. What the sweep transposes is therefore the
-// arithmetic the stepper performs, where a recording per stage left the tableau
-// to be transposed by hand beside the stepper and held consistent with it by
-// discipline. The stage states are intermediates of the recording rather than a
-// double rebuild ahead of it, so the step costs six model evaluations and not
-// thirteen.
+// arithmetic the stepper performs, and no tableau is transposed by hand. The
+// stage states are intermediates of the recording, so the step costs six model
+// evaluations.
 //
 // The recording is derivs(), which is what the forward pass calls, so no System
 // writes a transpose of its own; and the parameters ride in the same recording,

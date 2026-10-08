@@ -2,7 +2,7 @@
 #ifndef ODELIA_ODE_CALLBACK_SYSTEM_HPP_
 #define ODELIA_ODE_CALLBACK_SYSTEM_HPP_
 
-// A System whose right-hand side is a function handed in at run time (#62),
+// A System whose right-hand side is a function handed in at run time,
 // rather than a class compiled against odelia. This is how an R closure, a
 // Python callable or a plain C++ lambda is stepped: the solver sees an ordinary
 // System, and the language binding is a few lines that wrap its callable in a
@@ -14,7 +14,7 @@
 // d f_row / d y_col, with f(t, y) handed in as `dydt` for a finite-difference
 // implementation to use; when there is none, fd_jacobian() (ode_jacobian.hpp)
 // forms it against the right-hand side at n evaluations. Optionally a
-// validity predicate over (t, y) maps to ode_state_valid() (#55). A callable
+// validity predicate over (t, y) maps to ode_state_valid(). A callable
 // that wants the current step rejected throws util::DomainError
 // (util::stop_domain); anything else it throws propagates and ends the solve,
 // which is the core's rule for telling a bug from a domain refusal.
@@ -157,7 +157,7 @@ public:
   }
 
   // A different number of unknowns from here on: the consumer's state has
-  // changed shape (regnans drops or splits residents between steps). The state
+  // changed shape (entries dropped or split between steps). The state
   // itself is set afterwards through set_ode_state(); what this does is make
   // the sizes agree so that Solver::set_state() accepts the new vector.
   void resize(size_t n) {

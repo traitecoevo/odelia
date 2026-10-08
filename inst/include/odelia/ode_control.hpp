@@ -10,28 +10,25 @@
 namespace odelia {
 namespace ode {
 
-// Which rule turns the error estimate into the next step (#64).
+// Which rule turns the error estimate into the next step.
 //
-//   gsl     GSL's "standard control", odelia's since plant: accept while the
-//           worst error ratio is below 1.1, grow (by 0.9 r^(-1/(ord+1)), at
-//           most 5x) only below 0.5, and in between keep the step as it is.
-//           The dead band means a step that lands near the edge is repeated
-//           unchanged and rejected next time, and a step sitting inside the
-//           band is never grown: nine times deSolve's rejections on Lorenz,
-//           and 19000 steps where radau takes 144 on Robertson, measured.
+//   gsl     GSL's "standard control": accept while the worst error ratio is
+//           below 1.1, grow (by 0.9 r^(-1/(ord+1)), at most 5x) only below
+//           0.5, and in between keep the step as it is. The dead band means a
+//           step that lands near the edge is repeated unchanged and rejected
+//           next time, and a step sitting inside the band is never grown, so
+//           it rejects and steps many times more than the rule below.
 //   hairer  Hairer's classical rule (dopri5.f without its Lund stabilisation
 //           term, beta = 0; deSolve's rk): the error ratio in the RMS norm
 //           over components, accept at or below 1, then rescale after every
 //           accepted step by 0.9 r^(-1/ord), clamped to [0.2, 5], so the
 //           ratio is steered to about 0.9^ord and the step tracks the
 //           solution's smoothness; no growth on the step right after a
-//           rejection. On Lorenz it does the work deSolve's ode45 does, to
-//           within a fraction of a percent of evaluations.
+//           rejection.
 //
-// The default is gsl because changing it changes every adaptive step sequence
-// plant takes; the switch is here so a consumer can opt in now and the family
-// can flip the default with plant re-baselined. Rejection of a non-finite
-// estimate (#52) and reject_step() (#55) are the same under both.
+// The default is gsl because changing it changes every existing caller's
+// adaptive step sequence. Rejection of a non-finite estimate and reject_step()
+// are the same under both.
 enum class Controller { gsl, hairer };
 
 struct OdeControl {
@@ -118,7 +115,7 @@ struct OdeControl {
       // false against everything, so it yields NaN for a = NaN -- but on the
       // next element a finite a yields that instead, *wiping* the NaN. The NaN
       // component is then never accounted for at all, and the step is accepted
-      // one of two ways (odelia#52):
+      // one of two ways:
       //
       //   (a) the NaN survives to the end of the loop (last element, or all of
       //       them): rmax stays NaN, both `rmax > 1.1` and `rmax < 0.5` are
@@ -129,9 +126,8 @@ struct OdeControl {
       //       NaN.
       //
       // The caller branches solely on step_size_shrank(), so either way the
-      // diverging step is committed. (b) is the mode coupled systems hit in
-      // practice. Breaking on the first non-finite ratio removes the positional
-      // dependence that made this so easy to miss.
+      // diverging step is committed. Breaking on the first non-finite ratio
+      // removes the dependence on position.
       //
       // Inf already rejected via `> 1.1`; folding it in costs nothing and
       // states the intent once.
@@ -150,10 +146,7 @@ struct OdeControl {
     else if (controller == Controller::hairer)
     {
       // Hairer's rule reads the error in the RMS norm, as dopri5.f and deSolve
-      // do; the max norm above is the gsl rule's. Measured on Lorenz to
-      // t = 100 at 1e-6 under Dormand-Prince: max norm 4628 steps + 659
-      // rejections, RMS 4208 + 491, the latter the same 4700 attempts and
-      // 28200 evaluations as deSolve's ode45 on the same problem.
+      // do; the max norm above is the gsl rule's.
       double ss = 0.0;
       for (size_t i = 0; i < dim; i++)
       {
@@ -247,7 +240,7 @@ struct OdeControl {
   }
 
   // Reject the current step outright: not merely inaccurate but *invalid* -- a
-  // non-finite error estimate (odelia#52), or a state the system refuses (#55).
+  // non-finite error estimate, or a state the system refuses.
   //
   // Shrink hardest (the same floor the accuracy branch clamps to) and always
   // report the shrink, even when already at step_size_min and so unable to

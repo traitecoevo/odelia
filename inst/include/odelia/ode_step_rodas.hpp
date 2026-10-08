@@ -182,8 +182,7 @@ public:
   static const bool can_use_dydt_in = true;
   // dydt_out is f(t_n + h, y_{n+1}), evaluated explicitly above at the new
   // point, which is exactly the next step's f(t_n, y_n): the solver may carry it
-  // across as dydt_in. Until #62 this was declared false and the same vector was
-  // recomputed at the start of every step.
+  // across as dydt_in.
   static const bool first_same_as_last = true;
 
 private:

@@ -41,7 +41,11 @@ namespace ode {
 // Several exist together because they share ONE recording. The recording is a model
 // evaluation and a sweep is arithmetic, so a caller wanting several rows pays one
 // recording rather than one per row -- which is the whole reason this is a set and
-// not a vector. The shape is the object's own, so a ragged set and a row of the
+// not a vector. One seed is a batch of one, and nothing takes a single seed
+// instead: a second signature over the same recording would be a second place for
+// the seam between the recording and the sweep to be got wrong.
+//
+// The shape is the object's own, so a ragged set and a row of the
 // wrong width are not things a caller can build, where a vector of vectors builds
 // both and every function on the path then has to test for them.
 //
@@ -91,7 +95,7 @@ public:
   }
 
   // A batch of one, which is how a caller wanting a single transpose row asks for
-  // it: there is no separate entry point for one seed.
+  // it.
   static adjoint_rows one_row(const std::vector<double>& values) {
     adjoint_rows ret(1, values.size());
     std::copy(values.begin(), values.end(), ret[0].begin());
@@ -129,8 +133,8 @@ private:
 
 // The tape running for the duration, on every exit and exceptions included.
 //
-// ⚠️ ACTIVATED HERE ONLY IF NOTHING ELSE HOLDS IT, AND DEACTIVATED ONLY WHERE
-// ACTIVATED. Activating a tape twice raises, so a caller holding one across
+// Activated here only if nothing else holds it, and deactivated only where
+// activated. Activating a tape twice raises, so a caller holding one across
 // several recordings cannot be nested inside by anything that activates; and
 // deactivating one an outer scope is holding stops recording mid-recording,
 // which reads as a missing derivative term and raises nothing.
@@ -176,8 +180,7 @@ void release_slot(S& x) {
 // System with another System's parameter addresses.
 //
 // Held across the recordings a walk takes on it, where a copy per recording costs
-// every allocation the System owns -- for a stand, every cohort and the light
-// field with them.
+// every allocation the System owns.
 //
 // ⚠️ WHAT MAKES THAT LEGAL IS `release`, AND NOTHING ELSE. Writing a member does
 // not refresh the slot it carries: assignment keeps the slot the target already
@@ -195,11 +198,9 @@ struct active_system {
   // releases. Read back rather than handed to a transpose beside the System: the
   // two arriving separately is a pairing a caller can get wrong.
   //
-  // ⚠️ A POINTER TO A TAPE SOMEONE ELSE HOLDS, NEVER A TAPE OF ITS OWN.
-  // Constructing a `Tape` reserves 192 MiB, so a tape built per placement or per
-  // recording is the dominant cost of anything that does it. A private tape is
-  // affordable only as a member held for a whole run, and reusing one costs
-  // 0.14 us per cycle -- the cycle was never the expense.
+  // A pointer to a tape someone else holds, never a tape of its own:
+  // constructing a `Tape` reserves a large block, so a tape per recording would
+  // dominate the cost, while reusing one is cheap.
   adjoint_tape<double>* tape_;
   adjoint_tape<double>& tape() const { return *tape_; }
 
@@ -269,11 +270,11 @@ namespace internal {
 // Seed the recorded outputs and sweep, once per seed row; `read(m)` runs with
 // seed m's adjoints standing on the tape.
 //
-// ⚠️ THE DERIVATIVES ARE CLEARED BETWEEN SWEEPS. Without it the previous seed's
+// The derivatives are cleared between sweeps. Without it the previous seed's
 // adjoints are still on the slots and every row after the first is the running
-// sum of the ones before it. Clearing leaves the recorded operations alone, which
-// is what makes one recording substitutable for a fresh one per seed rather than
-// an approximation of one.
+// sum of the ones before it. Clearing leaves the recorded operations alone, so
+// each sweep is bit-identical to the row a fresh recording would give: one
+// recording is substitutable for one per seed rather than an approximation of it.
 template <class Read>
 void sweep_each_seed(adjoint_tape<double>& tape,
                      std::vector<active_scalar<double>>& outputs,
@@ -299,24 +300,12 @@ void sweep_each_seed(adjoint_tape<double>& tape,
 // value is the recording's size. `f` is instantiated at the active scalar here, so only
 // doubles cross in and out.
 //
-// One seed is a batch of one, and there is no separate entry point for it. Where the
-// recording is the expensive part -- which it is whenever `f` is a model evaluation
-// rather than arithmetic -- a caller wanting several rows pays one recording rather than
-// one per row, and a second signature over the same recording is a second place for the
-// seam between the recording and the sweep to be got wrong.
+// The batch carries its own shape (adjoint_rows), so a seed of the wrong width is not
+// something a caller can hand in and not something this has to test for.
 //
-// The batch carries its own shape, so a seed of the wrong width is not something a
-// caller can hand in and not something this has to test for.
-//
-// Each sweep is bit-identical to the row a fresh recording of `f` would give, because
-// clearDerivatives() returns the tape's derivative slots to zero while leaving the
-// recorded operations alone. That is what makes one recording substitutable for many
-// rather than an approximation of them.
-//
-// The tape is the caller's and is reused across calls, so nothing here allocates one; a
-// tape costs about a fifth of this whole product and the product runs millions of times
-// per gradient. Stops if a tape other than this one is active: recording onto a tape this
-// product does not own would sweep the block's adjoints twice.
+// The tape is the caller's and is reused across calls, so nothing here allocates one.
+// Stops if a tape other than this one is active: recording onto a tape this product does
+// not own would sweep the block's adjoints twice.
 //
 // An empty seed is swept anyway rather than skipped: the row is then zeros, which is
 // what the caller's accumulator expects, and skipping would make the result depend on
@@ -429,10 +418,9 @@ std::size_t state_and_parameter_adjoints(
     }
 
     // Held for the release, the recording and the sweeps. The release comes
-    // first and the clear second: a slot is handed back by the destructor of the
-    // temporary that takes it, which does nothing with no tape active, and
-    // clearing returns the slot counter to zero, so one handed back after a clear
-    // takes it below zero.
+    // first and the clear second (see release_slot); a slot is handed back by the
+    // destructor of the temporary that takes it, which does nothing with no tape
+    // active.
     tape_scope<adjoint_tape<double>> running{tape};
     active.release();
     tape.clearAll();
@@ -440,8 +428,7 @@ std::size_t state_and_parameter_adjoints(
     // The two kinds of input, each registered as what it is. The state is this
     // recording's own and arrives as doubles; the parameters live on the System
     // and are registered where they sit. So no value is copied in and no adjoint
-    // is split back out by position -- which is what a flat input vector cost,
-    // and what made slicing one past the state a hazard rather than a mistake.
+    // is split back out by position.
     std::vector<scalar> state_active(state.begin(), state.end());
     tape.registerInputs(state_active);
     for (scalar* p : parameters) {

@@ -5,7 +5,7 @@
 // Jacobian J = d(dydt)/dy for the implicit (Rosenbrock) stepper, from one of two
 // sources, in order of preference:
 //
-//   1. The System's own hook (#62),
+//   1. The System's own hook,
 //        void ode_jacobian(const state_type& y, double t,
 //                          const state_type& dydt, state_type& J);
 //      written row-major, J[row * n + col] = d f_row / d y_col. Whatever the
@@ -51,7 +51,7 @@
 namespace odelia {
 namespace ode {
 
-// Detect the `ode_jacobian(y, t, dydt, J)` hook (#62). Same shape of probe as
+// Detect the `ode_jacobian(y, t, dydt, J)` hook. Same shape of probe as
 // has_autonomous in ode_interface.hpp: a system that omits the member is
 // unaffected, and nothing is called on its behalf.
 template <typename S>

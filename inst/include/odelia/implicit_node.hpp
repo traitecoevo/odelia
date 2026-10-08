@@ -55,6 +55,7 @@ concept CarriesAdjoint = xad::ExprTraits<S>::isReverse;
 // long the submodel is. Recording the submodel on a tape of its own and sweeping
 // it m times to extract a dense block pays only when the submodel has fewer
 // outputs than the consumer has seeds.
+//
 // `into` receives `value` carrying the derivatives supplied against it: the
 // number is `value` itself, and its derivative with respect to each input is the
 // one supplied.
@@ -67,8 +68,7 @@ concept CarriesAdjoint = xad::ExprTraits<S>::isReverse;
 // ONE STATEMENT, whatever the row count. A tape statement is a left-hand side
 // over a run of operations, so n rows are n operations under one lhs -- not the
 // n recorded assignments that writing the sum out as `out += d * (x -
-// to_passive(x))` costs. Carrying a leaf-shaped boundary that way put the whole
-// of a submodel's arithmetic on a consumer's tape.
+// to_passive(x))` costs.
 //
 // NOTHING PARTIAL. Every row is tested before any is recorded, because a value
 // carrying some of its rows is a channel that has gone missing with every number
@@ -119,10 +119,9 @@ template <class S>
         if (term.derivative == 0.0) {
           continue;
         }
-        // ⚠️ A PASSIVE INPUT HOLDS NO SLOT, and the sweep indexes the slot it is
-        // pushed without a bounds check, so pushing one corrupts memory rather
-        // than raising. It has no row to carry either way: nothing outside reads
-        // it.
+        // A passive input holds no slot, and the sweep indexes the slot it is
+        // pushed without a bounds check, so pushing one would corrupt memory
+        // rather than raise. It has no row to carry either way.
         const typename tape_type::slot_type slot = term.input.getSlot();
         if (slot == tape_type::INVALID_SLOT) {
           continue;
@@ -162,15 +161,6 @@ template <class S>
 // derivative rather than to this one. It is what the theorem divides by, so a fold
 // -- where it approaches zero and the quotient is garbage rather than large -- is
 // the one thing this stops on.
-//
-// ⚠️ THIS ONCE HAD A REPORTING SIBLING, and the sibling went because the distinction
-// was one nothing acted on. The argument for it was that a BOUND must stop -- its
-// value IS what the equation defines -- while an INTERIOR optimum could carry on with
-// the row missing, since the envelope theorem spares the objective. Both were true of
-// the theorem and neither was true of the consumer: the report's one reader turned it
-// straight into the same metric-level refusal the catch around this makes. Two
-// mechanisms, one outcome, and a record_report threaded through LeafOutputs and two
-// signatures to carry the difference.
 template <class S, class Residual>
 S implicit_value(double y_star, double dFdy, Residual&& F) {
   if constexpr (std::is_same_v<S, double>) {
@@ -221,31 +211,19 @@ S implicit_value(double y_star, double dFdy, Residual&& F) {
 // `for_each_active`. They are the residual's own inputs, so a caller hands over
 // what it already holds rather than assembling a list.
 //
-// ⚠️ A SHAPE `visit_active` DOES NOT OPEN IS SKIPPED IN SILENCE, AND THE COLUMN
-// IT COSTS DOES NOT COME BACK ZERO. The sweep below deposits the missing row on
-// that input's slot, and nothing here can reach it to clear it: XAD's
-// `clearDerivativesAfter` reaches only slots created after the mark, and an
-// input predates it by construction. So the consumer's own sweep adds to what
-// was left. Measured on a region whose true dw/dy is 27, with y undeclared: the
-// answer is 11, not 7 and not 0.
+// ⚠️ A SHAPE `visit_active` DOES NOT OPEN IS SKIPPED IN SILENCE (see visit_active),
+// AND THE COLUMN IT COSTS DOES NOT COME BACK ZERO. The sweep below deposits the
+// missing row on that input's slot, and nothing here can reach it to clear it:
+// XAD's `clearDerivativesAfter` reaches only slots created after the mark, and an
+// input predates it by construction. So the consumer's own sweep adds to what was
+// left. Nothing here can detect it either, so no count is handed back: see
+// `ode::count_active_slots` for what a test that knows its own list can assert.
 //
-// ⚠️ AND NOTHING HERE CAN DETECT IT, which is why this does not hand back a count
-// for a caller to check. The only count available is of the values the list DOES
-// name, so it says nothing about one left out -- and it cannot say a row was
-// written either, since a named input whose adjoint comes back zero is still one
-// of them. A test that knows its own list and wants the number calls
-// `ode::count_active_slots` beside the call, where it reads as the assertion it
-// is; five call sites carrying an out-parameter none of them reads does not.
+// The caller's own adjoints on the inputs are left as they were.
 //
-// ⚠️ THE INPUTS' ADJOINTS ARE HELD AND PUT BACK, not zeroed, and the row is the
-// difference. They accumulate on the caller's tape, so a second solve against the
-// same inputs would otherwise add to the first -- and a caller that had already
-// swept something into one of those slots would see its own answer reported as
-// this node's row, and then destroyed.
-// ⚠️ AT LEAST ONE INPUT, SPELLED IN THE SIGNATURE. Rewinding with none discards
-// the residual and supplies nothing in its place, which is a value with no rows
-// rather than a value -- so the arity says what the form needs. Three arguments
-// is the other overload, which leaves the residual on the tape.
+// At least one input, so the arity says what the form needs: rewinding with none
+// would discard the residual and supply nothing in its place. Three arguments is
+// the other overload, which leaves the residual on the tape.
 template <class S, class Residual, class First, class... Rest>
 S implicit_value(double y_star, double dFdy, Residual&& F, const First& first,
                  const Rest&... rest) {
@@ -275,10 +253,9 @@ S implicit_value(double y_star, double dFdy, Residual&& F, const First& first,
 
     // ⚠️ THE INPUTS' ADJOINTS ARE HELD AND PUT BACK, NOT ZEROED. The sweep below
     // runs on the CALLER'S tape and ACCUMULATES, so a slot the caller has already
-    // swept something into arrives non-zero -- and reading it afterwards reports
-    // the caller's own answer as this residual's row. Measured on a region whose
-    // true row is 12, against a caller that had left 9 on the same slot: the
-    // harvest read 21, and zeroing afterwards destroyed the 9 as well.
+    // swept something into arrives non-zero -- reading it afterwards would report
+    // the caller's own answer as this residual's row, and zeroing it afterwards
+    // would destroy the caller's.
     //
     // Gathered before the sweep for the same reason: the slot list has to be the
     // one that was zeroed, not one read back out of a tape the sweep has touched.
@@ -309,9 +286,8 @@ S implicit_value(double y_star, double dFdy, Residual&& F, const First& first,
     // Read and cleared through the TAPE, by slot, so an input can arrive const --
     // which is how every caller already holds the things a residual reads.
     for (std::size_t i = 0; i < held.size(); ++i) {
-      // The slot was zeroed before the residual's sweep, so what it holds now is
-      // what the residual deposited and nothing else. The caller's own adjoint
-      // goes back, because this node had no business taking it.
+      // What the slot holds now is the residual's deposit alone; the caller's
+      // own adjoint goes back.
       const double adj = tape->derivative(slots[i]);
       tape->derivative(slots[i]) = held[i];
       const double row = -adj;
