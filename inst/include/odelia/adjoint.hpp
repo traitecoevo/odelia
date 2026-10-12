@@ -404,9 +404,13 @@ std::size_t state_and_parameter_adjoints(
                    "per seed, to accumulate into");
     }
     util::check_length(parameter_adjoint.width(), n_parameter);
-    if (state.empty()) {
-        util::stop("state_and_parameter_adjoints: 'state' must have at least one "
-                   "entry");
+    // An empty state is a map with no state inputs, not a mistake: the first
+    // insertion of a run that starts with nothing (plant's FF16, before its first
+    // cohort) is such a map, and its outputs depend on the parameters alone.
+    // Refused only where there is nothing to record at all.
+    if (state.empty() && n_parameter == 0) {
+        util::stop("state_and_parameter_adjoints: nothing to record -- the "
+                   "state is empty and the System lists no parameters");
     }
     if (output_adjoints.empty()) {
         util::stop("state_and_parameter_adjoints: needs at least one seed");

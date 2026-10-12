@@ -1,3 +1,9 @@
+## odelia 0.7.1
+
+**A run that starts with no state at all can now be recorded and swept.** The solver fills the run's first recorded row from the next seeding while that row's state is empty, and a System whose state is empty for real -- plant's FF16 patch before its first cohort, with no environment state of its own -- was re-filled from the seeding its first insertion makes. The run's start was then recorded one cohort wide, the insertion row duplicated it, and `solve_adjoint` could not reconcile a one-cohort state with the zero cohorts the schedule implies at the start. Whether the first row has been filled is now a flag rather than a test of its length. `state_and_parameter_adjoints` then accepts an empty state, since the transpose of that first insertion is a map from the parameters alone; it refuses only where the state is empty and the System lists no parameters either. A standalone test sweeps a run from an empty start against a pinned central difference.
+
+A **patch** bump: no signature changes, and a run whose first state is non-empty records and sweeps exactly as before.
+
 ## odelia 0.7.0
 
 **A recorded run can now be differentiated in reverse mode, so one solve yields the derivative with respect to every parameter at once.** Forward mode answers for one parameter per solve; reverse mode answers for all of them, but it must first record every operation the solve performed, and a run of several thousand adaptive steps performs far more of them than memory will hold. The solver stores its state at each accepted step and replays one step's arithmetic at a time while the derivative is taken, so what is held is bounded by a single step rather than by the run. Memory then grows with the number of steps, which is cheap, rather than with the arithmetic, which is not.

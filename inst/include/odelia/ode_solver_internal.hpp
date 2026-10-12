@@ -93,6 +93,7 @@ public:
       step_record<System> row{prev_schedule.front(), state_type()};
       row.state.assign(y.begin(), y.end());
       prev_steps.push_back(std::move(row));
+      first_row_unfilled_ = false;
     }
   }
   // The record itself, which is what a sweep reads. One row per accepted step,
@@ -312,6 +313,10 @@ private:
   // needs them and a run that is only integrating does not. The same flag decides
   // whether what a step solves for is kept, because those are one recording.
   bool keep_states_ = false;
+  // The run's first row is pushed by set_time with no state and filled by the
+  // next set_state_from_system; this says which of the two has happened. Kept
+  // apart from the row's own length because an empty state is a state too.
+  bool first_row_unfilled_ = false;
 
   // The step being attempted writes what it solves for here, and an accepted step
   // moves it onto its row.
@@ -361,8 +366,17 @@ void SolverInternal<System>::set_state_from_system(System& system) {
   // The state the run starts from, into the record set_time just opened. Kept
   // here rather than by the caller because this is the one place that knows the
   // System has been read.
-  if (keep_states_ && prev_steps.size() == 1 && prev_steps.back().state.empty()) {
+  //
+  // ⚠️ "NOT YET FILLED" IS A FLAG, NOT AN EMPTY STATE. A System can start with no
+  // state at all -- plant's FF16 patch holds no cohort and no environment state
+  // before its first introduction -- and that row is empty AFTER being filled.
+  // Testing emptiness re-filled it from the next seeding, which is the one the
+  // first insertion makes: the run's start was then recorded one cohort wide, the
+  // insertion row duplicated it, and a sweep could not reconcile a one-cohort
+  // state with the zero cohorts the schedule implies at the start.
+  if (keep_states_ && first_row_unfilled_ && prev_steps.size() == 1) {
     prev_steps.back().state.assign(y.begin(), y.end());
+    first_row_unfilled_ = false;
   }
 }
 
@@ -890,6 +904,7 @@ void SolverInternal<System>::set_time(double t) {
     prev_schedule.push_back(row);
     if (keep_states_) {
       prev_steps.push_back(step_record<System>{row, state_type()});
+      first_row_unfilled_ = true;
     }
   }
 }

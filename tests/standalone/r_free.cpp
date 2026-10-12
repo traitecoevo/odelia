@@ -1125,6 +1125,53 @@ void test_sweep_across_an_insertion() {
   check(same, "with the insertion where the run had it");
 }
 
+// A run that starts with NO state: the first insertion is a map from the
+// parameters alone, and the run's first row is empty after being filled. Both
+// halves of that were refused once -- the first row re-filled from the seeding
+// the insertion makes, and the transpose of a map with no state inputs.
+void test_sweep_from_an_empty_start() {
+  const double r = 2.0;
+  Cells<double> c(r, {});
+  odelia::ode::Solver<Cells<double>> s(c, odelia::ode::OdeControl());
+  s.set_keep_states(true);
+  s.reset();
+  check(s.state().empty(), "the run starts with no state");
+  insert_cell(s);
+  s.advance_adaptive(std::vector<double>{0.0, 1.0});
+  const auto rec = s.recording();
+  check(rec.front().state.empty(),
+        "the run's first row keeps the empty state it started from");
+  check(rec.size() > 2 && rec[1].insertion && rec[1].state.size() == 1,
+        "and the insertion row holds the one cell it made");
+
+  std::vector<double> seg;
+  for (const auto& ins : s.schedule()) {
+    if (!ins.insertion) seg.push_back(ins.time);
+  }
+  odelia::ode::adjoint_rows lambda = odelia::ode::adjoint_rows::one_row({1.0});
+  odelia::ode::adjoint_rows dp(1, 1);
+  const size_t ranges = s.solve_adjoint(lambda, dp);
+  check(ranges == 1, "one range with steps in it; the empty one above cuts nothing");
+  check(lambda.rows() == 1 && lambda.width() == 0,
+        "the adjoint comes back at the empty width the run started at");
+
+  // The same run pinned to its steps, differenced in r: the only route from r
+  // to the answer is the newborn's size and the dynamics after it.
+  const auto sum_at = [&](double r_) -> double {
+    Cells<double> c2(r_, {});
+    odelia::ode::Solver<Cells<double>> s2(c2, odelia::ode::OdeControl());
+    insert_cell(s2);
+    s2.advance_fixed(seg);
+    return s2.state()[0];
+  };
+  const double h = 1e-6;
+  const double fd = (sum_at(r + h) - sum_at(r - h)) / (2 * h);
+  check(std::fabs(dp[0][0] - fd) < 1e-7 * std::fabs(fd),
+        "d(cell)/dr from an empty start is the central difference");
+  std::printf("       (sweep %.10g, difference %.10g)\n", dp[0][0], fd);
+  check(s.state().size() == 1, "the solver's state is at the run's width after the sweep");
+}
+
 // A scalar that already carries an adjoint is closed to the forward-AD Jacobian,
 // and naming the Jacobian at it must not be a compile error: the implicit
 // stepper refuses at run time, as it did before the tangent scalar was named.
@@ -1845,6 +1892,7 @@ int main() {
   test_sweep_refuses_one_batch_for_both();
   test_implicit_value_leaves_the_callers_adjoint_alone();
   test_sweep_across_an_insertion();
+  test_sweep_from_an_empty_start();
   test_jacobian_is_closed_at_an_adjoint_scalar();
   test_jacobian_hook_is_detected();
   test_callback_rodas_matches_compiled();
