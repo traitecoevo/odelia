@@ -1,5 +1,25 @@
 # Changelog
 
+## odelia 0.7.1
+
+**A run that starts with no state at all can now be recorded and
+swept.** The solver fills the run’s first recorded row from the next
+seeding while that row’s state is empty, and a System whose state is
+empty for real – plant’s FF16 patch before its first cohort, with no
+environment state of its own – was re-filled from the seeding its first
+insertion makes. The run’s start was then recorded one cohort wide, the
+insertion row duplicated it, and `solve_adjoint` could not reconcile a
+one-cohort state with the zero cohorts the schedule implies at the
+start. Whether the first row has been filled is now a flag rather than a
+test of its length. `state_and_parameter_adjoints` then accepts an empty
+state, since the transpose of that first insertion is a map from the
+parameters alone; it refuses only where the state is empty and the
+System lists no parameters either. A standalone test sweeps a run from
+an empty start against a pinned central difference.
+
+A **patch** bump: no signature changes, and a run whose first state is
+non-empty records and sweeps exactly as before.
+
 ## odelia 0.7.0
 
 **A recorded run can now be differentiated in reverse mode, so one solve
