@@ -24,10 +24,11 @@ public:
   //
   // ⚠️ SIX AND NOT FIVE. Five are the stages; the sixth is the evaluation at the
   // state the step ends at, which first-same-as-last hands the next step as its
-  // own k1. A SWEEP re-derives that one (see step_adjoint) and reads only 0..4 --
-  // but a FORWARD replay cannot re-derive it, because re-deriving is exactly what
-  // it is replaying to avoid, and a step whose k1 was re-derived is wrong at first
-  // order in h.
+  // own k1. A SWEEP reads 0..4 for its stages and takes its k1 from the row of
+  // the step before (see step_adjoint), re-deriving it only where no step came
+  // before -- and a FORWARD replay cannot re-derive it at all, because
+  // re-deriving is exactly what it is replaying to avoid, and a step whose k1
+  // was re-derived is wrong at first order in h.
   using solved_row = std::array<solved_values_t<System>, 6>;
 
   void resize(size_t size_);
@@ -58,6 +59,15 @@ public:
                     double time, double step_size,
                     const state_type &y, const adjoint_rows& lambda_out,
                     adjoint_rows& lambda_in, adjoint_rows& parameter_adjoint);
+  // The same with no row for the first stage, which a caller transposing one
+  // step on its own has: there is no step before it to take one from.
+  void step_adjoint(active_system<System>& active, const solved_row& solved,
+                    double time, double step_size, const state_type& y,
+                    const adjoint_rows& lambda_out, adjoint_rows& lambda_in,
+                    adjoint_rows& parameter_adjoint) {
+    step_adjoint(active, solved, nullptr, time, step_size, y, lambda_out,
+                 lambda_in, parameter_adjoint);
+  }
 
   // Rate evaluations the sweeps since the last clear have recorded, counted where
   // they are recorded rather than added up as a total the loop could disagree
