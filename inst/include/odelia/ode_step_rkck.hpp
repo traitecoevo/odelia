@@ -54,6 +54,7 @@ public:
   // walk's, held across every step of one width.
   void step_adjoint(active_system<System>& active,
                     const solved_row& solved,
+                    const solved_values_t<System>* k1_row,
                     double time, double step_size,
                     const state_type &y, const adjoint_rows& lambda_out,
                     adjoint_rows& lambda_in, adjoint_rows& parameter_adjoint);
@@ -291,6 +292,7 @@ void Step<System>::step_end(const std::vector<S>& y,
 template <class System>
 void Step<System>::step_adjoint(active_system<System>& active,
                                 const solved_row& solved,
+                                const solved_values_t<System>* k1_row,
                                 double time, double step_size,
                                 const state_type &y, const adjoint_rows& lambda_out,
                                 adjoint_rows& lambda_in,
@@ -311,11 +313,22 @@ void Step<System>::step_adjoint(active_system<System>& active,
     const std::vector<scalar> y0(x, x + static_cast<std::ptrdiff_t>(size));
     std::vector<std::vector<scalar>> rate(6, std::vector<scalar>(size));
     std::vector<scalar> stage(size);
-    // k1 is re-derived at this step's own start state, and unaddressed on purpose:
-    // the run took its first rates either at the end of the step before this one or,
-    // where it widened in between, at a state no record holds. A descent that starts
-    // at an arbitrary step cannot tell those apart, so it asks for neither.
-    ode::derivs(sys, y0, rate[0], time);
+    // k1 is re-derived at this step's own start state. The run took its first
+    // rates at the end of the step before this one -- the sixth evaluation of
+    // that step's row, which the caller hands over as `k1_row` where that step
+    // is in the recording -- or, where the run widened in between, at a state no
+    // record holds, and then there is no row and the rates are derived afresh.
+    // ⚠️ A REPLAYED RUN'S k1 STOOD IN WHAT IT LOADED, so without the row a sweep
+    // of a replay re-derived at every step what the replay had been told.
+    if constexpr (SolvesForValues<System>) {
+      if (k1_row != nullptr) {
+        ode::derivs(sys, y0, rate[0], time, *k1_row);
+      } else {
+        ode::derivs(sys, y0, rate[0], time);
+      }
+    } else {
+      ode::derivs(sys, y0, rate[0], time);
+    }
     ++recorded_rates;
     for (int i = 1; i < 6; ++i) {
       stage_state(i, y0, rate, h, stage);

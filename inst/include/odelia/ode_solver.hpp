@@ -663,7 +663,14 @@ private:
                    "not the step the run took; record the run adaptively, or "
                    "pin it finely enough that nothing is refused");
       }
-      solver.step_adjoint(active, rec[k].solved, rec[k - 1].time,
+      // The row the run's k1 stood in: the sixth evaluation of the step before,
+      // where that is a step row. Row 0 is the run's start and an insertion is a
+      // map, and neither recorded an evaluation at the state this step runs
+      // from, so after either the k1 is derived afresh.
+      const bool k1_recorded = k >= 2 && !rec[k - 1].insertion;
+      const solved_values_t<System>* k1_row =
+        k1_recorded ? &rec[k - 1].solved[5] : nullptr;
+      solver.step_adjoint(active, rec[k].solved, k1_row, rec[k - 1].time,
                           rec[k].step_size, from,
                           lambda, lambda_in, parameter_adjoint);
       // Swapped rather than moved from: a move leaves the buffer this step wrote

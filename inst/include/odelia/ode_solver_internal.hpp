@@ -56,7 +56,8 @@ public:
   // stepper records its stages, so neither carries a reverse
   // counterpart.
   void step_adjoint(active_system<System>& active,
-                    const typename Step<System>::solved_row& solved, double time,
+                    const typename Step<System>::solved_row& solved,
+                    const solved_values_t<System>* k1_row, double time,
                     double step_size, const state_type& y,
                     const adjoint_rows& lambda_out, adjoint_rows& lambda_in,
                     adjoint_rows& parameter_adjoint) {
@@ -71,7 +72,7 @@ public:
     // carries that same width, and the stage buffers are sized to it here. A sweep
     // is the end of the solver's forward state either way.
     resize(lambda_out.width());
-    stepper.step_adjoint(active, solved, time, step_size, y,
+    stepper.step_adjoint(active, solved, k1_row, time, step_size, y,
                          lambda_out, lambda_in, parameter_adjoint);
   }
 
@@ -247,6 +248,15 @@ private:
       if (replay != nullptr) {
         stepper.step(system, *replay, time_, step_size, y_, yerr_, dydt_in_,
                      dydt_out_);
+        // A replay that keeps its states keeps the rows it loaded too, so its
+        // own recording can be swept with the same loads: a sweep of it then
+        // hands each stage the value the replay stood in, exogenous and
+        // carrying no derivative, rather than solving for one of its own.
+        // Without this the record held an empty row and a sweep re-derived
+        // what the replay had been told.
+        if (keep_states_) {
+          solved_scratch_ = *replay;
+        }
       } else {
         for (solved_values_t<System>& row : solved_scratch_) { row = {}; }
         stepper.step(system, solved_scratch_, time_, step_size, y_, yerr_,

@@ -1172,6 +1172,121 @@ void test_sweep_from_an_empty_start() {
   check(s.state().size() == 1, "the solver's state is at the run's width after the sweep");
 }
 
+// --- A run that solves for a choice, replayed ---------------------------------
+//
+// y' = r y s, where s is a CHOICE made at every stage from the state -- full
+// speed below a threshold, half above -- and kept as the row. A replay loads
+// the choice instead of making it, so a replay under a larger r keeps the
+// original's choices where its own state would have switched; and a sweep of
+// the replay's own recording loads them the same way, which is what makes the
+// loaded choice exogenous to that sweep.
+namespace {
+
+struct solved_choice { double s = 0.0; bool kept = false; };
+
+template <typename T = double>
+struct Chooser {
+  using value_type = T;
+  using solved_values = solved_choice;
+  template <typename> friend struct Chooser;
+  T r;
+  std::vector<T> y, dydt;
+  double time = 0.0;
+  solved_choice* into = nullptr;
+  const solved_choice* from = nullptr;
+  explicit Chooser(T r_ = T(1.0)) : r(r_) { reset(); }
+  template <class S> Chooser<S> rebind_from() const {
+    Chooser<S> out(S(xad::value(r)));
+    out.y.assign(1, S(xad::value(y[0])));
+    out.time = time;
+    out.compute_rates();
+    return out;
+  }
+  size_t ode_size() const { return 1; }
+  double ode_time() const { return time; }
+  template <class It> It set_ode_state(It it, double t) {
+    y[0] = *it++; time = t; compute_rates(); return it;
+  }
+  void set_recorded_state(const std::vector<T>& s, double t) { set_ode_state(s.begin(), t); }
+  void store_solved(solved_choice& s) { into = &s; from = nullptr; }
+  void load_solved(const solved_choice& s) { from = s.kept ? &s : nullptr; into = nullptr; }
+  void end_solved() { into = nullptr; from = nullptr; }
+  void compute_rates() {
+    const double s = from != nullptr ? from->s : (xad::value(y[0]) < 100.0 ? 1.0 : 0.5);
+    if (into != nullptr) { into->s = s; into->kept = true; }
+    dydt.assign(1, r * y[0] * s);
+  }
+  template <class It> It ode_state(It it) const { *it++ = y[0]; return it; }
+  template <class It> It ode_rates(It it) const { *it++ = dydt[0]; return it; }
+  void reset() { y.assign(1, T(1.0)); time = 0.0; compute_rates(); }
+  std::vector<T*> ad_parameters() { return {&r}; }
+  template <class F> void for_each_active(F&& f) { f(r); for (T& c : y) f(c); for (T& c : dydt) f(c); }
+};
+
+} // namespace
+
+void test_replay_keeps_the_rows_it_loaded() {
+  // r = 2 never reaches the threshold: full speed throughout, y(1) = e^2.
+  Chooser<double> a(2.0);
+  odelia::ode::Solver<Chooser<double>> run(a, odelia::ode::OdeControl());
+  run.set_keep_states(true);
+  run.reset();
+  run.advance_adaptive(std::vector<double>{0.0, 1.0});
+  const auto rec = run.recording();
+  check(rec.size() > 2 && rec[1].solved[0].kept, "the run kept the choices it made");
+
+  // r = 5 on its own crosses the threshold late and slows; replayed through the
+  // run's rows it keeps full speed, so y(1) = e^5.
+  Chooser<double> own(5.0);
+  odelia::ode::Solver<Chooser<double>> alone(own, odelia::ode::OdeControl());
+  alone.advance_adaptive(std::vector<double>{0.0, 1.0});
+  check(alone.state()[0] < std::exp(5.0) - 1.0, "a run of its own at r = 5 slows past the threshold");
+
+  Chooser<double> b(5.0);
+  odelia::ode::Solver<Chooser<double>> replay(b, odelia::ode::OdeControl());
+  replay.set_keep_states(true);
+  replay.reset();
+  replay.advance_recorded(rec);
+  check(std::fabs(replay.state()[0] - std::exp(5.0)) < 1e-5 * std::exp(5.0),
+        "a replay follows the choices it loads, not its own state");
+  const auto rec2 = replay.recording();
+  check(rec2.size() == rec.size(), "the replay's recording has the run's rows");
+  bool same = true;
+  for (size_t k = 1; k < rec.size(); ++k) {
+    for (size_t s = 0; s < rec[k].solved.size(); ++s) {
+      same = same && rec2[k].solved[s].kept == rec[k].solved[s].kept &&
+             rec2[k].solved[s].s == rec[k].solved[s].s;
+    }
+  }
+  check(same, "and each row holds what the replay loaded");
+
+  // A sweep of the replay's recording loads the same choices, so d y(1) / d r
+  // is e^5 -- the derivative of the run the replay made, not of the run it
+  // would have made choosing for itself.
+  odelia::ode::adjoint_rows lambda = odelia::ode::adjoint_rows::one_row({1.0});
+  odelia::ode::adjoint_rows dp_replay(1, 1), dp_run(1, 1);
+  replay.solve_adjoint(lambda, dp_replay);
+  lambda = odelia::ode::adjoint_rows::one_row({1.0});
+  run.solve_adjoint(lambda, dp_run);
+  // The replay steps on the run's grid, coarse for r = 5, so its value sits
+  // ~1e-5 off e^5 and so does the derivative of the map it is: the referee is a
+  // central difference of the replay itself, which loads the same rows.
+  const auto replay_at = [&](double r_) -> double {
+    Chooser<double> c(r_);
+    odelia::ode::Solver<Chooser<double>> s(c, odelia::ode::OdeControl());
+    s.advance_recorded(rec);
+    return s.state()[0];
+  };
+  const double h = 1e-6;
+  const double fd = (replay_at(5.0 + h) - replay_at(5.0 - h)) / (2 * h);
+  check(std::fabs(dp_replay[0][0] - fd) < 1e-8 * std::fabs(fd),
+        "a sweep of the replay's recording holds the loaded choices");
+  check(std::fabs(dp_run[0][0] - std::exp(2.0)) < 1e-6 * std::exp(2.0),
+        "and the run's own sweep is the run's");
+  std::printf("       (replay sweep %.10g, difference %.10g, e^5 %.10g; run %.10g against e^2 %.10g)\n",
+              dp_replay[0][0], fd, std::exp(5.0), dp_run[0][0], std::exp(2.0));
+}
+
 // A scalar that already carries an adjoint is closed to the forward-AD Jacobian,
 // and naming the Jacobian at it must not be a compile error: the implicit
 // stepper refuses at run time, as it did before the tangent scalar was named.
@@ -1893,6 +2008,7 @@ int main() {
   test_implicit_value_leaves_the_callers_adjoint_alone();
   test_sweep_across_an_insertion();
   test_sweep_from_an_empty_start();
+  test_replay_keeps_the_rows_it_loaded();
   test_jacobian_is_closed_at_an_adjoint_scalar();
   test_jacobian_hook_is_detected();
   test_callback_rodas_matches_compiled();
