@@ -186,9 +186,8 @@ public:
   // own order-4 continuous extension, from the step's stages, with an error of
   // the step's own order. Under the other steppers it is cubic Hermite on the
   // step's endpoints and the derivatives there: exact for a cubic, otherwise
-  // one order below the step (measured on Lorenz at 40-100x the integration
-  // error), so a consumer that wants dense output within tolerance uses
-  // Method::dopri. Refuses a t outside [previous time, current time], and is
+  // one order below the step, so a consumer that wants dense output within
+  // tolerance uses Method::dopri. Refuses a t outside [previous time, current time], and is
   // unavailable until a step has been accepted since the last reset.
   bool can_interpolate() const { return have_prev; }
   double previous_time() const { return time_prev; }
@@ -329,8 +328,11 @@ private:
   // whether what a step solves for is kept, because those are one recording.
   bool keep_states_ = false;
   // The run's first row is pushed by set_time with no state and filled by the
-  // next set_state_from_system; this says which of the two has happened. Kept
-  // apart from the row's own length because an empty state is a state too.
+  // next set_state_from_system; this says which of the two has happened.
+  // ⚠️ A FLAG, NOT THE ROW'S LENGTH. A System can start with no state at all, so
+  // its first row is empty after being filled too; testing emptiness would fill
+  // it again from the next seeding, the first insertion's, and record the run's
+  // start at the inserted width.
   bool first_row_unfilled_ = false;
 
   // The step being attempted writes what it solves for here, and an accepted step
@@ -343,11 +345,9 @@ private:
   state_type dydt_out; // Vector of dydt during step
 
   bool dydt_in_is_clean;
-  // Where dydt_in came from, which a recorded step keeps as step_record::k1_time:
-  // the time of the evaluation first-same-as-last carried it from, or NaN where
-  // it was derived afresh. The time of dydt_out's evaluation is held beside it
-  // for the carry, and what dydt_in was when the step being taken started is held
-  // for its row.
+  // Where dydt_in came from, in the form step_record::k1_time keeps it. The time
+  // of dydt_out's evaluation is held beside it for the carry, and where dydt_in
+  // came from when the step being taken started is held for its row.
   double dydt_out_time = 0.0;
   double dydt_in_carried_at = std::numeric_limits<double>::quiet_NaN();
   double k1_carried_at = std::numeric_limits<double>::quiet_NaN();
@@ -387,17 +387,9 @@ void SolverInternal<System>::set_state_from_system(System& system) {
   system.ode_rates(dydt_in.begin());
   dydt_in_is_clean = true;
   dydt_in_carried_at = std::numeric_limits<double>::quiet_NaN();
-  // The state the run starts from, into the record set_time just opened. Kept
-  // here rather than by the caller because this is the one place that knows the
-  // System has been read.
-  //
-  // ⚠️ "NOT YET FILLED" IS A FLAG, NOT AN EMPTY STATE. A System can start with no
-  // state at all -- plant's FF16 patch holds no cohort and no environment state
-  // before its first introduction -- and that row is empty AFTER being filled.
-  // Testing emptiness re-filled it from the next seeding, which is the one the
-  // first insertion makes: the run's start was then recorded one cohort wide, the
-  // insertion row duplicated it, and a sweep could not reconcile a one-cohort
-  // state with the zero cohorts the schedule implies at the start.
+  // The state the run starts from, into the record set_time just opened, once
+  // (see first_row_unfilled_). Kept here rather than by the caller because this
+  // is the one place that knows the System has been read.
   if (keep_states_ && first_row_unfilled_ && prev_steps.size() == 1) {
     prev_steps.back().state.assign(y.begin(), y.end());
     first_row_unfilled_ = false;

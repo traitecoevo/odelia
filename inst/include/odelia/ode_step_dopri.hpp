@@ -16,8 +16,8 @@
 // evaluation and with an error of the same order as the step's. That is what
 // makes dense output honest -- output at times the stepper did not land on,
 // still within the tolerance it was asked for -- where a cubic Hermite on the
-// endpoints is one order short (measured on Lorenz: 40-100x the integration
-// error). See SolverInternal::interpolate and Solver::advance_collect.
+// endpoints is one order short. See SolverInternal::interpolate and
+// Solver::advance_collect.
 //
 // Matches the `Step` interface -- resize/order/step and the two traits -- so
 // SolverInternal drives it through the same adaptive loop; `dense()` is the

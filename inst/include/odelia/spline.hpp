@@ -293,7 +293,7 @@ private:
       for (int i = Order - 2; i >= 1; --i)
         r = static_cast<double>(i + 1) * c[i] + t * r;
       // c[0]'s factor is one, and writing it as one is a multiply the compiler
-      // keeps: it measured 8% of the read.
+      // keeps on every read.
       return (c[0] + t * r) * inv_h;
     }
   };

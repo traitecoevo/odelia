@@ -24,7 +24,7 @@
 // solver set the state without wanting rates -- the restore after a caught
 // DomainError, and the two set_state_from_system() calls inside
 // Solver::set_state() -- and for a right-hand side that is itself an expensive
-// computation (regnans's is a demographic equilibrium solve) an evaluation
+// computation (an equilibrium solve, say) an evaluation
 // nobody reads is the whole cost of a step wasted. The count of right-hand-side
 // calls is kept, with the count of Jacobian formations, because for such a
 // system those two numbers are what a solve costs.

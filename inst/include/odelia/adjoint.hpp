@@ -405,8 +405,8 @@ std::size_t state_and_parameter_adjoints(
     }
     util::check_length(parameter_adjoint.width(), n_parameter);
     // An empty state is a map with no state inputs, not a mistake: the first
-    // insertion of a run that starts with nothing (plant's FF16, before its first
-    // cohort) is such a map, and its outputs depend on the parameters alone.
+    // insertion of a run that starts with nothing is such a map, and its outputs
+    // depend on the parameters alone.
     // Refused only where there is nothing to record at all.
     if (state.empty() && n_parameter == 0) {
         util::stop("state_and_parameter_adjoints: nothing to record -- the "

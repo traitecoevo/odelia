@@ -55,8 +55,7 @@ public:
     // The n*n buffers J and W are NOT sized here but in step(). The solver
     // resizes every stepper it holds whenever the state length changes, whether
     // or not this one is ever stepped, and a consumer that grows its state often
-    // (plant introduces a cohort at every schedule event) would otherwise pay
-    // O(n^2) per resize for a method it does not use.
+    // would otherwise pay O(n^2) per resize for a method it does not use.
     dT.assign(size, value_type(0.0));
     arg.assign(size, value_type(0.0));
     ftmp.assign(size, value_type(0.0));

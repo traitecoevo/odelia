@@ -333,12 +333,10 @@ void Step<System>::step_adjoint(active_system<System>& active,
     const std::vector<scalar> y0(x, x + static_cast<std::ptrdiff_t>(size));
     std::vector<std::vector<scalar>> rate(6, std::vector<scalar>(size));
     std::vector<scalar> stage(size);
-    // k1 is re-derived at this step's own start state, taken as the run took
-    // it: where the step before carried it, in that step's sixth row and at that
-    // evaluation's time, and otherwise afresh at `time` with no row. A row is
-    // what a replay's k1 stood in, so dropping it re-solves what the replay was
-    // told; and a row loaded where the run took none is a choice the run never
-    // made.
+    // k1 is re-derived at this step's own start state, as `k1` says the run took
+    // it. A row is what a replay's k1 stood in, so dropping it re-solves what the
+    // replay was told; and a row loaded where the run took none is a choice the
+    // run never made.
     bool k1_loaded = false;
     if constexpr (SolvesForValues<System>) {
       if (k1 != nullptr) {

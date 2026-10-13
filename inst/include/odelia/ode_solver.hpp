@@ -663,11 +663,9 @@ private:
                    "not the step the run took; record the run adaptively, or "
                    "pin it finely enough that nothing is refused");
       }
-      // The run's k1, as the row says the run took it: carried from the sixth
-      // evaluation of the step below, in that step's row and at that
-      // evaluation's time, or derived afresh with no row. Afresh is what a run
-      // does at its start, after an insertion and after any re-seed, so a System
-      // that stands in a loaded value across rows has to supply it there itself.
+      // The run's k1, taken as step_record::k1_time says the run took it. No row
+      // holds a k1 derived afresh, so a System that stands in a loaded value
+      // across rows has to supply it there itself.
       const bool k1_carried = !std::isnan(rec[k].k1_time);
       if (k1_carried && (k < 2 || rec[k - 1].insertion)) {
         util::stop("solve_adjoint: recorded step " + util::to_string(k) +

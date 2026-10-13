@@ -14,8 +14,9 @@ namespace interpolator {
 // The front end every consumer names: hermite_spline<S> from spline.hpp with
 // the calls the family has always made on an interpolator -- init(x, y) from
 // values alone, eval with an out-of-domain refusal, deriv, min/max, r_eval --
-// added on top. init(x, y) reads the natural cubic spline, as before 0.5.0. Templated on the scalar S of the knot VALUES (knot positions
-// stay double); `Interpolator` below pins S = double. A caller that has slopes
+// added on top. init(x, y) fits the natural cubic spline. Templated on the
+// scalar S of the knot VALUES (knot positions stay double); `Interpolator`
+// below pins S = double. A caller that has slopes
 // to give uses init(x, y, m), or any of the base class's own calls.
 template <typename S>
 class hermite_interpolator : public hermite_spline<S> {
