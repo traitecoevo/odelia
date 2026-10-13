@@ -1337,6 +1337,47 @@ void test_carried_k1_keeps_its_own_instant() {
   check(std::fabs(dp[0][0] - fd) < 1e-8 * std::fabs(fd), "and the sweep is the run's derivative");
 }
 
+// A pinned interval whose sum rounds short of its end is still one step:
+// 0.2 + (0.9 - 0.2) is 0.8999999999999999, and the step lands on 0.9 because
+// it spans the whole interval, not because the sum reaches it. Its row is not
+// subdivided, so the run sweeps, and the next step's k1 is carried from the
+// instant the step's last evaluation ran at.
+void test_pinned_interval_short_by_an_ulp_is_one_step() {
+  const std::vector<double> grid{0.0, 0.2, 0.9, 1.0};
+  check(0.2 + (0.9 - 0.2) != 0.9, "the interval's sum falls short of its end (else this tests nothing)");
+  Chooser<double> a(2.0);
+  odelia::ode::Solver<Chooser<double>> run(a, odelia::ode::OdeControl());
+  run.set_keep_states(true);
+  run.reset();
+  run.advance_fixed(grid);
+  const auto rec = run.recording();
+  check(rec.size() == 4 && rec[2].time == 0.9, "one row per pinned interval, on the caller's time");
+  bool subdivided = false;
+  for (const auto& row : rec) subdivided = subdivided || row.subdivided;
+  check(!subdivided, "and none of them subdivided");
+  check(rec[3].k1_time == 0.2 + (0.9 - 0.2), "the next k1 is carried from where the step evaluated last");
+
+  chooser_mispaired_loads = 0;
+  odelia::ode::adjoint_rows lambda = odelia::ode::adjoint_rows::one_row({1.0});
+  odelia::ode::adjoint_rows dp(1, 1);
+  run.solve_adjoint(lambda, dp);
+  check(chooser_mispaired_loads == 0, "the sweep loads every row at the instant it was made at");
+  const auto run_at = [&](double r_) -> double {
+    Chooser<double> c(r_);
+    odelia::ode::Solver<Chooser<double>> s(c, odelia::ode::OdeControl());
+    s.advance_fixed(grid);
+    return s.state()[0];
+  };
+  const double h = 1e-6;
+  const double fd = (run_at(2.0 + h) - run_at(2.0 - h)) / (2 * h);
+  check(std::fabs(dp[0][0] - fd) < 1e-8 * std::fabs(fd), "and the sweep is the run's derivative");
+
+  Chooser<double> b(2.0);
+  odelia::ode::Solver<Chooser<double>> replay(b, odelia::ode::OdeControl());
+  replay.advance_recorded(rec);
+  check(replay.state()[0] == run.state()[0], "a replay of the pinned run lands where it did");
+}
+
 // A re-seed from the System between two steps derives the next k1 afresh, with
 // no row, and keeps no row of its own; the step after it says so, and the one
 // after that is carried again.
@@ -2103,6 +2144,7 @@ int main() {
   test_replay_keeps_the_rows_it_loaded();
   test_carried_k1_keeps_its_own_instant();
   test_reseed_derives_k1_afresh();
+  test_pinned_interval_short_by_an_ulp_is_one_step();
   test_jacobian_is_closed_at_an_adjoint_scalar();
   test_jacobian_hook_is_detected();
   test_callback_rodas_matches_compiled();

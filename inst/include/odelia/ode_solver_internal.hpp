@@ -749,7 +749,15 @@ void SolverInternal<System>::step_to(System& system, double time_max_) {
     // Take the endpoint from time_max rather than accumulating sub_step_size,
     // so the caller's time is reproduced bit-for-bit however the interval was
     // cut. A zero-length interval lands here immediately and steps once.
-    const bool final_sub_step = !(time + sub_step_size < time_max);
+    //
+    // ⚠️ A SUB-STEP AS WIDE AS WHAT REMAINS IS FINAL WHATEVER ITS SUM ROUNDS TO.
+    // fl(t + (t1 - t)) can fall an ulp short of t1 -- 0.2 + (0.9 - 0.2) is
+    // 0.8999999999999999 -- and asked of the sum alone, the whole interval
+    // would be crossed as a step short of t1 and an ulp-wide one onto it, a
+    // row marked subdivided that no step refused, and one no sweep or replay
+    // accepts.
+    const bool final_sub_step = !(sub_step_size < time_max - time) ||
+                                !(time + sub_step_size < time_max);
     const double time_next = final_sub_step ? time_max : time + sub_step_size;
 
     y_orig = y;
