@@ -1182,7 +1182,12 @@ void test_sweep_from_an_empty_start() {
 // loaded choice exogenous to that sweep.
 namespace {
 
-struct solved_choice { double s = 0.0; bool kept = false; };
+// The instant a choice was made at, held to the instant it is loaded at exactly,
+// as plant's Patch holds a recorded field: a mismatch is counted rather than
+// raised so a test can say where it happened.
+struct solved_choice { double s = 0.0; bool kept = false; double t = 0.0; };
+int chooser_mispaired_loads = 0;
+int chooser_loads = 0;
 
 template <typename T = double>
 struct Chooser {
@@ -1209,11 +1214,15 @@ struct Chooser {
   }
   void set_recorded_state(const std::vector<T>& s, double t) { set_ode_state(s.begin(), t); }
   void store_solved(solved_choice& s) { into = &s; from = nullptr; }
-  void load_solved(const solved_choice& s) { from = s.kept ? &s : nullptr; into = nullptr; }
+  void load_solved(const solved_choice& s) {
+    from = s.kept ? &s : nullptr; into = nullptr;
+    if (s.kept) ++chooser_loads;
+  }
   void end_solved() { into = nullptr; from = nullptr; }
   void compute_rates() {
     const double s = from != nullptr ? from->s : (xad::value(y[0]) < 100.0 ? 1.0 : 0.5);
-    if (into != nullptr) { into->s = s; into->kept = true; }
+    if (from != nullptr && from->t != time) { ++chooser_mispaired_loads; }
+    if (into != nullptr) { into->s = s; into->kept = true; into->t = time; }
     dydt.assign(1, r * y[0] * s);
   }
   template <class It> It ode_state(It it) const { *it++ = y[0]; return it; }
@@ -1265,9 +1274,11 @@ void test_replay_keeps_the_rows_it_loaded() {
   // would have made choosing for itself.
   odelia::ode::adjoint_rows lambda = odelia::ode::adjoint_rows::one_row({1.0});
   odelia::ode::adjoint_rows dp_replay(1, 1), dp_run(1, 1);
+  chooser_mispaired_loads = 0;
   replay.solve_adjoint(lambda, dp_replay);
   lambda = odelia::ode::adjoint_rows::one_row({1.0});
   run.solve_adjoint(lambda, dp_run);
+  check(chooser_mispaired_loads == 0, "both sweeps load every row at the instant it was made at");
   // The replay steps on the run's grid, coarse for r = 5, so its value sits
   // ~1e-5 off e^5 and so does the derivative of the map it is: the referee is a
   // central difference of the replay itself, which loads the same rows.
@@ -1285,6 +1296,87 @@ void test_replay_keeps_the_rows_it_loaded() {
         "and the run's own sweep is the run's");
   std::printf("       (replay sweep %.10g, difference %.10g, e^5 %.10g; run %.10g against e^2 %.10g)\n",
               dp_replay[0][0], fd, std::exp(5.0), dp_run[0][0], std::exp(2.0));
+}
+
+// A carried k1 was taken at the instant the step below's last evaluation ran at,
+// fl(t + h), and a run that is handed the time each step reaches lands there
+// instead: driven by {0, 0.2, 0.9, 1} at sizes {0.2, 0.7, 0.1}, the step to 0.9
+// evaluates last at 0.8999999999999999. The sweep has to load that row at that
+// instant, not at the 0.9 the row below records.
+void test_carried_k1_keeps_its_own_instant() {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const std::vector<odelia::ode::instruction> program{
+      {0.0, nan}, {0.2, 0.2}, {0.9, 0.7}, {1.0, 0.1}};
+  const double t_end = 0.2 + 0.7;
+  check(t_end != 0.9, "the step lands an ulp off its own time (else this tests nothing)");
+  Chooser<double> a(2.0);
+  odelia::ode::Solver<Chooser<double>> run(a, odelia::ode::OdeControl());
+  run.set_keep_states(true);
+  run.reset();
+  run.advance_recorded(program);
+  const auto rec = run.recording();
+  check(rec.size() == 4, "one row per instruction");
+  check(std::isnan(rec[1].k1_time), "the first step's k1 was derived afresh");
+  check(rec[3].k1_time == t_end && rec[2].time == 0.9,
+        "the last step's k1 is carried from fl(0.2 + 0.7), not from 0.9");
+  check(rec[2].solved[5].t == t_end, "and that is where the row below was solved");
+
+  chooser_mispaired_loads = 0;
+  odelia::ode::adjoint_rows lambda = odelia::ode::adjoint_rows::one_row({1.0});
+  odelia::ode::adjoint_rows dp(1, 1);
+  run.solve_adjoint(lambda, dp);
+  check(chooser_mispaired_loads == 0, "the sweep loads the carried row at its own instant");
+  const auto run_at = [&](double r_) -> double {
+    Chooser<double> c(r_);
+    odelia::ode::Solver<Chooser<double>> s(c, odelia::ode::OdeControl());
+    s.advance_recorded(program);
+    return s.state()[0];
+  };
+  const double h = 1e-6;
+  const double fd = (run_at(2.0 + h) - run_at(2.0 - h)) / (2 * h);
+  check(std::fabs(dp[0][0] - fd) < 1e-8 * std::fabs(fd), "and the sweep is the run's derivative");
+}
+
+// A re-seed from the System between two steps derives the next k1 afresh, with
+// no row, and keeps no row of its own; the step after it says so, and the one
+// after that is carried again.
+void test_reseed_derives_k1_afresh() {
+  Chooser<double> a(2.0);
+  odelia::ode::Solver<Chooser<double>> run(a, odelia::ode::OdeControl());
+  run.set_keep_states(true);
+  run.reset();
+  run.advance_adaptive(std::vector<double>{0.0, 0.5});
+  const size_t first_after = run.recording().size();
+  run.set_state_from_system();
+  run.advance_adaptive(std::vector<double>{0.5, 1.0});
+  const auto rec = run.recording();
+  check(rec.size() > first_after + 1, "the second leg took at least two steps");
+  check(!rec[first_after].insertion && std::isnan(rec[first_after].k1_time),
+        "the step after a re-seed says its k1 was derived afresh");
+  check(rec[first_after + 1].k1_time ==
+            rec[first_after - 1].time + rec[first_after].step_size,
+        "and the step after that carries it again, from where that step ended");
+  bool carried_elsewhere = true;
+  for (size_t k = 2; k < rec.size(); ++k) {
+    if (k != first_after) {
+      carried_elsewhere = carried_elsewhere && !std::isnan(rec[k].k1_time);
+    }
+  }
+  check(carried_elsewhere, "every other step past the first carries its k1");
+
+  // Five stage rows a step, and a k1 row at every step but the first and the
+  // re-seeded one: a row loaded there is a choice the run never made.
+  chooser_mispaired_loads = 0;
+  chooser_loads = 0;
+  odelia::ode::adjoint_rows lambda = odelia::ode::adjoint_rows::one_row({1.0});
+  odelia::ode::adjoint_rows dp(1, 1);
+  run.solve_adjoint(lambda, dp);
+  const int steps = static_cast<int>(rec.size()) - 1;
+  check(chooser_loads == 5 * steps + (steps - 2),
+        "the sweep loads no row at the re-seeded k1");
+  check(chooser_mispaired_loads == 0, "and every row it loads at the instant it was made at");
+  check(std::fabs(dp[0][0] - std::exp(2.0)) < 1e-6 * std::exp(2.0),
+        "and the run's sweep is the run's");
 }
 
 // A scalar that already carries an adjoint is closed to the forward-AD Jacobian,
@@ -2009,6 +2101,8 @@ int main() {
   test_sweep_across_an_insertion();
   test_sweep_from_an_empty_start();
   test_replay_keeps_the_rows_it_loaded();
+  test_carried_k1_keeps_its_own_instant();
+  test_reseed_derives_k1_afresh();
   test_jacobian_is_closed_at_an_adjoint_scalar();
   test_jacobian_hook_is_detected();
   test_callback_rodas_matches_compiled();

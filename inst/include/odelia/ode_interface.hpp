@@ -12,6 +12,7 @@
 
 #include <concepts>
 #include <iterator>
+#include <limits>
 #include <type_traits>
 #include <utility>
 #include <array>
@@ -253,6 +254,17 @@ struct step_record : instruction {
   // such a row would be wrong at every entry with every number finite, so both
   // refuse it.
   bool subdivided = false;
+
+  // Where this step's first rates came from. First-same-as-last hands a step the
+  // sixth evaluation of the step before, taken in that row's `solved[5]` at the
+  // time it ran at, and that time is kept here: fl(t + h) is not always the time
+  // the row below records, which a pinned interval or a replay sets exactly. NaN
+  // where the run derived the rates afresh instead -- at the run's start, after
+  // an insertion, after any re-seed from the System -- with no row at all.
+  // ⚠️ A SWEEP TAKES k1 THE WAY THIS SAYS THE RUN DID, never as the row below
+  // implies: a step row below does not mean the rates were carried, because a
+  // re-seed between two steps keeps no row of its own.
+  double k1_time = std::numeric_limits<double>::quiet_NaN();
 };
 
 // A System whose state vector gains entries during a run does not declare a

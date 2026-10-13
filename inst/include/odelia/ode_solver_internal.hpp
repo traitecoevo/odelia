@@ -57,7 +57,7 @@ public:
   // counterpart.
   void step_adjoint(active_system<System>& active,
                     const typename Step<System>::solved_row& solved,
-                    const solved_values_t<System>* k1_row, double time,
+                    const typename Step<System>::carried_rates* k1, double time,
                     double step_size, const state_type& y,
                     const adjoint_rows& lambda_out, adjoint_rows& lambda_in,
                     adjoint_rows& parameter_adjoint) {
@@ -72,7 +72,7 @@ public:
     // carries that same width, and the stage buffers are sized to it here. A sweep
     // is the end of the solver's forward state either way.
     resize(lambda_out.width());
-    stepper.step_adjoint(active, solved, k1_row, time, step_size, y,
+    stepper.step_adjoint(active, solved, k1, time, step_size, y,
                          lambda_out, lambda_in, parameter_adjoint);
   }
 
@@ -214,6 +214,9 @@ private:
                     state_type& y_, state_type& yerr_,
                     const state_type& dydt_in_, state_type& dydt_out_,
                     const typename Step<System>::solved_row* replay = nullptr) {
+    // Each stepper's last evaluation is at the state the step ends at, at this
+    // time, which is what first-same-as-last carries on with dydt_out.
+    dydt_out_time = time_ + step_size;
     if (method == Method::dopri) {
       if (replay != nullptr) {
         util::stop("method='dopri' cannot replay what a run solved for: the "
@@ -252,8 +255,10 @@ private:
         // own recording can be swept with the same loads: a sweep of it then
         // hands each stage the value the replay stood in, exogenous and
         // carrying no derivative, rather than solving for one of its own.
-        // Without this the record held an empty row and a sweep re-derived
-        // what the replay had been told.
+        // Copied rather than pointed at, so the recording stands alone: the one
+        // it was loaded from can be re-recorded or freed while this is swept.
+        // That costs a second copy of the loaded rows, and only a replay asked to
+        // keep its states -- one whose gradient will be taken -- pays it.
         if (keep_states_) {
           solved_scratch_ = *replay;
         }
@@ -338,6 +343,14 @@ private:
   state_type dydt_out; // Vector of dydt during step
 
   bool dydt_in_is_clean;
+  // Where dydt_in came from, which a recorded step keeps as step_record::k1_time:
+  // the time of the evaluation first-same-as-last carried it from, or NaN where
+  // it was derived afresh. The time of dydt_out's evaluation is held beside it
+  // for the carry, and what dydt_in was when the step being taken started is held
+  // for its row.
+  double dydt_out_time = 0.0;
+  double dydt_in_carried_at = std::numeric_limits<double>::quiet_NaN();
+  double k1_carried_at = std::numeric_limits<double>::quiet_NaN();
 };
 
 template <class System>
@@ -373,6 +386,7 @@ void SolverInternal<System>::set_state_from_system(System& system) {
   system.ode_state(y.begin());
   system.ode_rates(dydt_in.begin());
   dydt_in_is_clean = true;
+  dydt_in_carried_at = std::numeric_limits<double>::quiet_NaN();
   // The state the run starts from, into the record set_time just opened. Kept
   // here rather than by the caller because this is the one place that knows the
   // System has been read.
@@ -403,6 +417,7 @@ void SolverInternal<System>::push_step(System& system, double time_,
     system.ode_state(record.state.begin());
     record.solved = std::move(solved_scratch_);
     record.subdivided = subdivided;
+    record.k1_time = k1_carried_at;
     prev_steps.push_back(std::move(record));
   }
 }
@@ -516,6 +531,8 @@ void SolverInternal<System>::step_euler(System& system, double time_max_) {
   const double h = time_max - time;
   // Derivatives at the current state (also sets the system to y at this time).
   ode::derivs(system, y, dydt_in, time);
+  dydt_in_carried_at = std::numeric_limits<double>::quiet_NaN();
+  k1_carried_at = dydt_in_carried_at;
   const size_t size = y.size();
   for (size_t i = 0; i < size; ++i) {
     y[i] += h * dydt_in[i];
@@ -883,7 +900,10 @@ void SolverInternal<System>::setup_dydt_in(System& system) {
     // before the rates mean anything.
     ode::derivs(system, y, dydt_in, time);
     dydt_in_is_clean = true;
+    dydt_in_carried_at = std::numeric_limits<double>::quiet_NaN();
   }
+  // Every step starts here, so this is where the step learns what its k1 is.
+  k1_carried_at = dydt_in_carried_at;
 }
 
 template <class System>
@@ -891,8 +911,10 @@ void SolverInternal<System>::save_dydt_out_as_in() {
   if (stepper_first_same_as_last()) {
     dydt_in = dydt_out;
     dydt_in_is_clean = true;
+    dydt_in_carried_at = dydt_out_time;
   } else {
     dydt_in_is_clean = false;
+    dydt_in_carried_at = std::numeric_limits<double>::quiet_NaN();
   }
 }
 

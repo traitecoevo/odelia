@@ -24,12 +24,20 @@ public:
   //
   // ⚠️ SIX AND NOT FIVE. Five are the stages; the sixth is the evaluation at the
   // state the step ends at, which first-same-as-last hands the next step as its
-  // own k1. A SWEEP reads 0..4 for its stages and takes its k1 from the row of
-  // the step before (see step_adjoint), re-deriving it only where no step came
-  // before -- and a FORWARD replay cannot re-derive it at all, because
-  // re-deriving is exactly what it is replaying to avoid, and a step whose k1
-  // was re-derived is wrong at first order in h.
+  // own k1. A SWEEP reads 0..4 for its stages and, where the run carried k1
+  // over, the sixth entry of the step before (see carried_rates) -- and a
+  // FORWARD replay cannot re-derive it at all, because re-deriving is exactly
+  // what it is replaying to avoid, and a step whose k1 was re-derived is wrong at
+  // first order in h.
   using solved_row = std::array<solved_values_t<System>, 6>;
+
+  // A step's first rates where first-same-as-last carried them from the step
+  // before: that step's sixth evaluation, the row it was taken in and the time it
+  // ran at (step_record::k1_time says why that time is its own).
+  struct carried_rates {
+    const solved_values_t<System>& row;
+    double time;
+  };
 
   void resize(size_t size_);
   size_t order() const;
@@ -53,14 +61,16 @@ public:
   // The step transposed, for as many seeds as are handed in: one recording of the
   // whole step, swept once per seed (see adjoint_rows). The active System is the
   // walk's, held across every step of one width.
+  //
+  // `k1` is how the run took this step's first rates where the step before
+  // carried them, and null where the run derived them afresh at `time`.
   void step_adjoint(active_system<System>& active,
-                    const solved_row& solved,
-                    const solved_values_t<System>* k1_row,
+                    const solved_row& solved, const carried_rates* k1,
                     double time, double step_size,
                     const state_type &y, const adjoint_rows& lambda_out,
                     adjoint_rows& lambda_in, adjoint_rows& parameter_adjoint);
-  // The same with no row for the first stage, which a caller transposing one
-  // step on its own has: there is no step before it to take one from.
+  // The same with the first rates derived afresh, which is what a caller
+  // transposing one step on its own has: no step before it to carry them.
   void step_adjoint(active_system<System>& active, const solved_row& solved,
                     double time, double step_size, const state_type& y,
                     const adjoint_rows& lambda_out, adjoint_rows& lambda_in,
@@ -302,7 +312,7 @@ void Step<System>::step_end(const std::vector<S>& y,
 template <class System>
 void Step<System>::step_adjoint(active_system<System>& active,
                                 const solved_row& solved,
-                                const solved_values_t<System>* k1_row,
+                                const carried_rates* k1,
                                 double time, double step_size,
                                 const state_type &y, const adjoint_rows& lambda_out,
                                 adjoint_rows& lambda_in,
@@ -323,21 +333,21 @@ void Step<System>::step_adjoint(active_system<System>& active,
     const std::vector<scalar> y0(x, x + static_cast<std::ptrdiff_t>(size));
     std::vector<std::vector<scalar>> rate(6, std::vector<scalar>(size));
     std::vector<scalar> stage(size);
-    // k1 is re-derived at this step's own start state. The run took its first
-    // rates at the end of the step before this one -- the sixth evaluation of
-    // that step's row, which the caller hands over as `k1_row` where that step
-    // is in the recording -- or, where the run widened in between, at a state no
-    // record holds, and then there is no row and the rates are derived afresh.
-    // ⚠️ A REPLAYED RUN'S k1 STOOD IN WHAT IT LOADED, so without the row a sweep
-    // of a replay re-derived at every step what the replay had been told.
+    // k1 is re-derived at this step's own start state, taken as the run took
+    // it: where the step before carried it, in that step's sixth row and at that
+    // evaluation's time, and otherwise afresh at `time` with no row. A row is
+    // what a replay's k1 stood in, so dropping it re-solves what the replay was
+    // told; and a row loaded where the run took none is a choice the run never
+    // made.
+    bool k1_loaded = false;
     if constexpr (SolvesForValues<System>) {
-      if (k1_row != nullptr) {
-        ode::derivs(sys, y0, rate[0], time, *k1_row);
-      } else {
-        ode::derivs(sys, y0, rate[0], time);
+      if (k1 != nullptr) {
+        ode::derivs(sys, y0, rate[0], k1->time, k1->row);
+        k1_loaded = true;
       }
-    } else {
-      ode::derivs(sys, y0, rate[0], time);
+    }
+    if (!k1_loaded) {
+      ode::derivs(sys, y0, rate[0], k1 != nullptr ? k1->time : time);
     }
     ++recorded_rates;
     for (int i = 1; i < 6; ++i) {
