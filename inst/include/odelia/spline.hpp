@@ -205,6 +205,20 @@ public:
     if constexpr (std::is_same_v<U, double>) {
       return value_at(up);
     } else {
+      // A cubic's value and the query's derivative as ONE expression. At an
+      // active scalar every named intermediate is a tape statement -- the Horner
+      // loops in Span and with_query_derivative below hold several -- and this
+      // read sits at every quadrature point of a model that integrates over a
+      // field. Same operations in the same order as Span::value and Span::slope.
+      if constexpr (Order == 3) {
+        if (up > x.front() && up < x.back()) {
+          const Span& s = spans[span_of(up)];
+          const double t = s.local(up);
+          return S(s.y0 + t * (s.c[0] + t * (s.c[1] + t * s.c[2])) +
+                   (s.c[0] + t * (2.0 * s.c[1] + t * (3.0 * s.c[2]))) *
+                       s.inv_h * (u - up));
+        }
+      }
       // One span load for both halves. The with_query_derivative needs the slope too, and taking
       // them separately resolves the same position twice on the read this class
       // exists for.

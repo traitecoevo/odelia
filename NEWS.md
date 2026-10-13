@@ -1,3 +1,9 @@
+## odelia 0.7.5
+
+**A cubic read at an active position is one tape statement.** `hermite_spline<S>::eval` at an active query took the value and the slope through the span's Horner loops and then added the query's derivative, and every named intermediate on that path was a statement: eight per read. A model that integrates over a field reads it at every quadrature point, so in plant's FF16 those reads were a large share of a sweep's tape (plant#677). Inside the knots a cubic's read is now one expression, with the same operations in the same order, so values and derivatives do not move; the quintic and the end extensions are unchanged. A standalone test reads at an active position inside a span, on a knot and past each end, checks the value against the double read exactly, the position derivative against the slope and the knot derivatives against central differences, and counts one statement for the interior read.
+
+A **patch** bump: no signature changes, and no value moves.
+
 ## odelia 0.7.3
 
 **A sweep crosses steps that have no state.** A run that starts empty and steps before its first insertion -- plant's invader, whose first cohort comes after the replay starts -- recorded steps of width zero below the insertion, and the sweep transposed them, refusing the empty seed ("a seed must have at least one entry"). A step with no state has no output, so it carries no adjoint and adds nothing to any parameter's; a range at width zero is now passed over, as a range with no step in it already was, and so is an insertion that leaves the state empty (a replay records the resident's introductions for an invader with none of its own there). A standalone test steps twice with no state around an empty insertion, inserts a cell, and checks the sweep against a central difference. A **patch** bump: no sweep that ran before moves.

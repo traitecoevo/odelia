@@ -84,6 +84,45 @@ compile_spline_ad_interface <- function() {
         return g;
       }
 
+      // A read at an ACTIVE position: the value, its derivative with respect to
+      // the position and to each knot value, and the statements the read alone
+      // put on the tape.
+      // [[Rcpp::export]]
+      Rcpp::List spline_active_query(std::vector<double> x, std::vector<double> y,
+                                     double q) {
+        using ad = xad::adj<double>;
+        using ad_t = ad::active_type;
+        ad::tape_type tape;
+        std::vector<ad_t> ya(y.begin(), y.end());
+        for (auto& v : ya) tape.registerInput(v);
+        ad_t qa = q;
+        tape.registerInput(qa);
+        tape.newRecording();
+        odelia::interpolator::hermite_spline<ad_t> s;
+        s.init(x, ya, odelia::interpolator::natural_slopes<ad_t>(x, ya));
+        const double before = tape.getNumStatements();
+        ad_t val = s.eval(qa);
+        const double statements = tape.getNumStatements() - before;
+        tape.registerOutput(val);
+        xad::derivative(val) = 1.0;
+        tape.computeAdjoints();
+        Rcpp::NumericVector g(y.size());
+        for (size_t i = 0; i < y.size(); ++i) g[i] = xad::derivative(ya[i]);
+        return Rcpp::List::create(
+            Rcpp::_["value"] = xad::value(val),
+            Rcpp::_["d_query"] = xad::derivative(qa),
+            Rcpp::_["d_knots"] = g,
+            Rcpp::_["statements"] = statements);
+      }
+
+      // [[Rcpp::export]]
+      double spline_slope_double(std::vector<double> x, std::vector<double> y,
+                                 double q) {
+        odelia::interpolator::hermite_spline<double> s;
+        s.init(x, y, odelia::interpolator::natural_slopes<double>(x, y));
+        return s.slope(q);
+      }
+
       // [[Rcpp::export]]
       double interp_value_double(std::vector<double> x, std::vector<double> y,
                                  double q) {
@@ -158,4 +197,33 @@ testthat::test_that("hermite_interpolator<ad> matches FD (the wrapper plant uses
 
   expect_equal(g_ad, g_fd, tolerance = 1e-6)
   expect_equal(sum(g_ad), 1, tolerance = 1e-9)
+})
+
+testthat::test_that("hermite_spline<ad> read at an active position", {
+  testthat::skip_if(is_pkgload_dll(),
+    "Skipping AD spline in pkgload load_all sessions due to native-pointer lifecycle.")
+  compile_spline_ad_interface()
+
+  x <- c(0.0, 1.0, 2.5, 4.0, 6.0, 9.0)
+  y <- sin(0.4 * x) + 0.1 * x
+
+  # Inside a span, on a knot, and past each end, where the end span's line is
+  # extended. The value is the double read's exactly, and the derivative with
+  # respect to the position is the spline's slope there.
+  for (q in c(3.3, 0.37, 2.5, -0.5, 9.75)) {
+    r <- spline_active_query(x, y, q)
+    expect_identical(r$value, spline_value_double(x, y, q))
+    expect_equal(r$d_query, spline_slope_double(x, y, q), tolerance = 1e-14)
+
+    h <- 1e-6
+    g_fd <- vapply(seq_along(y), function(i) {
+      yp <- y; ym <- y; yp[i] <- yp[i] + h; ym[i] <- ym[i] - h
+      (spline_value_double(x, yp, q) - spline_value_double(x, ym, q)) / (2 * h)
+    }, numeric(1))
+    expect_equal(r$d_knots, g_fd, tolerance = 1e-6)
+  }
+
+  # Inside the knots the read is one expression, so one statement: a model that
+  # integrates over a field reads it at every quadrature point (plant#677).
+  expect_equal(spline_active_query(x, y, 3.3)$statements, 1)
 })
