@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -203,7 +203,8 @@ one class of value that cannot be recomputed.</p>
     |-- insertion   bool           did the state vector grow here
     |-- subdivided  bool           a pinned step crossed in several sub-steps
     |-- state[]     state_type     the state at `time`
-    +-- solved[6]   solved_values  what its six rate evaluations solved for</code></pre>
+    |-- solved[6]   solved_values  what its six rate evaluations solved for
+    +-- k1_time     double         when its first rates were carried from the step below; NaN if derived afresh</code></pre>
 <p>Memory for a run of <code>n</code> steps on a state of width
 <code>w</code> is <code>n * (w + 6 * sizeof(solved_values))</code>.
 Stage rates and intermediate stage states are absent by choice:
@@ -219,8 +220,13 @@ that solves for nothing declares nothing and the slot is empty.</p>
 <p>The row is six long, not five. Five entries are a step’s stages; the
 sixth is the evaluation at the state the step ends at, which
 first-same-as-last hands the next step as its own first stage. A sweep
-reads the first five and re-derives the first stage at the state it was
-handed. A forward replay reads all six, because re-deriving is what a
+reads the first five for its stages and takes the first stage as the run
+took it: where the run carried it over, at the start state in the step
+below’s sixth entry, at the time that evaluation ran at
+(<code>fl(t + h)</code>, which <code>k1_time</code> keeps because it can
+be an ulp from the time the row below records); where the run derived it
+afresh – at its start, after an insertion or a re-seed – afresh with no
+row. A forward replay reads all six, because re-deriving is what a
 replay exists to avoid, and a step whose first stage was re-derived is
 wrong at first order in <code>h</code>.</p>
 <p>A pinned step (<code>advance_fixed</code>) that the System’s domain

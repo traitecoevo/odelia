@@ -1,5 +1,49 @@
 # Changelog
 
+## odelia 0.7.2
+
+**A replay that keeps its states now keeps the rows it loaded.**
+`advance_recorded(rec)` hands each stage the row an earlier run solved
+for, and a replay asked to keep its states recorded its own states
+beside an empty row, so a sweep of the replay’s recording re-derived at
+every stage what the replay had been told. The replay’s recording now
+carries the rows it loaded, and a sweep of it loads them the same way:
+the loaded values are exogenous to that sweep and carry no derivative.
+This is what a frozen-environment derivative is – plant’s invader
+against a recorded resident. The copy is the price of a recording that
+stands alone, and only a replay asked to keep its states pays it. A
+standalone test replays a run through a different parameter and checks
+that the replay’s recording holds the original’s rows and that its sweep
+matches a central difference of the replay to 1e-8.
+
+**And a sweep now takes each step’s first rates the way the run took
+them.** First-same-as-last hands a step the sixth evaluation of the step
+before, and the sweep re-derived it with no row, loading rows for the
+other five stages only; a System that places an inner solve from its
+row, or stands in a loaded field, re-solved or rebuilt at one stage in
+six, and the replay test above came back 0.9% low. Each step row now
+records where its first rates came from (`step_record::k1_time`): the
+time of the evaluation they were carried from, or NaN where the run
+derived them afresh – at its start, after an insertion, and after any
+`set_state_from_system()` between steps, which keeps no row. Where they
+were carried, the sweep loads the step below’s sixth row at that time,
+which is `fl(t + h)` and can be an ulp from the time the row below
+records (a replay, or a final step set onto its interval’s end); a
+System that checks the instant of what it loads, as plant’s Patch does,
+would otherwise refuse it. Where they were derived afresh the sweep
+derives them afresh, with no row, so a System that stands in a loaded
+value across an insertion supplies it there itself. Two more standalone
+tests check both: a carried row loaded at its own instant on a step that
+lands an ulp off, and a re-seed between steps that loads no row.
+
+A **patch** bump. `step_record` gains a defaulted field,
+`Step::step_adjoint` takes the carried rates in place of a bare row (the
+one-step form without them is unchanged), and a replay that keeps no
+states is untouched. Every sweep changes where it takes a carried k1: in
+the row, for a System that solves for values, and at `fl(t + h)` rather
+than `t` for any System, which moves a time-dependent System’s gradient
+in the last digits.
+
 ## odelia 0.7.1
 
 **A run that starts with no state at all can now be recorded and

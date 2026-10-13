@@ -145,7 +145,8 @@ of value that cannot be recomputed.
         |-- insertion   bool           did the state vector grow here
         |-- subdivided  bool           a pinned step crossed in several sub-steps
         |-- state[]     state_type     the state at `time`
-        +-- solved[6]   solved_values  what its six rate evaluations solved for
+        |-- solved[6]   solved_values  what its six rate evaluations solved for
+        +-- k1_time     double         when its first rates were carried from the step below; NaN if derived afresh
 
 Memory for a run of `n` steps on a state of width `w` is
 `n * (w + 6 * sizeof(solved_values))`. Stage rates and intermediate
@@ -164,10 +165,14 @@ solves for nothing declares nothing and the slot is empty.
 The row is six long, not five. Five entries are a step’s stages; the
 sixth is the evaluation at the state the step ends at, which
 first-same-as-last hands the next step as its own first stage. A sweep
-reads the first five and re-derives the first stage at the state it was
-handed. A forward replay reads all six, because re-deriving is what a
-replay exists to avoid, and a step whose first stage was re-derived is
-wrong at first order in `h`.
+reads the first five for its stages and takes the first stage as the run
+took it: where the run carried it over, at the start state in the step
+below’s sixth entry, at the time that evaluation ran at (`fl(t + h)`,
+which `k1_time` keeps because it can be an ulp from the time the row
+below records); where the run derived it afresh – at its start, after an
+insertion or a re-seed – afresh with no row. A forward replay reads all
+six, because re-deriving is what a replay exists to avoid, and a step
+whose first stage was re-derived is wrong at first order in `h`.
 
 A pinned step (`advance_fixed`) that the System’s domain refused is
 crossed in several sub-steps and recorded as one row of the interval,
