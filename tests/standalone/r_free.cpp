@@ -1172,6 +1172,56 @@ void test_sweep_from_an_empty_start() {
   check(s.state().size() == 1, "the solver's state is at the run's width after the sweep");
 }
 
+// A run that starts empty and STEPS while empty, widening at a later insertion:
+// plant's invader before its first cohort. The steps below the insertion have
+// no state, so the range they make carries nothing and is not swept; it was once
+// swept, and refused as a seed with no entries.
+void test_sweep_across_empty_steps() {
+  const double r = 2.0;
+  Cells<double> c(r, {});
+  odelia::ode::Solver<Cells<double>> s(c, odelia::ode::OdeControl());
+  s.set_keep_states(true);
+  s.reset();
+  s.advance_fixed(std::vector<double>{0.0, 0.2, 0.4});
+  check(s.state().empty() && s.time() == 0.4, "the run steps with no state");
+  insert_cell(s);
+  s.advance_adaptive(std::vector<double>{0.4, 1.0});
+  const auto rec = s.recording();
+  size_t empty_steps = 0, at = 0;
+  for (size_t k = 1; k < rec.size(); ++k) {
+    if (rec[k].insertion) {
+      at = k;
+      break;
+    }
+    if (rec[k].state.empty()) ++empty_steps;
+  }
+  check(empty_steps == 2 && at > 2, "two empty steps are recorded before the insertion");
+
+  std::vector<double> seg;
+  for (const auto& ins : s.schedule()) {
+    if (!ins.insertion && ins.time >= 0.4) seg.push_back(ins.time);
+  }
+  odelia::ode::adjoint_rows lambda = odelia::ode::adjoint_rows::one_row({1.0});
+  odelia::ode::adjoint_rows dp(1, 1);
+  const size_t ranges = s.solve_adjoint(lambda, dp);
+  check(ranges == 1, "only the range with state in it is swept");
+  check(lambda.width() == 0, "the adjoint comes back at the empty width the run started at");
+
+  const auto sum_at = [&](double r_) -> double {
+    Cells<double> c2(r_, {});
+    odelia::ode::Solver<Cells<double>> s2(c2, odelia::ode::OdeControl());
+    s2.advance_fixed(std::vector<double>{0.0, 0.2, 0.4});
+    insert_cell(s2);
+    s2.advance_fixed(seg);
+    return s2.state()[0];
+  };
+  const double h = 1e-6;
+  const double fd = (sum_at(r + h) - sum_at(r - h)) / (2 * h);
+  check(std::fabs(dp[0][0] - fd) < 1e-7 * std::fabs(fd),
+        "d(cell)/dr across empty steps is the central difference");
+  std::printf("       (sweep %.10g, difference %.10g)\n", dp[0][0], fd);
+}
+
 // --- A run that solves for a choice, replayed ---------------------------------
 //
 // y' = r y s, where s is a CHOICE made at every stage from the state -- full
@@ -2141,6 +2191,7 @@ int main() {
   test_implicit_value_leaves_the_callers_adjoint_alone();
   test_sweep_across_an_insertion();
   test_sweep_from_an_empty_start();
+  test_sweep_across_empty_steps();
   test_replay_keeps_the_rows_it_loaded();
   test_carried_k1_keeps_its_own_instant();
   test_reseed_derives_k1_afresh();
