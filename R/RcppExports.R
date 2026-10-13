@@ -153,6 +153,14 @@ OdeControl_get_controller <- function(control_xp) {
     .Call(`_odelia_OdeControl_get_controller`, control_xp)
 }
 
+OdeControl_set_stabilisation <- function(control_xp, stabilisation) {
+    invisible(.Call(`_odelia_OdeControl_set_stabilisation`, control_xp, stabilisation))
+}
+
+OdeControl_get_stabilisation <- function(control_xp) {
+    .Call(`_odelia_OdeControl_get_stabilisation`, control_xp)
+}
+
 Drivers_new <- function() {
     .Call(`_odelia_Drivers_new`)
 }

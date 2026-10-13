@@ -129,6 +129,19 @@ std::string OdeControl_get_controller(SEXP control_xp) {
   return get_OdeControl(control_xp)->get_controller() == ode::Controller::hairer ? "hairer" : "gsl";
 }
 
+// [[Rcpp::export]]
+void OdeControl_set_stabilisation(SEXP control_xp, double stabilisation) {
+  if (!(stabilisation >= 0.0 && stabilisation < 0.2)) {
+    Rcpp::stop("stabilisation must be in [0, 0.2)");
+  }
+  get_OdeControl(control_xp)->set_stabilisation(stabilisation);
+}
+
+// [[Rcpp::export]]
+double OdeControl_get_stabilisation(SEXP control_xp) {
+  return get_OdeControl(control_xp)->get_stabilisation();
+}
+
 //-------------------------------------------------------------------------
 // Drivers interface
 

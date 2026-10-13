@@ -445,6 +445,28 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// OdeControl_set_stabilisation
+void OdeControl_set_stabilisation(SEXP control_xp, double stabilisation);
+RcppExport SEXP _odelia_OdeControl_set_stabilisation(SEXP control_xpSEXP, SEXP stabilisationSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type control_xp(control_xpSEXP);
+    Rcpp::traits::input_parameter< double >::type stabilisation(stabilisationSEXP);
+    OdeControl_set_stabilisation(control_xp, stabilisation);
+    return R_NilValue;
+END_RCPP
+}
+// OdeControl_get_stabilisation
+double OdeControl_get_stabilisation(SEXP control_xp);
+RcppExport SEXP _odelia_OdeControl_get_stabilisation(SEXP control_xpSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type control_xp(control_xpSEXP);
+    rcpp_result_gen = Rcpp::wrap(OdeControl_get_stabilisation(control_xp));
+    return rcpp_result_gen;
+END_RCPP
+}
 // Drivers_new
 SEXP Drivers_new();
 RcppExport SEXP _odelia_Drivers_new() {
@@ -771,6 +793,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_odelia_OdeControl_set_step_size_initial", (DL_FUNC) &_odelia_OdeControl_set_step_size_initial, 2},
     {"_odelia_OdeControl_set_controller", (DL_FUNC) &_odelia_OdeControl_set_controller, 2},
     {"_odelia_OdeControl_get_controller", (DL_FUNC) &_odelia_OdeControl_get_controller, 1},
+    {"_odelia_OdeControl_set_stabilisation", (DL_FUNC) &_odelia_OdeControl_set_stabilisation, 2},
+    {"_odelia_OdeControl_get_stabilisation", (DL_FUNC) &_odelia_OdeControl_get_stabilisation, 1},
     {"_odelia_Drivers_new", (DL_FUNC) &_odelia_Drivers_new, 0},
     {"_odelia_Drivers_set_constant", (DL_FUNC) &_odelia_Drivers_set_constant, 3},
     {"_odelia_Drivers_set_variable", (DL_FUNC) &_odelia_Drivers_set_variable, 4},

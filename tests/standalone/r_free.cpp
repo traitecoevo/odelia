@@ -2158,6 +2158,26 @@ void test_controller_switch() {
               sa.times().size() - 1, sa.get_n_rejections(),
               sc.times().size() - 1, sc.get_n_rejections());
 
+  // At an explicit stepper's stability limit the classical rule (no
+  // stabilisation) grows the step past the limit, is rejected, and repeats;
+  // the stabilised rule holds the step just inside it.
+  check(control.get_stabilisation() == 0.04, "the default stabilisation is dopri5.f's");
+  auto stiff = [](double t, const State& y, State& dydt) {
+    dydt[0] = -1000.0 * (y[0] - std::cos(t));
+  };
+  odelia::ode::OdeControl limit(1e-3, 1e-3, 1.0, 0.0, 1e-12, 10.0, 1e-6);
+  odelia::ode::OdeControl classical = limit;
+  classical.set_stabilisation(0.0);
+  CallbackSystem e(stiff, State{0.0}, 0.0), f(stiff, State{0.0}, 0.0);
+  odelia::ode::Solver<CallbackSystem> se(e, limit, Method::rkck), sf(f, classical, Method::rkck);
+  se.advance_adaptive(std::vector<double>{0.0, 10.0});
+  sf.advance_adaptive(std::vector<double>{0.0, 10.0});
+  check(se.get_n_rejections() * 10 < sf.get_n_rejections(),
+        "stabilised, a stiff problem at the stability limit rejects a tenth as often");
+  check(std::abs(se.state()[0] - sf.state()[0]) < 1e-3, "for the same answer");
+  std::printf("       (stiff, rkck at 1e-3: stabilised %zu rejections, classical %zu)\n",
+              se.get_n_rejections(), sf.get_n_rejections());
+
   // The two validity paths are shared: a non-finite estimate and a domain
   // refusal are rejections under either rule.
   auto logistic = [](double, const State& y, State& dydt) {

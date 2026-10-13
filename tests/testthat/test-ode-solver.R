@@ -177,12 +177,29 @@ testthat::test_that("the step-size rule is a switch, with Hairer's rule the defa
   gsl <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, autonomous = TRUE,
                    controller = "gsl")
   hairer <- ode_solve(lorenz_r_rhs, c(1, 1, 1), times, lorenz_pars, autonomous = TRUE)
+  expect_equal(ctrl$get_stabilisation(), 0.04)
+  expect_error(ctrl$set_stabilisation(-1), "stabilisation")
   expect_lt(ode_counts(hairer)[["n_rejections"]], 0.8 * ode_counts(gsl)[["n_rejections"]])
   expect_lte(ode_counts(hairer)[["n_rhs"]], ode_counts(gsl)[["n_rhs"]])
   short <- seq(0, 2, by = 0.1)
   expect_equal(ode_solve(lorenz_r_rhs, c(1, 1, 1), short, lorenz_pars, autonomous = TRUE)[, 2],
                ode_solve(lorenz_r_rhs, c(1, 1, 1), short, lorenz_pars, autonomous = TRUE, controller = "gsl")[, 2],
                tolerance = 1e-3)
+})
+
+testthat::test_that("the stabilised rule holds an explicit stepper inside its stability limit", {
+  stiff <- function(t, y, p) list(-1000 * (y - cos(t)))
+  solve <- function(beta) {
+    ctrl <- OdeControl$new()
+    ctrl$set_tol_rel(1e-3)
+    ctrl$set_tol_abs(1e-3)
+    ctrl$set_stabilisation(beta)
+    ode_solve(stiff, 0, c(0, 10), method = "rkck", control = ctrl)
+  }
+  stabilised <- solve(0.04)
+  classical <- solve(0)
+  expect_lt(10 * ode_counts(stabilised)[["n_rejections"]], ode_counts(classical)[["n_rejections"]])
+  expect_equal(stabilised[2, 2], classical[2, 2], tolerance = 1e-3)
 })
 
 testthat::test_that("a forced, damped oscillator (non-autonomous) matches its closed form under every stepper", {

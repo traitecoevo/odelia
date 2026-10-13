@@ -27,6 +27,8 @@ R6 wrapper for ODE solver control settings
     \item \href{#method-OdeControl-set_step_size_max}{\code{OdeControl$set_step_size_max()}}
     \item \href{#method-OdeControl-set_controller}{\code{OdeControl$set_controller()}}
     \item \href{#method-OdeControl-get_controller}{\code{OdeControl$get_controller()}}
+    \item \href{#method-OdeControl-set_stabilisation}{\code{OdeControl$set_stabilisation()}}
+    \item \href{#method-OdeControl-get_stabilisation}{\code{OdeControl$get_stabilisation()}}
     \item \href{#method-OdeControl-set_step_size_initial}{\code{OdeControl$set_step_size_initial()}}
     \item \href{#method-OdeControl-clone}{\code{OdeControl$clone()}}
   }
@@ -218,7 +220,7 @@ R6 wrapper for ODE solver control settings
       \item{\code{controller}}{Which rule turns the error estimate into the next step:
 `"hairer"` (the default; the error in the RMS norm over components,
 accept at 1 and rescale after every step, as `deSolve` and Hairer's codes
-do) or `"gsl"` (the worst component's error, accept below 1.1, grow only
+do, stabilised as `dopri5.f` is; see `set_stabilisation()`) or `"gsl"` (the worst component's error, accept below 1.1, grow only
 below 0.5, otherwise keep the step). `"gsl"` rejects many more attempts;
 `"hairer"`'s RMS norm bounds each component more loosely when the state
 is large and the error sits in a few components.}
@@ -235,6 +237,40 @@ is large and the error sits in a few components.}
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{OdeControl$get_controller()}
+    \if{html}{\out{</div>}}
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-OdeControl-set_stabilisation"></a>}}
+\if{latex}{\out{\hypertarget{method-OdeControl-set_stabilisation}{}}}
+\subsection{\code{OdeControl$set_stabilisation()}}{
+  Set the `"hairer"` rule's stabilisation, `beta` in
+  `dopri5.f`: 0.04 (the default) damps step growth while the error is
+  rising, which keeps an explicit stepper off its stability limit; 0 is
+  the classical rule, which takes fewer steps on smooth problems.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{OdeControl$set_stabilisation(stabilisation)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{stabilisation}}{A number in `[0, 0.2)`.}
+    }
+    \if{html}{\out{</div>}}
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-OdeControl-get_stabilisation"></a>}}
+\if{latex}{\out{\hypertarget{method-OdeControl-get_stabilisation}{}}}
+\subsection{\code{OdeControl$get_stabilisation()}}{
+  The `"hairer"` rule's stabilisation in force.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{OdeControl$get_stabilisation()}
     \if{html}{\out{</div>}}
   }
 }
