@@ -1182,20 +1182,30 @@ void test_sweep_across_empty_steps() {
   odelia::ode::Solver<Cells<double>> s(c, odelia::ode::OdeControl());
   s.set_keep_states(true);
   s.reset();
-  s.advance_fixed(std::vector<double>{0.0, 0.2, 0.4});
+  s.advance_fixed(std::vector<double>{0.0, 0.2});
+  // An insertion that introduces nothing, as a replay records the resident's
+  // introductions for an invader that has none at that instant.
+  s.push_insertion();
+  s.advance_fixed(std::vector<double>{0.2, 0.4});
   check(s.state().empty() && s.time() == 0.4, "the run steps with no state");
   insert_cell(s);
   s.advance_adaptive(std::vector<double>{0.4, 1.0});
   const auto rec = s.recording();
   size_t empty_steps = 0, at = 0;
+  size_t empty_insertions = 0;
   for (size_t k = 1; k < rec.size(); ++k) {
-    if (rec[k].insertion) {
+    if (rec[k].insertion && !rec[k].state.empty()) {
       at = k;
       break;
     }
-    if (rec[k].state.empty()) ++empty_steps;
+    if (rec[k].insertion) {
+      ++empty_insertions;
+    } else if (rec[k].state.empty()) {
+      ++empty_steps;
+    }
   }
-  check(empty_steps == 2 && at > 2, "two empty steps are recorded before the insertion");
+  check(empty_steps == 2 && empty_insertions == 1 && at > 3,
+        "two empty steps and an empty insertion are recorded before the cell's");
 
   std::vector<double> seg;
   for (const auto& ins : s.schedule()) {
@@ -1210,7 +1220,9 @@ void test_sweep_across_empty_steps() {
   const auto sum_at = [&](double r_) -> double {
     Cells<double> c2(r_, {});
     odelia::ode::Solver<Cells<double>> s2(c2, odelia::ode::OdeControl());
-    s2.advance_fixed(std::vector<double>{0.0, 0.2, 0.4});
+    s2.advance_fixed(std::vector<double>{0.0, 0.2});
+    s2.push_insertion();
+    s2.advance_fixed(std::vector<double>{0.2, 0.4});
     insert_cell(s2);
     s2.advance_fixed(seg);
     return s2.state()[0];

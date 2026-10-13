@@ -548,6 +548,14 @@ public:
         hi = at;
         continue;
       }
+      // An insertion that leaves the state empty -- one that introduced nothing
+      // into a run with no state yet, as a replay's earlier introductions do for
+      // an invader whose own come later -- has no output to transpose, and the
+      // state below it is empty too.
+      if (lambda.width() == 0) {
+        hi = at - 1;
+        continue;
+      }
       // The map that widened `at`, transposed at the width below it -- which is
       // the width the range below runs at, and the width the row below holds.
       //
