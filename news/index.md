@@ -36,6 +36,20 @@ value across an insertion supplies it there itself. Two more standalone
 tests check both: a carried row loaded at its own instant on a step that
 lands an ulp off, and a re-seed between steps that loads no row.
 
+**A pinned interval whose sum rounds short of its end is one step again
+([\#72](https://github.com/traitecoevo/odelia/issues/72)).**
+`advance_fixed` asked whether a sub-step was its interval’s last by
+adding it to the time, and `0.2 + (0.9 - 0.2)` is `0.8999999999999999`:
+the interval was crossed as a step short of 0.9 and an ulp-wide one onto
+it, recorded `subdivided`, and refused by any sweep or replay although
+nothing had been refused. A sub-step as wide as what remains of its
+interval is now final whatever its sum rounds to. An interval this
+affected now takes one step rather than two, so its values move in the
+last digits; a run whose sub-steps were refused is subdivided as before.
+A standalone test pins `{0, 0.2, 0.9, 1}` and checks that no row is
+subdivided, the sweep matches a central difference, and a replay lands
+where the run did.
+
 A **patch** bump. `step_record` gains a defaulted field,
 `Step::step_adjoint` takes the carried rates in place of a bare row (the
 one-step form without them is unchanged), and a replay that keeps no
