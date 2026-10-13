@@ -117,7 +117,10 @@ Lorenz_Solver <- R6::R6Class(
     },
 
     #' @description Least-squares loss against the target, and its exact
-    #'   gradient by reverse-mode automatic differentiation.
+    #'   gradient by reverse-mode automatic differentiation. The schedule is
+    #'   replayed under this solver's \code{method}, except that a
+    #'   \code{"rodas"} solver's is replayed under \code{"rkck"}: the
+    #'   Rosenbrock stepper cannot be swept.
     #' @param ic Initial state to fit from, or \code{NULL} to keep the system's.
     #' @param params Parameters to fit at, or \code{NULL} to keep the system's.
     #' @return A list with \code{loss} (sum of squared differences) and

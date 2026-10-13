@@ -1373,6 +1373,45 @@ void test_replay_keeps_the_rows_it_loaded(odelia::ode::Method m) {
               dp_replay[0][0], fd, std::exp(5.0), dp_run[0][0], std::exp(2.0));
 }
 
+// The two explicit steppers' rows have one shape and different meanings: entry
+// i is each tableau's own stage i + 2, and stages 4..6 fall at different times.
+// Replayed under the other stepper, half of every row loaded at the wrong
+// instant with no error, so a recording now names its stepper and a replay
+// under the other is refused before a stage is taken. The program, which has no
+// rows, still replays under either.
+void test_replay_under_the_other_stepper_is_refused() {
+  using odelia::ode::Method;
+  for (auto [made, replayed] : {std::pair{Method::rkck, Method::dopri},
+                                std::pair{Method::dopri, Method::rkck}}) {
+    Chooser<double> a(2.0);
+    odelia::ode::Solver<Chooser<double>> run(a, odelia::ode::OdeControl(), made);
+    run.set_keep_states(true);
+    run.reset();
+    run.advance_adaptive(std::vector<double>{0.0, 1.0});
+    const auto rec = run.recording();
+    check(rec[1].method == made, "a recorded step names the stepper that took it");
+
+    chooser_loads = 0;
+    Chooser<double> b(2.0);
+    odelia::ode::Solver<Chooser<double>> replay(b, odelia::ode::OdeControl(), replayed);
+    bool refused = false;
+    try {
+      replay.advance_recorded(rec);
+    } catch (const std::exception& e) {
+      refused = std::string(e.what()).find("only under the stepper that took it") !=
+                std::string::npos;
+    }
+    check(refused, "a replay under the other stepper is refused by name");
+    check(chooser_loads == 0, "before any stage loads a row");
+
+    Chooser<double> c(2.0);
+    odelia::ode::Solver<Chooser<double>> by_program(c, odelia::ode::OdeControl(), replayed);
+    by_program.advance_recorded(run.schedule());
+    check(std::fabs(by_program.state()[0] - std::exp(2.0)) < 1e-6 * std::exp(2.0),
+          "and the program, with no rows, replays under it");
+  }
+}
+
 // A carried k1 was taken at the instant the step below's last evaluation ran at,
 // fl(t + h), and a run that is handed the time each step reaches lands there
 // instead: driven by {0, 0.2, 0.9, 1} at sizes {0.2, 0.7, 0.1}, the step to 0.9
@@ -2283,6 +2322,7 @@ int main() {
   for_each_explicit_stepper(test_sweep_from_an_empty_start);
   for_each_explicit_stepper(test_sweep_across_empty_steps);
   for_each_explicit_stepper(test_replay_keeps_the_rows_it_loaded);
+  test_replay_under_the_other_stepper_is_refused();
   for_each_explicit_stepper(test_carried_k1_keeps_its_own_instant);
   for_each_explicit_stepper(test_reseed_derives_k1_afresh);
   for_each_explicit_stepper(test_pinned_interval_short_by_an_ulp_is_one_step);

@@ -88,6 +88,10 @@ public:
   // with the same integration settings.
   const OdeControl& control() const { return control_; }
 
+  // The stepper this solver was built with, fixed for its life; a recording
+  // replays only under the one that made it.
+  Method method() const { return solver.get_method(); }
+
   // Synchronize internal ODE buffers from the current system state without
   // resetting solver history/step-size state.
   void set_state_from_system()
@@ -277,6 +281,15 @@ public:
                    "entry " + util::to_string(k) + " reached t=" +
                    util::format_double(rec[k].time) + " in several sub-steps "
                    "and holds only the last one's solved values");
+      }
+      if (rec[k].method != method())
+      {
+        util::stop("A recorded step replays only under the stepper that took "
+                   "it: entry " + util::to_string(k) + " was taken by method='" +
+                   method_name(rec[k].method) + "' and this solver steps by "
+                   "method='" + method_name(method()) + "'. Build the solver "
+                   "with the recording's method, or replay schedule(), which "
+                   "carries no rows, to solve the stages afresh");
       }
       solver.step_by(system, rec[k].step_size, rec[k].time, &rec[k].solved);
       if (collect)

@@ -17,12 +17,18 @@ compile_step_adjoint_interface <- function() {
   } else {
     Sys.getenv("PKG_LIBS", unset = "")
   }
+  # Without contraction, because the stage-state test below holds the recording
+  # to the step bit for bit, which the kernels promise only where the compiler
+  # does not fuse a * b + c for doubles and not through the adjoint scalar.
+  # The whole snippet, because sourceCpp caches on the code and not the flags.
   withr::local_envvar(
     PKG_CPPFLAGS = odelia_cppflags(include_dir),
+    PKG_CXXFLAGS = "-ffp-contract=off",
     PKG_LIBS = pkg_libs
   )
   Rcpp::sourceCpp(code = '
     // [[Rcpp::plugins(cpp20)]]
+    // Built with -ffp-contract=off (see compile_step_adjoint_interface).
     #include <Rcpp.h>
     #include <type_traits>
     #include <vector>
@@ -208,21 +214,14 @@ testthat::test_that("the recording builds each stage state bit-identically to st
     expect_identical(r$n_logged, 6L, info = method)
     # What the sweep transposes has to be the step the forward pass took, term
     # for term: b21 * h * k1 and h * (b21 * k1) round differently, and one
-    # function builds both sides so they cannot come apart. Except in the last
-    # place: a compiler that contracts a * b + c into a fused multiply-add does
-    # so for the double step and not through the adjoint scalar's operators.
-    # The Cash-Karp step below happens to show none of that; the
-    # Dormand-Prince one, with its larger, cancelling coefficients, does under
-    # clang's default, so it is held to a few ulps.
+    # function builds both sides so they cannot come apart. That holds where
+    # the compiler does not contract a * b + c into a fused multiply-add, which
+    # it would do for the double step and not through the adjoint scalar's
+    # operators; the snippet is built without contraction, so both steppers are
+    # held to it exactly.
     for (j in seq_len(6)) {
-      if (method == "rkck") {
-        expect_identical(r$recorded[[j]], r$forward[[j]],
-                         info = paste(method, "stage", j))
-      } else {
-        expect_equal(r$recorded[[j]], r$forward[[j]],
-                     tolerance = 8 * .Machine$double.eps,
-                     info = paste(method, "stage", j))
-      }
+      expect_identical(r$recorded[[j]], r$forward[[j]],
+                       info = paste(method, "stage", j))
     }
 
     # The last state loaded is the sixth stage's: nothing follows the stages.

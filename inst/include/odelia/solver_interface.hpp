@@ -208,7 +208,12 @@ inline Rcpp::List Solver_fit_impl(SEXP solver_xp,
     program[k] = {times[k], times[k] - times[k - 1]};
   }
 
-  ode::Solver<SystemType> replay(sys, solver->control());
+  // Under the solver's own stepper where that stepper can be swept, so the loss
+  // is of the integrator the caller chose. RODAS cannot, so a stiff solver's
+  // schedule is replayed under Cash-Karp.
+  const ode::Method method = solver->method() == ode::Method::rodas
+                               ? ode::Method::rkck : solver->method();
+  ode::Solver<SystemType> replay(sys, solver->control(), method);
   replay.set_collect(false);
   replay.set_keep_states(true);
   replay.set_state(y0, times[0]);

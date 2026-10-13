@@ -287,7 +287,10 @@ each row of \code{target} was observed.}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-fit}{}}}
 \subsection{\code{Lorenz_Solver$fit()}}{
   Least-squares loss against the target, and its exact
-  gradient by reverse-mode automatic differentiation.
+  gradient by reverse-mode automatic differentiation. The schedule is
+  replayed under this solver's \code{method}, except that a
+  \code{"rodas"} solver's is replayed under \code{"rkck"}: the
+  Rosenbrock stepper cannot be swept.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{Lorenz_Solver$fit(ic = NULL, params = NULL)}

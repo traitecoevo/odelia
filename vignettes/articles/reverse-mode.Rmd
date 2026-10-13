@@ -120,7 +120,7 @@ The row is six long, not five. Five entries are a step's stages; the sixth is th
 
 A pinned step (`advance_fixed`) that the System's domain refused is crossed in several sub-steps and recorded as one row of the interval, holding only the last sub-step's solved values. The row is marked `subdivided`, and a sweep or a replay refuses it by name rather than treating the interval as one step. Record a run adaptively, or pin it finely enough that nothing is refused.
 
-Both explicit steppers record a run: `method = "rkck"` (Cash-Karp) and `"dopri"` (Dormand-Prince) make the same six new rate evaluations a step, five stages and the one at the state the step ends at, so their rows have the same shape and a sweep or a replay reads them the same way. A Dormand-Prince run can therefore give dense output and a gradient from one stepper. `"rodas"` keeps no per-stage row and refuses a sweep or a replay.
+Both explicit steppers record a run: `method = "rkck"` (Cash-Karp) and `"dopri"` (Dormand-Prince) make the same six new rate evaluations a step, five stages and the one at the state the step ends at, so their rows have the same shape and a sweep or a replay reads them the same way. A Dormand-Prince run can therefore give dense output and a gradient from one stepper. The shape is shared but the meaning is not: entry i is each tableau's own stage, so a recording names its method and replays only under it. `"rodas"` keeps no per-stage row and refuses a sweep or a replay.
 
 ## Where the state grows
 

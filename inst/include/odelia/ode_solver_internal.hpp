@@ -20,11 +20,6 @@
 namespace odelia {
 namespace ode {
 
-// Integration method: the explicit Cash-Karp RKCK 4(5) stepper (default), the
-// implicit RODAS4(3) Rosenbrock stepper for stiff systems, or the explicit
-// Dormand-Prince 5(4) stepper with order-4 dense output.
-enum class Method { rkck, rodas, dopri };
-
 template <class System>
 class SolverInternal {
 public:
@@ -200,6 +195,7 @@ public:
   // unavailable until a step has been accepted since the last reset.
   bool can_interpolate() const { return have_prev; }
   double previous_time() const { return time_prev; }
+  Method get_method() const { return method; }
   void interpolate(double t, state_type& out) const;
 
 private:
@@ -419,6 +415,7 @@ void SolverInternal<System>::push_step(System& system, double time_,
     record.solved = std::move(solved_scratch_);
     record.subdivided = subdivided;
     record.k1_time = k1_carried_at;
+    record.method = method;
     prev_steps.push_back(std::move(record));
   }
 }
@@ -438,6 +435,7 @@ void SolverInternal<System>::push_insertion(System& system) {
     step_record<System> record{row, state_type()};
     record.state.resize(system.ode_size());
     system.ode_state(record.state.begin());
+    record.method = method;
     prev_steps.push_back(std::move(record));
   }
 }
@@ -944,6 +942,7 @@ void SolverInternal<System>::set_time(double t) {
     prev_schedule.push_back(row);
     if (keep_states_) {
       prev_steps.push_back(step_record<System>{row, state_type()});
+      prev_steps.back().method = method;
       first_row_unfilled_ = true;
     }
   }

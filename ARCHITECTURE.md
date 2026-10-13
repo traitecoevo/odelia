@@ -164,10 +164,12 @@ Cash-Karp is a free continuous extension of order 4: `SolverInternal::interpolat
 reads the state anywhere inside the last accepted step from the step's own
 stages, and `Solver::advance_collect(times, dense = true)` uses it to report at
 requested times without making a step end on each. Under the other steppers
-the interpolant is cubic Hermite on the step's endpoints, one order short. It
-records, replays and sweeps a run exactly as Cash-Karp does: the same six-entry
-`solved_row`, filled with its five later stages and the evaluation at the state
-the step ends at, and a `DopriStep::step_adjoint` on its own tableau.
+the interpolant is cubic Hermite on the step's endpoints, one order short.
+Dormand-Prince records, replays and sweeps a run exactly as Cash-Karp does: the
+same six-entry `solved_row`, filled with its five later stages and the
+evaluation at the state the step ends at, and a `DopriStep::step_adjoint` on its
+own tableau. The entries mean different stages under the two tableaux, so each
+`step_record` names its `Method` and a replay under the other stepper is refused.
 
 ## The solver core contains no R
 

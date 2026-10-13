@@ -227,15 +227,21 @@ struct instruction {
   bool insertion = false;
 };
 
-// One row of a recording: the instruction the run executed and the state it left
-// the System holding. A recording row IS a program row plus its state, so it
-// derives rather than repeating the two fields, and a time cannot be paired with a
-// state from another container.
-//
-// A insertion is a row like any other, and its state is what the map produced. So
-// no row carries two states and nothing has to choose between them. A insertion row
-// shares its time with the row below it, which is the row that holds the state the
-// map ran on.
+// Integration method: the explicit Cash-Karp RKCK 4(5) stepper (default), the
+// implicit RODAS4(3) Rosenbrock stepper for stiff systems, or the explicit
+// Dormand-Prince 5(4) stepper with order-4 dense output. Here rather than with
+// the solver because a recorded row names the stepper that made it.
+enum class Method { rkck, rodas, dopri };
+
+// The name R passes for each, for messages.
+inline const char* method_name(Method m) {
+  switch (m) {
+    case Method::rodas: return "rodas";
+    case Method::dopri: return "dopri";
+    default: return "rkck";
+  }
+}
+
 // What one step's rate evaluations solve for, in the order the explicit
 // steppers (Cash-Karp and Dormand-Prince) take them. One name, because the
 // forward walk, the sweep and the record (step_record::solved) all have to agree
@@ -261,6 +267,16 @@ struct carried_rates {
   double time;
 };
 
+// One row of a recording: the instruction the run executed and the state it left
+// the System holding. A recording row IS a program row plus its state, so it
+// derives rather than repeating the two fields, and a time cannot be paired with a
+// state from another container.
+//
+// A insertion is a row like any other, and its state is what the map produced. So
+// no row carries two states and nothing has to choose between them. A insertion row
+// shares its time with the row below it, which is the row that holds the state the
+// map ran on.
+//
 // A run of n steps on a state of width w holds n rows of w scalars and one row of
 // solved values each, and nothing else: stage rates and stage states are
 // recomputed by the sweep, which is cheaper than holding them.
@@ -270,6 +286,14 @@ struct step_record : instruction {
 
   // What this step's rate evaluations solved for; see solved_row.
   solved_row<System> solved;
+
+  // The stepper that took this step. Both explicit steppers fill a row of the
+  // same shape, but entry i is the answer at THEIR stage i + 2, and the two
+  // tableaux put stages 4..6 at different times and states. A replay under the
+  // other stepper would load every one of those at the wrong stage, finitely, so
+  // advance_recorded refuses it; a program (schedule()) carries no rows and
+  // replays under either.
+  Method method = Method::rkck;
 
   // A pinned step that was refused and crossed its interval in several sub-steps.
   // The row still holds the interval, which is what a replay of the caller's times
