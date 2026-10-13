@@ -92,8 +92,9 @@ Rcpp::NumericVector System_rates(SEXP system_xp) {
 
 // Solver creation - Lorenz-specific (must know LorenzSystem type). R only ever
 // holds the double solver; gradients build the active replay internally. The
-// stiff `rodas` and dense-output `dopri` steppers are double-path options; the
-// active replay stays rkck, the one stepper that records its stages.
+// method chooses how this solver steps; `$fit()` replays the caller's times
+// under the default stepper, so its loss and gradient come from that one
+// replay whatever the method.
 // [[Rcpp::export]]
 SEXP Solver_new(SEXP system_xp, SEXP control_xp, std::string method = "rkck") {
   Rcpp::XPtr<SystemType> sys(system_xp);

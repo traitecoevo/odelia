@@ -10,8 +10,8 @@
 #' @param value Logical flag for collect-history behavior.
 #' @param i Integer index into solver history.
 #' @param method Integration method: \code{"rkck"} (default, explicit Cash-Karp
-#'   RK 4(5)) or \code{"rodas"} (implicit RODAS4(3) Rosenbrock, for stiff
-#'   systems).
+#'   RK 4(5)), \code{"dopri"} (explicit Dormand-Prince 5(4)) or \code{"rodas"}
+#'   (implicit RODAS4(3) Rosenbrock, for stiff systems).
 #' @export
 Lorenz_Solver <- R6::R6Class(
   "Lorenz_Solver",

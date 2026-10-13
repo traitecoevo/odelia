@@ -236,6 +236,31 @@ struct instruction {
 // no row carries two states and nothing has to choose between them. A insertion row
 // shares its time with the row below it, which is the row that holds the state the
 // map ran on.
+// What one step's rate evaluations solve for, in the order the explicit
+// steppers (Cash-Karp and Dormand-Prince) take them. One name, because the
+// forward walk, the sweep and the record (step_record::solved) all have to agree
+// on the shape.
+//
+// SIX AND NOT FIVE. Five are the stages after the first; the sixth is the
+// evaluation at the state the step ends at, which first-same-as-last hands the
+// next step as its own k1. The first stage has no entry: it is carried from the
+// step before or derived afresh, and step_record::k1_time says which. A SWEEP
+// reads 0..4 for its stages and, where the run carried k1 over, the sixth entry
+// of the step before (see carried_rates) -- and a FORWARD replay cannot
+// re-derive it at all, because re-deriving is exactly what it is replaying to
+// avoid, and a step whose k1 was re-derived is wrong at first order in h.
+template <class System>
+using solved_row = std::array<solved_values_t<System>, 6>;
+
+// A step's first rates where first-same-as-last carried them from the step
+// before: that step's sixth evaluation, the row it was taken in and the time it
+// ran at (step_record::k1_time says why that time is its own).
+template <class System>
+struct carried_rates {
+  const solved_values_t<System>& row;
+  double time;
+};
+
 // A run of n steps on a state of width w holds n rows of w scalars and one row of
 // solved values each, and nothing else: stage rates and stage states are
 // recomputed by the sweep, which is cheaper than holding them.
@@ -243,9 +268,8 @@ template <typename System>
 struct step_record : instruction {
   state_type<System> state;
 
-  // What this step's rate evaluations solved for, in the stepper's order; see
-  // Step::solved_row for what the six entries are and which pass reads which.
-  std::array<solved_values_t<System>, 6> solved;
+  // What this step's rate evaluations solved for; see solved_row.
+  solved_row<System> solved;
 
   // A pinned step that was refused and crossed its interval in several sub-steps.
   // The row still holds the interval, which is what a replay of the caller's times

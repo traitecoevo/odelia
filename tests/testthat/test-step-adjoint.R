@@ -1,4 +1,5 @@
-# Tests for Step::step_adjoint against a finite difference of the same step. The
+# Tests for step_adjoint, under both explicit steppers (Step, Cash-Karp, and
+# DopriStep, Dormand-Prince), against a finite difference of the same step. The
 # adjoint records a tape, so the snippet must link against the odelia shared library
 # for the XAD Tape symbols (as the leaf/supplied-derivative interfaces do).
 
@@ -25,7 +26,8 @@ compile_step_adjoint_interface <- function() {
     #include <Rcpp.h>
     #include <type_traits>
     #include <vector>
-    #include <odelia/ode_step.hpp>
+    #include <odelia/ode_step_rkck.hpp>
+    #include <odelia/ode_step_dopri.hpp>
     #include <examples/lorenz_system.hpp>
 
     // Every state handed to a System below, in call order, so the stage states
@@ -62,12 +64,12 @@ compile_step_adjoint_interface <- function() {
     // builds, both ascending in stage. One stage_log serves every scalar the
     // template is instantiated at, so the states the recording builds -- at the
     // adjoint scalar -- land in it beside the ones the forward pass built.
-    // [[Rcpp::export]]
-    Rcpp::List lorenz_stage_states(std::vector<double> pars, double time,
-                                   double step_size, std::vector<double> y,
-                                   std::vector<double> lambda_out) {
+    template <template <class> class Stepper>
+    Rcpp::List stage_states_under(std::vector<double> pars, double time,
+                                  double step_size, std::vector<double> y,
+                                  std::vector<double> lambda_out) {
       RecordingLorenz<double> system(pars[0], pars[1], pars[2]);
-      odelia::ode::Step<RecordingLorenz<double>> stepper;
+      Stepper<RecordingLorenz<double>> stepper;
       stepper.resize(y.size());
 
       std::vector<double> dydt_in(y.size()), dydt_out(y.size()), yerr(y.size());
@@ -76,7 +78,7 @@ compile_step_adjoint_interface <- function() {
       // y, then the five later stage states, then y_end.
       stage_log.clear();
       odelia::ode::derivs(system, y, dydt_in, time);
-      decltype(stepper)::solved_row solved{};
+      odelia::ode::solved_row<RecordingLorenz<double>> solved{};
       stepper.step(system, solved, time, step_size, y_end, yerr, dydt_in,
                    dydt_out);
       Rcpp::List forward(6);
@@ -104,19 +106,29 @@ compile_step_adjoint_interface <- function() {
                                 Rcpp::_["n_logged"] = (int) stage_log.size());
     }
 
-    // One RKCK step of the Lorenz system from y, plus the adjoint of that step.
     // [[Rcpp::export]]
-    Rcpp::List lorenz_step_and_adjoint(std::vector<double> pars, double time,
-                                       double step_size, std::vector<double> y,
-                                       std::vector<double> lambda_out) {
+    Rcpp::List lorenz_stage_states(std::vector<double> pars, double time,
+                                   double step_size, std::vector<double> y,
+                                   std::vector<double> lambda_out,
+                                   std::string method = "rkck") {
+      return method == "dopri"
+        ? stage_states_under<odelia::ode::DopriStep>(pars, time, step_size, y, lambda_out)
+        : stage_states_under<odelia::ode::Step>(pars, time, step_size, y, lambda_out);
+    }
+
+    // One step of the Lorenz system from y, plus the adjoint of that step.
+    template <template <class> class Stepper>
+    Rcpp::List step_and_adjoint_under(std::vector<double> pars, double time,
+                                      double step_size, std::vector<double> y,
+                                      std::vector<double> lambda_out) {
       LorenzSystem<double> system(pars[0], pars[1], pars[2]);
-      odelia::ode::Step<LorenzSystem<double>> stepper;
+      Stepper<LorenzSystem<double>> stepper;
       stepper.resize(y.size());
 
       std::vector<double> dydt_in(y.size()), dydt_out(y.size()), yerr(y.size());
       std::vector<double> y_end(y);
       odelia::ode::derivs(system, y, dydt_in, time);
-      decltype(stepper)::solved_row solved{};
+      odelia::ode::solved_row<LorenzSystem<double>> solved{};
       stepper.step(system, solved, time, step_size, y_end, yerr, dydt_in,
                    dydt_out);
 
@@ -133,6 +145,16 @@ compile_step_adjoint_interface <- function() {
 
       return Rcpp::List::create(Rcpp::_["y_end"] = y_end,
                                 Rcpp::_["lambda_in"] = lambda_in);
+    }
+
+    // [[Rcpp::export]]
+    Rcpp::List lorenz_step_and_adjoint(std::vector<double> pars, double time,
+                                       double step_size, std::vector<double> y,
+                                       std::vector<double> lambda_out,
+                                       std::string method = "rkck") {
+      return method == "dopri"
+        ? step_and_adjoint_under<odelia::ode::DopriStep>(pars, time, step_size, y, lambda_out)
+        : step_and_adjoint_under<odelia::ode::Step>(pars, time, step_size, y, lambda_out);
     }', verbose = FALSE)
 }
 
@@ -147,47 +169,65 @@ testthat::test_that("step_adjoint reproduces a finite difference of one Lorenz s
   lambda_out <- c(0.3, -1.7, 2.1)
   eps <- 1e-6
 
-  step_end <- function(y) {
-    lorenz_step_and_adjoint(pars, time, step_size, y, lambda_out)$y_end
+  for (method in c("rkck", "dopri")) {
+    step_end <- function(y) {
+      lorenz_step_and_adjoint(pars, time, step_size, y, lambda_out, method)$y_end
+    }
+
+    # J[i, j] = d y_end[i] / d y[j], by central difference of the same step.
+    jacobian <- sapply(seq_along(y), function(j) {
+      up <- y; up[j] <- up[j] + eps
+      down <- y; down[j] <- down[j] - eps
+      (step_end(up) - step_end(down)) / (2 * eps)
+    })
+
+    expected <- as.vector(t(jacobian) %*% lambda_out)
+    got <- lorenz_step_and_adjoint(pars, time, step_size, y, lambda_out,
+                                   method)$lambda_in
+
+    expect_equal(length(got), length(y), info = method)
+    expect_equal(got, expected, tolerance = 1e-7, info = method)
+    # The transpose is load-bearing: J is not symmetric here.
+    expect_false(isTRUE(all.equal(expected, as.vector(jacobian %*% lambda_out),
+                                  tolerance = 1e-3)), info = method)
   }
-
-  # J[i, j] = d y_end[i] / d y[j], by central difference of the same step.
-  jacobian <- sapply(seq_along(y), function(j) {
-    up <- y; up[j] <- up[j] + eps
-    down <- y; down[j] <- down[j] - eps
-    (step_end(up) - step_end(down)) / (2 * eps)
-  })
-
-  expected <- as.vector(t(jacobian) %*% lambda_out)
-  got <- lorenz_step_and_adjoint(pars, time, step_size, y, lambda_out)$lambda_in
-
-  expect_equal(length(got), length(y))
-  expect_equal(got, expected, tolerance = 1e-7)
-  # The transpose is load-bearing: J is not symmetric here.
-  expect_false(isTRUE(all.equal(expected, as.vector(jacobian %*% lambda_out),
-                                tolerance = 1e-3)))
 })
 
 testthat::test_that("the recording builds each stage state bit-identically to step()", {
   compile_step_adjoint_interface()
 
-  r <- lorenz_stage_states(c(10.0, 28.0, 8.0 / 3.0), 0.0, 0.01,
-                           c(1.5, -0.7, 20.0), c(0.3, -1.7, 2.1))
+  for (method in c("rkck", "dopri")) {
+    r <- lorenz_stage_states(c(10.0, 28.0, 8.0 / 3.0), 0.0, 0.01,
+                             c(1.5, -0.7, 20.0), c(0.3, -1.7, 2.1), method)
 
-  # One state loaded per stage of the tableau, and nothing after them: the stage
-  # states are the recording's own intermediates, and the double system is not
-  # walked once the recording is taken.
-  expect_identical(r$n_logged, 6L)
-  # What the sweep transposes has to be the step the forward pass took, term for
-  # term: b21 * h * k1 and h * (b21 * k1) round differently, and one function
-  # builds both sides so they cannot come apart.
-  for (j in seq_len(6)) {
-    expect_identical(r$recorded[[j]], r$forward[[j]],
-                     info = paste("stage", j))
+    # One state loaded per stage of the tableau, and nothing after them: the
+    # stage states are the recording's own intermediates, and the double system
+    # is not walked once the recording is taken. Dormand-Prince's seventh
+    # evaluation is not among them: the state the step ends at does not depend
+    # on it.
+    expect_identical(r$n_logged, 6L, info = method)
+    # What the sweep transposes has to be the step the forward pass took, term
+    # for term: b21 * h * k1 and h * (b21 * k1) round differently, and one
+    # function builds both sides so they cannot come apart. Except in the last
+    # place: a compiler that contracts a * b + c into a fused multiply-add does
+    # so for the double step and not through the adjoint scalar's operators.
+    # The Cash-Karp step below happens to show none of that; the
+    # Dormand-Prince one, with its larger, cancelling coefficients, does under
+    # clang's default, so it is held to a few ulps.
+    for (j in seq_len(6)) {
+      if (method == "rkck") {
+        expect_identical(r$recorded[[j]], r$forward[[j]],
+                         info = paste(method, "stage", j))
+      } else {
+        expect_equal(r$recorded[[j]], r$forward[[j]],
+                     tolerance = 8 * .Machine$double.eps,
+                     info = paste(method, "stage", j))
+      }
+    }
+
+    # The last state loaded is the sixth stage's: nothing follows the stages.
+    expect_identical(r$last, r$recorded[[6]], info = method)
   }
-
-  # The last state loaded is the sixth stage's: nothing follows the stages.
-  expect_identical(r$last, r$recorded[[6]])
 })
 
 testthat::test_that("the adjoint scalar is named at namespace scope", {
@@ -247,7 +287,7 @@ compile_step_adjoint_on <- function(rebind_body) {
       odelia::ode::adjoint_tape<double> step_tape(false);
       odelia::ode::active_system<std::decay_t<decltype(system)>> active{
           system, step_tape};
-      const decltype(stepper)::solved_row solved{};
+      const odelia::ode::solved_row<Decay> solved{};
       stepper.step_adjoint(active, solved, 0.0, 0.1, y, seeds, swept, rows);
       return swept.to_rows()[0];
     }
