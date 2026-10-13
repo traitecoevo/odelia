@@ -2112,7 +2112,7 @@ void test_dopri() {
 }
 
 
-// --- The step-size rule is a switch (#64) -------------------------------------
+// --- The step-size rule is a switch -----------------------------------------
 
 void test_controller_switch() {
   using odelia::ode::Controller;
@@ -2121,35 +2121,35 @@ void test_controller_switch() {
   const std::vector<double> times{0.0, 20.0};
   odelia::ode::OdeControl control(1e-6, 1e-6, 1.0, 0.0, 1e-12, 1e9, 1e-6);
 
-  // The default is the gsl rule, and saying so changes nothing: bit-identical.
-  CallbackSystem a(lorenz_rhs, y0, 0.0);
-  odelia::ode::Solver<CallbackSystem> sa(a, control, Method::dopri);
-  sa.advance_adaptive(times);
-  odelia::ode::OdeControl explicit_gsl = control;
-  explicit_gsl.set_controller(Controller::gsl);
-  CallbackSystem b(lorenz_rhs, y0, 0.0);
-  odelia::ode::Solver<CallbackSystem> sb(b, explicit_gsl, Method::dopri);
-  sb.advance_adaptive(times);
-  check(control.get_controller() == Controller::gsl, "the default rule is gsl");
-  check(sa.state() == sb.state() && sa.times() == sb.times(),
-        "and naming it changes nothing, bit for bit");
-
-  // Hairer's rule reaches the same answer (over a horizon short enough that
-  // chaos does not separate two correct step sequences) with fewer rejected
-  // attempts over a long one.
+  // The default is Hairer's rule, and saying so changes nothing: bit-identical.
+  CallbackSystem c(lorenz_rhs, y0, 0.0);
+  odelia::ode::Solver<CallbackSystem> sc(c, control, Method::dopri);
+  sc.advance_adaptive(times);
   odelia::ode::OdeControl hairer = control;
   hairer.set_controller(Controller::hairer);
+  CallbackSystem b(lorenz_rhs, y0, 0.0);
+  odelia::ode::Solver<CallbackSystem> sb(b, hairer, Method::dopri);
+  sb.advance_adaptive(times);
+  check(control.get_controller() == Controller::hairer, "the default rule is hairer");
+  check(sc.state() == sb.state() && sc.times() == sb.times(),
+        "and naming it changes nothing, bit for bit");
+
+  // The gsl rule reaches the same answer (over a horizon short enough that
+  // chaos does not separate two correct step sequences) with more rejected
+  // attempts over a long one.
+  odelia::ode::OdeControl gsl = control;
+  gsl.set_controller(Controller::gsl);
   {
     CallbackSystem g(lorenz_rhs, y0, 0.0), hh(lorenz_rhs, y0, 0.0);
-    odelia::ode::Solver<CallbackSystem> sg(g, control, Method::dopri), sh(hh, hairer, Method::dopri);
+    odelia::ode::Solver<CallbackSystem> sg(g, gsl, Method::dopri), sh(hh, hairer, Method::dopri);
     sg.advance_adaptive(std::vector<double>{0.0, 2.0});
     sh.advance_adaptive(std::vector<double>{0.0, 2.0});
     check(max_abs_diff(sh.state(), sg.state()) < 1e-3,
           "the hairer rule integrates Lorenz to the same place at 1e-6");
   }
-  CallbackSystem c(lorenz_rhs, y0, 0.0);
-  odelia::ode::Solver<CallbackSystem> sc(c, hairer, Method::dopri);
-  sc.advance_adaptive(times);
+  CallbackSystem a(lorenz_rhs, y0, 0.0);
+  odelia::ode::Solver<CallbackSystem> sa(a, gsl, Method::dopri);
+  sa.advance_adaptive(times);
   check(sc.get_n_rejections() < sa.get_n_rejections() * 0.8,
         "with at least a fifth fewer rejected attempts");
   check(sc.get_system_ref().n_rhs <= sa.get_system_ref().n_rhs,

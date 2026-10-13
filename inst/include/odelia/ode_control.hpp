@@ -26,9 +26,11 @@ namespace ode {
 //           solution's smoothness; no growth on the step right after a
 //           rejection.
 //
-// The default is gsl because changing it changes every existing caller's
-// adaptive step sequence. Rejection of a non-finite estimate and reject_step()
-// are the same under both.
+// The default is hairer. The RMS norm averages the error over components, so a
+// caller whose state is large and whose error sits in a few components gets a
+// looser per-component bound than the same tolerance gives under gsl, and
+// should tighten it. Rejection of a non-finite estimate and reject_step() are
+// the same under both.
 enum class Controller { gsl, hairer };
 
 struct OdeControl {
@@ -281,7 +283,7 @@ struct OdeControl {
   double tol_abs, tol_rel, a_y, a_dydt;
   double step_size_min, step_size_max, step_size_initial;
   bool last_step_size_shrank;
-  Controller controller = Controller::gsl;
+  Controller controller = Controller::hairer;
   bool last_rejected = false; // hairer: no growth on the step after a rejection
 };
 

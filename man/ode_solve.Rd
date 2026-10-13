@@ -14,7 +14,7 @@ ode_solve(
   control = NULL,
   rtol = 1e-06,
   atol = 1e-06,
-  controller = "gsl",
+  controller = "hairer",
   autonomous = FALSE,
   jac_fd_step = 1e-06,
   jac_fd_floor = 1e-05,
@@ -44,8 +44,8 @@ With a `control` given, `rtol`, `atol` and `controller` are ignored.}
 \item{rtol, atol}{Shorthand for the control's relative and absolute
 tolerances when `control` is `NULL`.}
 
-\item{controller}{The step-size rule when `control` is `NULL`: `"gsl"`
-(the default) or `"hairer"`; see [OdeControl].}
+\item{controller}{The step-size rule when `control` is `NULL`: `"hairer"`
+(the default) or `"gsl"`; see [OdeControl].}
 
 \item{autonomous}{`TRUE` if `func` does not depend on `t`.}
 

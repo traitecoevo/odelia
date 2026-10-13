@@ -10,11 +10,12 @@
 #' @param step_size_max Maximum allowed step size.
 #' @param step_size_initial Initial step size.
 #' @param controller Which rule turns the error estimate into the next step:
-#'   `"gsl"` (the default; accept below 1.1, grow only below 0.5, otherwise
-#'   keep the step) or `"hairer"` (accept at 1, rescale after every step, as
-#'   `deSolve` and Hairer's codes do). The default is kept for continuity of
-#'   step sequences; `"hairer"` makes far fewer rejected attempts and lets the
-#'   step track a smoothing solution (odelia#64).
+#'   `"hairer"` (the default; the error in the RMS norm over components,
+#'   accept at 1 and rescale after every step, as `deSolve` and Hairer's codes
+#'   do) or `"gsl"` (the worst component's error, accept below 1.1, grow only
+#'   below 0.5, otherwise keep the step). `"gsl"` rejects many more attempts;
+#'   `"hairer"`'s RMS norm bounds each component more loosely when the state
+#'   is large and the error sits in a few components.
 #' @export
 OdeControl <- R6::R6Class(
   "OdeControl",

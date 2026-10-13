@@ -108,9 +108,9 @@ void OdeControl_set_step_size_initial(SEXP control_xp, double step_size_initial)
   get_OdeControl(control_xp)->step_size_initial = step_size_initial;
 }
 
-// Which rule turns the error estimate into the next step: "gsl" (the default,
-// odelia's dead-band rule) or "hairer" (rescale after every step); see
-// ode_control.hpp and #64.
+// Which rule turns the error estimate into the next step: "hairer" (the
+// default, rescale after every step) or "gsl" (the dead-band rule); see
+// ode_control.hpp.
 // [[Rcpp::export]]
 void OdeControl_set_controller(SEXP control_xp, std::string controller) {
   ode::Controller c;

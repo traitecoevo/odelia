@@ -279,8 +279,8 @@ OdeSolver <- R6::R6Class(
 #' @param autonomous `TRUE` if `func` does not depend on `t`.
 #' @param jac_fd_step,jac_fd_floor The finite-difference Jacobian's relative
 #'   step and small-component floor; see [OdeSolver].
-#' @param controller The step-size rule when `control` is `NULL`: `"gsl"`
-#'   (the default) or `"hairer"`; see [OdeControl].
+#' @param controller The step-size rule when `control` is `NULL`: `"hairer"`
+#'   (the default) or `"gsl"`; see [OdeControl].
 #' @param dense `TRUE` to let the stepper choose its own steps and read the
 #'   requested times off the interpolant of the step spanning each, as
 #'   `deSolve`'s `lsoda` does; `FALSE` to land a step on every requested time,
@@ -305,7 +305,7 @@ OdeSolver <- R6::R6Class(
 #' ode_counts(out)
 ode_solve <- function(func, y0, times, parms = NULL, jacfunc = NULL,
                       method = "dopri", control = NULL,
-                      rtol = 1e-6, atol = 1e-6, controller = "gsl",
+                      rtol = 1e-6, atol = 1e-6, controller = "hairer",
                       autonomous = FALSE, jac_fd_step = 1e-6, jac_fd_floor = 1e-5,
                       dense = NULL) {
   func <- check_callback(func, "func")
