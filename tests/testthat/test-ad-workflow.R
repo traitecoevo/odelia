@@ -73,3 +73,40 @@ test_that("AD workflow optimizes Lorenz parameters", {
   expect_equal(optimized_hist$y, hist$y, tolerance = 1e-6)
   expect_equal(optimized_hist$z, hist$z, tolerance = 1e-6)
 })
+
+test_that("a Dormand-Prince solver fits under Dormand-Prince", {
+  testthat::skip_if(is_pkgload_dll(), "Skipping AD workflow in pkgload load_all sessions due unstable native-pointer lifecycle.")
+
+  true_pars <- c(10.0, 28.0, 8.0 / 3.0)
+  lz <- LorenzSystem$new(sigma = true_pars[1], R = true_pars[2], b = true_pars[3])
+  lz$set_initial_state(c(1, 1, 1), t0 = 0)
+  ctrl <- odelia:::OdeControl$new()
+  reference <- Lorenz_Solver$new(lz$ptr, ctrl$ptr, method = "dopri")
+  reference$advance_adaptive(c(0, 1))
+  times <- reference$times()
+  hist <- reference$history()
+  obs_index <- which(times %in% hist$time)
+  target <- as.matrix(hist[, c("x", "y", "z")])
+
+  fitter <- function(method) {
+    s <- Lorenz_Solver$new(lz$ptr, ctrl$ptr, method = method)
+    s$set_target(times, target, obs_index)
+    s
+  }
+  # At the parameters that made the target, the replay is the reference's own
+  # integrator on its own steps, so the loss is rounding (about 1e-27); a
+  # Cash-Karp replay of the same steps is a different integrator (about 3e-14).
+  expect_lt(fitter("dopri")$fit(params = true_pars)$loss, 1e-20)
+  expect_gt(fitter("rkck")$fit(params = true_pars)$loss, 1e-18)
+
+  # And its gradient is the derivative of its own loss.
+  s <- fitter("dopri")
+  at <- c(10.5, 27.5, 2.8)
+  eps <- 1e-6
+  fd <- sapply(seq_along(at), function(j) {
+    up <- at; up[j] <- up[j] + eps
+    down <- at; down[j] <- down[j] - eps
+    (s$fit(params = up)$loss - s$fit(params = down)$loss) / (2 * eps)
+  })
+  expect_equal(s$fit(params = at)$gradient, fd, tolerance = 1e-6)
+})

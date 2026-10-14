@@ -35,8 +35,10 @@ namespace ode {
 // push_step and push_insertion (ode_solver_internal.hpp) for the two places a
 // row is written; state_and_parameter_adjoints (adjoint.hpp) for the transpose
 // of one map; Step::step_adjoint (ode_step_rkck.hpp) for the transpose of one
-// step; solve_adjoint below for the loop over rows and insertions. Only
-// method = rkck records a run; dopri and rodas refuse a sweep or a replay.
+// step, which DopriStep::step_adjoint (ode_step_dopri.hpp) repeats on its own
+// tableau; solve_adjoint below for the loop over rows and insertions. Under
+// method = rkck or dopri a run records, replays and sweeps; rodas refuses a sweep
+// or a replay.
 //
 // `collect` (default on) keeps a copy of the whole System at every step in
 // `history`, for callers reading a trajectory from R. A sweep does not read it
@@ -85,6 +87,10 @@ public:
   // The control this solver was built with, so a driver builds the active solver
   // with the same integration settings.
   const OdeControl& control() const { return control_; }
+
+  // The stepper this solver was built with, fixed for its life; a recording
+  // replays only under the one that made it.
+  Method method() const { return solver.get_method(); }
 
   // Synchronize internal ODE buffers from the current system state without
   // resetting solver history/step-size state.
@@ -276,6 +282,15 @@ public:
                    util::format_double(rec[k].time) + " in several sub-steps "
                    "and holds only the last one's solved values");
       }
+      if (rec[k].method != method())
+      {
+        util::stop("A recorded step replays only under the stepper that took "
+                   "it: entry " + util::to_string(k) + " was taken by method='" +
+                   method_name(rec[k].method) + "' and this solver steps by "
+                   "method='" + method_name(method()) + "'. Build the solver "
+                   "with the recording's method, or replay schedule(), which "
+                   "carries no rows, to solve the stages afresh");
+      }
       solver.step_by(system, rec[k].step_size, rec[k].time, &rec[k].solved);
       if (collect)
       {
@@ -286,7 +301,7 @@ public:
 
   // Take a series of plain forward-Euler steps over the supplied grid. One
   // derivative evaluation per step, no error control (cf. advance_fixed, which
-  // drives the full RKCK stepper). Collects history at each supplied time.
+  // drives the selected stepper). Collects history at each supplied time.
   void advance_euler(std::vector<double> times)
   {
     if (times.empty())
@@ -608,8 +623,8 @@ public:
                          extra_stops);
   }
 
-  // Rate evaluations the sweeps since the last clear have recorded; Step::
-  // recorded_rates says what the number means and what it catches.
+  // Rate evaluations the sweeps since the last clear have recorded;
+  // Step::recorded_rates says what the number means and what it catches.
   std::size_t recorded_rates() const { return solver.recorded_rates(); }
   void clear_recorded_rates() { solver.clear_recorded_rates(); }
 
@@ -683,8 +698,7 @@ private:
                    " says its first rates were carried from the step below, "
                    "but row " + util::to_string(k - 1) + " is not a step");
       }
-      const typename ode::Step<System>::carried_rates k1{rec[k - 1].solved[5],
-                                                         rec[k].k1_time};
+      const ode::carried_rates<System> k1{rec[k - 1].solved[5], rec[k].k1_time};
       solver.step_adjoint(active, rec[k].solved, k1_carried ? &k1 : nullptr,
                           rec[k - 1].time, rec[k].step_size, from,
                           lambda, lambda_in, parameter_adjoint);

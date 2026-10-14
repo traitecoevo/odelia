@@ -120,7 +120,7 @@ The row is six long, not five. Five entries are a step's stages; the sixth is th
 
 A pinned step (`advance_fixed`) that the System's domain refused is crossed in several sub-steps and recorded as one row of the interval, holding only the last sub-step's solved values. The row is marked `subdivided`, and a sweep or a replay refuses it by name rather than treating the interval as one step. Record a run adaptively, or pin it finely enough that nothing is refused.
 
-Only `method = "rkck"` records a run. `"dopri"` and `"rodas"` keep no per-stage row and refuse a sweep or a replay.
+Both explicit steppers record a run: `method = "rkck"` (Cash-Karp) and `"dopri"` (Dormand-Prince) make the same six new rate evaluations a step, five stages and the one at the state the step ends at, so their rows have the same shape and a sweep or a replay reads them the same way. A Dormand-Prince run can therefore give dense output and a gradient from one stepper. The shape is shared but the meaning is not: entry i is each tableau's own stage, so a recording names its method and replays only under it. `"rodas"` keeps no per-stage row and refuses a sweep or a replay.
 
 ## Where the state grows
 
@@ -198,7 +198,7 @@ A System whose state grows adds `apply_insertion(time, x, out)`, the widening as
 2. `ode_interface.hpp`: the System concepts, `instruction` and `step_record`, `Sweepable`, `visit_active`.
 3. `ode_solver_internal.hpp`: `push_step` and `push_insertion`, the two places a row is written; `step_to` for the pinned path.
 4. `adjoint.hpp`: `adjoint_rows`, `active_system`, `vector_jacobian_product`, `state_and_parameter_adjoints`, the transpose of one map.
-5. `ode_step_rkck.hpp`: `Step::step_adjoint`, the transpose of one step, and the `solved` channel.
+5. `ode_step_rkck.hpp`: `Step::step_adjoint`, the transpose of one step, and the `solved` channel; `ode_step_dopri.hpp`: `DopriStep::step_adjoint`, the same on the Dormand-Prince tableau.
 6. `ode_solver.hpp`: `solve_adjoint`, the loop over rows and insertions; `advance_recorded`, the replay.
 7. `implicit_node.hpp`: supplied rows and `implicit_value`, independent of the solver.
 8. `sweep.hpp`: helpers for a consumer that drives a sweep range by range itself.

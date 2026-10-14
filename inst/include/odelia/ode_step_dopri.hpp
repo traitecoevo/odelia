@@ -19,13 +19,17 @@
 // endpoints is one order short. See SolverInternal::interpolate and
 // Solver::advance_collect.
 //
-// Matches the `Step` interface -- resize/order/step and the two traits -- so
-// SolverInternal drives it through the same adaptive loop; `dense()` is the
-// extra. Stage evaluations use the plain 4-argument derivs: no per-stage cache
-// hook, which is RKCK's business.
+// Otherwise it is the Cash-Karp stepper's interface member for member: a step
+// writes or reads a solved_row (stages 2..6, then the seventh evaluation at the
+// state the step ends at), and step_adjoint transposes one step, so a run under
+// either is recorded, replayed and swept the same way. `dense()` is the extra.
 
+#include <array>
 #include <cstddef>
+#include <utility>
 #include <vector>
+#include <XAD/XAD.hpp>
+#include <odelia/adjoint.hpp>
 #include <odelia/ode_interface.hpp>
 
 namespace odelia {
@@ -37,20 +41,25 @@ public:
   using value_type = typename System::value_type;
   using state_type = std::vector<value_type>;
 
+  // Sized, not cleared: a sweep at the run's own width resizes on the way in,
+  // and the last accepted step's stages are what dense() reads afterwards.
   void resize(size_t size_) {
     size = size_;
-    for (int s = 0; s < n_stages; ++s) {
-      k[s].assign(size, value_type(0.0));
+    for (state_type& stage_rate : k) {
+      stage_rate.resize(size);
     }
-    ytmp.assign(size, value_type(0.0));
-    y0.assign(size, value_type(0.0));
-    h_last = 0.0;
+    ytmp.resize(size);
+    y0.resize(size);
   }
 
   // Order of the propagated solution (the controller uses 1/order).
   size_t order() const { return 5; }
 
-  void step(System& system, double time, double step_size,
+  // `solved` is the row this step creates, or, where a caller hands a CONST one,
+  // the row an earlier run created, which the stages then load: the same rule as
+  // Step::step.
+  template <class Row>
+  void step(System& system, Row& solved, double time, double step_size,
             state_type& y, state_type& yerr,
             const state_type& dydt_in, state_type& dydt_out) {
     const double h = step_size;
@@ -58,39 +67,24 @@ public:
     h_last = h;
     k[0] = dydt_in;
 
-    for (size_t i = 0; i < size; ++i) {
-      ytmp[i] = y[i] + h * a21 * k[0][i];
-    }
-    ode::derivs(system, ytmp, k[1], time + c2 * h);
-
-    for (size_t i = 0; i < size; ++i) {
-      ytmp[i] = y[i] + h * (a31 * k[0][i] + a32 * k[1][i]);
-    }
-    ode::derivs(system, ytmp, k[2], time + c3 * h);
-
-    for (size_t i = 0; i < size; ++i) {
-      ytmp[i] = y[i] + h * (a41 * k[0][i] + a42 * k[1][i] + a43 * k[2][i]);
-    }
-    ode::derivs(system, ytmp, k[3], time + c4 * h);
-
-    for (size_t i = 0; i < size; ++i) {
-      ytmp[i] = y[i] + h * (a51 * k[0][i] + a52 * k[1][i] + a53 * k[2][i] +
-                            a54 * k[3][i]);
-    }
-    ode::derivs(system, ytmp, k[4], time + c5 * h);
-
-    for (size_t i = 0; i < size; ++i) {
-      ytmp[i] = y[i] + h * (a61 * k[0][i] + a62 * k[1][i] + a63 * k[2][i] +
-                            a64 * k[3][i] + a65 * k[4][i]);
-    }
-    ode::derivs(system, ytmp, k[5], time + h);
+    stages(y, k, h, ytmp,
+           [&](int i, const state_type& at, state_type& into) -> void {
+             if constexpr (SolvesForValues<System>) {
+               ode::derivs(system, at, into, stage_time(i, time, h),
+                           solved[i - 1]);
+             } else {
+               ode::derivs(system, at, into, stage_time(i, time, h));
+             }
+           });
 
     // The fifth-order solution; its weights are the seventh stage's row.
-    for (size_t i = 0; i < size; ++i) {
-      y[i] = y0[i] + h * (b1 * k[0][i] + b3 * k[2][i] + b4 * k[3][i] +
-                          b5 * k[4][i] + b6 * k[5][i]);
+    step_end(y0, k, h, y);
+    // The seventh evaluation, in the row's sixth slot: see solved_row.
+    if constexpr (SolvesForValues<System>) {
+      ode::derivs(system, y, k[6], time + h, solved[5]);
+    } else {
+      ode::derivs(system, y, k[6], time + h);
     }
-    ode::derivs(system, y, k[6], time + h);
     dydt_out = k[6];
 
     // Difference between the fifth- and fourth-order solutions.
@@ -99,6 +93,29 @@ public:
                      e5 * k[4][i] + e6 * k[5][i] + e7 * k[6][i]);
     }
   }
+
+  // The step transposed, for as many seeds as are handed in; Step::step_adjoint
+  // says what the arguments are. The seventh evaluation is not recorded: the
+  // state the step ends at does not depend on it, only the error estimate and
+  // the dense output do.
+  void step_adjoint(active_system<System>& active,
+                    const solved_row<System>& solved,
+                    const carried_rates<System>* k1,
+                    double time, double step_size,
+                    const state_type& y, const adjoint_rows& lambda_out,
+                    adjoint_rows& lambda_in, adjoint_rows& parameter_adjoint);
+  void step_adjoint(active_system<System>& active,
+                    const solved_row<System>& solved,
+                    double time, double step_size, const state_type& y,
+                    const adjoint_rows& lambda_out, adjoint_rows& lambda_in,
+                    adjoint_rows& parameter_adjoint) {
+    step_adjoint(active, solved, nullptr, time, step_size, y, lambda_out,
+                 lambda_in, parameter_adjoint);
+  }
+
+  // Rate evaluations the sweeps since the last clear have recorded; see
+  // Step::recorded_rates. Six a step here too.
+  std::size_t recorded_rates = 0;
 
   // The state at fraction theta in [0, 1] of the last step taken, from that
   // step's stages (dopri5.f, contd5). Valid once a step has been taken at
@@ -122,9 +139,85 @@ public:
   static const bool first_same_as_last = true;
 
 private:
-  static const int n_stages = 7;
+  // The tableau, written once and used at whatever scalar the caller holds its
+  // rates in: the forward step and the recording its transpose is taken from
+  // both step through these, so the two agree to the last place where the
+  // compiler does not contract (see Step's kernels).
+  //
+  // Stages 2..6 from y and k[0], each stage's rates into k[i] by `rates(i, at,
+  // into)`. One walk for both passes, so the unrolled stages exist once.
+  template <class S, class Rates>
+  void stages(const std::vector<S>& y, std::vector<std::vector<S>>& k_,
+              double h, std::vector<S>& tmp, Rates&& rates) const {
+    stage_state<1>(y, k_, h, tmp); rates(1, tmp, k_[1]);
+    stage_state<2>(y, k_, h, tmp); rates(2, tmp, k_[2]);
+    stage_state<3>(y, k_, h, tmp); rates(3, tmp, k_[3]);
+    stage_state<4>(y, k_, h, tmp); rates(4, tmp, k_[4]);
+    stage_state<5>(y, k_, h, tmp); rates(5, tmp, k_[5]);
+  }
+
+  // Y for stage I + 1, into `out`. Each stage keeps its own written-out sum,
+  // the one the stepper's results were taken with: a running sum is fused
+  // differently under contraction and would move them.
+  template <int I, class S>
+  void stage_state(const std::vector<S>& y,
+                   const std::vector<std::vector<S>>& k_, double h,
+                   std::vector<S>& out) const {
+    const S* const yp = y.data();
+    const S* const k0 = k_[0].data();
+    const S* const k1 = k_[1].data();
+    const S* const k2 = k_[2].data();
+    const S* const k3 = k_[3].data();
+    const S* const k4 = k_[4].data();
+    S* const op = out.data();
+    for (size_t q = 0; q < size; ++q) {
+      if constexpr (I == 1) {
+        op[q] = yp[q] + h * a21 * k0[q];
+      } else if constexpr (I == 2) {
+        op[q] = yp[q] + h * (a31 * k0[q] + a32 * k1[q]);
+      } else if constexpr (I == 3) {
+        op[q] = yp[q] + h * (a41 * k0[q] + a42 * k1[q] + a43 * k2[q]);
+      } else if constexpr (I == 4) {
+        op[q] = yp[q] + h * (a51 * k0[q] + a52 * k1[q] + a53 * k2[q] +
+                             a54 * k3[q]);
+      } else {
+        op[q] = yp[q] + h * (a61 * k0[q] + a62 * k1[q] + a63 * k2[q] +
+                             a64 * k3[q] + a65 * k4[q]);
+      }
+    }
+  }
+
+  // The state the step ends at. k[1] reaches it only through the later stages.
+  // `out` may be `y`.
+  template <class S>
+  void step_end(const std::vector<S>& y,
+                const std::vector<std::vector<S>>& k_, double h,
+                std::vector<S>& out) const {
+    const S* const yp = y.data();
+    const S* const k0 = k_[0].data();
+    const S* const k2 = k_[2].data();
+    const S* const k3 = k_[3].data();
+    const S* const k4 = k_[4].data();
+    const S* const k5 = k_[5].data();
+    S* const op = out.data();
+    for (size_t q = 0; q < size; ++q) {
+      op[q] = yp[q] + h * (b1 * k0[q] + b3 * k2[q] + b4 * k3[q] +
+                           b5 * k4[q] + b6 * k5[q]);
+    }
+  }
+
+  double stage_time(int i, double time, double h) const {
+    switch (i) {
+      case 1: return time + c2 * h;
+      case 2: return time + c3 * h;
+      case 3: return time + c4 * h;
+      case 4: return time + c5 * h;
+      default: return time + h;
+    }
+  }
+
   size_t size = 0;
-  state_type k[n_stages];
+  std::vector<state_type> k{7};
   state_type ytmp;
   state_type y0;
   double h_last = 0.0;
@@ -168,6 +261,61 @@ private:
   static constexpr double d6 = -1453857185.0 / 822651844.0;
   static constexpr double d7 = 69997945.0 / 29380423.0;
 };
+
+// lambda_in[m] = (d y_end / d y)^T lambda_out[m] for the one step step() takes
+// from y, and the parameter rows alongside it: one recording of the step's six
+// rate evaluations and the combination closing them, as Step::step_adjoint.
+template <class System>
+void DopriStep<System>::step_adjoint(active_system<System>& active,
+                                     const solved_row<System>& solved,
+                                     const carried_rates<System>* k1,
+                                     double time, double step_size,
+                                     const state_type& y,
+                                     const adjoint_rows& lambda_out,
+                                     adjoint_rows& lambda_in,
+                                     adjoint_rows& parameter_adjoint) {
+  using scalar = active_scalar<double>;
+  const double h = step_size;
+  if (lambda_out.empty()) {
+    util::stop("step_adjoint: needs at least one seed");
+  }
+  util::check_length(y.size(), size);
+
+  auto whole_step = [&](auto& sys,
+                        typename std::vector<scalar>::const_iterator x,
+                        std::vector<scalar>& y_end) -> void {
+    const std::vector<scalar> y_start(x, x + static_cast<std::ptrdiff_t>(size));
+    std::vector<std::vector<scalar>> rate(6, std::vector<scalar>(size));
+    std::vector<scalar> stage(size);
+    // k1 as the run took it: see Step::step_adjoint.
+    bool k1_loaded = false;
+    if constexpr (SolvesForValues<System>) {
+      if (k1 != nullptr) {
+        ode::derivs(sys, y_start, rate[0], k1->time, k1->row);
+        k1_loaded = true;
+      }
+    }
+    if (!k1_loaded) {
+      ode::derivs(sys, y_start, rate[0], k1 != nullptr ? k1->time : time);
+    }
+    ++recorded_rates;
+    stages(y_start, rate, h, stage,
+           [&](int i, const std::vector<scalar>& at,
+               std::vector<scalar>& into) -> void {
+             if constexpr (SolvesForValues<System>) {
+               ode::derivs(sys, at, into, stage_time(i, time, h),
+                           std::as_const(solved[i - 1]));
+             } else {
+               ode::derivs(sys, at, into, stage_time(i, time, h));
+             }
+             ++recorded_rates;
+           });
+    step_end(y_start, rate, h, y_end);
+  };
+
+  ode::state_and_parameter_adjoints(active, y, lambda_out, whole_step, lambda_in,
+                                    parameter_adjoint);
+}
 
 } // namespace ode
 } // namespace odelia

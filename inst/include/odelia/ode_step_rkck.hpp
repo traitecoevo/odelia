@@ -18,26 +18,8 @@ public:
   using value_type = typename System::value_type;
   using state_type = std::vector<value_type>;
   
-  // What one step's rate evaluations solve for. One name, because the forward
-  // walk, the sweep and the record (step_record::solved) all have to agree on the
-  // shape.
-  //
-  // ⚠️ SIX AND NOT FIVE. Five are the stages; the sixth is the evaluation at the
-  // state the step ends at, which first-same-as-last hands the next step as its
-  // own k1. A SWEEP reads 0..4 for its stages and, where the run carried k1
-  // over, the sixth entry of the step before (see carried_rates) -- and a
-  // FORWARD replay cannot re-derive it at all, because re-deriving is exactly
-  // what it is replaying to avoid, and a step whose k1 was re-derived is wrong at
-  // first order in h.
-  using solved_row = std::array<solved_values_t<System>, 6>;
-
-  // A step's first rates where first-same-as-last carried them from the step
-  // before: that step's sixth evaluation, the row it was taken in and the time it
-  // ran at (step_record::k1_time says why that time is its own).
-  struct carried_rates {
-    const solved_values_t<System>& row;
-    double time;
-  };
+  // The row a step's rate evaluations solve into and the first rates a step
+  // carried in are solved_row and carried_rates (ode_interface.hpp).
 
   void resize(size_t size_);
   size_t order() const;
@@ -65,13 +47,15 @@ public:
   // `k1` is how the run took this step's first rates where the step before
   // carried them, and null where the run derived them afresh at `time`.
   void step_adjoint(active_system<System>& active,
-                    const solved_row& solved, const carried_rates* k1,
+                    const solved_row<System>& solved,
+                    const carried_rates<System>* k1,
                     double time, double step_size,
                     const state_type &y, const adjoint_rows& lambda_out,
                     adjoint_rows& lambda_in, adjoint_rows& parameter_adjoint);
   // The same with the first rates derived afresh, which is what a caller
   // transposing one step on its own has: no step before it to carry them.
-  void step_adjoint(active_system<System>& active, const solved_row& solved,
+  void step_adjoint(active_system<System>& active,
+                    const solved_row<System>& solved,
                     double time, double step_size, const state_type& y,
                     const adjoint_rows& lambda_out, adjoint_rows& lambda_in,
                     adjoint_rows& parameter_adjoint) {
@@ -93,7 +77,12 @@ public:
 private:
   // The tableau, written once and used at whatever scalar the caller holds its
   // rates in: the forward step and the recording its transpose is taken from
-  // both step through these, so the two cannot come apart.
+  // both step through these, so the two cannot come apart -- except in the last
+  // place, where the compiler contracts a * b + c into a fused multiply-add.
+  // It can do so for doubles but not through the adjoint scalar's operators, so
+  // under contraction (clang's default) a stage state the recording builds can
+  // be an ulp from the one the step stepped through; with -ffp-contract=off the
+  // two are bit-identical.
   //
   // Y_i for stage i, into `out`: y at stage 0, and y plus the combination of the
   // earlier stage rates above that. Callers pass 1..5; see stage_row for why the
@@ -311,8 +300,8 @@ void Step<System>::step_end(const std::vector<S>& y,
 // so a stage the parameters reach carries their rows too.
 template <class System>
 void Step<System>::step_adjoint(active_system<System>& active,
-                                const solved_row& solved,
-                                const carried_rates* k1,
+                                const solved_row<System>& solved,
+                                const carried_rates<System>* k1,
                                 double time, double step_size,
                                 const state_type &y, const adjoint_rows& lambda_out,
                                 adjoint_rows& lambda_in,

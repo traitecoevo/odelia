@@ -1,6 +1,6 @@
 # Tests that the solver records the step size each accepted step took, and that a
 # replay driven by those sizes reproduces the adaptive run bitwise where a replay
-# driven by the recorded times does not.
+# driven by the recorded times does not -- under both explicit steppers.
 
 compile_step_record_interface <- function() {
   ensure_ode_interface_loaded()
@@ -23,6 +23,7 @@ compile_step_record_interface <- function() {
   Rcpp::sourceCpp(code = '
     // [[Rcpp::plugins(cpp20)]]
     #include <Rcpp.h>
+    #include <string>
     #include <vector>
     #include <odelia/ode_solver.hpp>
     #include <examples/lorenz_system.hpp>
@@ -30,12 +31,13 @@ compile_step_record_interface <- function() {
     using namespace odelia;
     using LorenzD = LorenzSystem<double>;
 
-    static ode::Solver<LorenzD> make_solver(Rcpp::NumericVector y0, double t0) {
+    static ode::Solver<LorenzD> make_solver(Rcpp::NumericVector y0, double t0,
+                                            ode::Method method) {
       LorenzD sys(10.0, 28.0, 8.0 / 3.0);
       std::vector<double> y(y0.begin(), y0.end());
       sys.set_initial_state(y.begin(), t0);
       sys.reset();
-      ode::Solver<LorenzD> solver(sys, ode::OdeControl());
+      ode::Solver<LorenzD> solver(sys, ode::OdeControl(), method);
       solver.set_collect(false);
       return solver;
     }
@@ -43,8 +45,11 @@ compile_step_record_interface <- function() {
     // Adaptive run over [t0, t1], then the same trajectory replayed twice: once
     // over the recorded step sizes, once over the recorded times.
     // [[Rcpp::export]]
-    Rcpp::List step_record_replays(Rcpp::NumericVector y0, double t0, double t1) {
-      ode::Solver<LorenzD> solver = make_solver(y0, t0);
+    Rcpp::List step_record_replays(Rcpp::NumericVector y0, double t0, double t1,
+                                   std::string method_name = "rkck") {
+      const ode::Method method =
+        method_name == "dopri" ? ode::Method::dopri : ode::Method::rkck;
+      ode::Solver<LorenzD> solver = make_solver(y0, t0, method);
       solver.advance_adaptive({t0, t1});
       const std::vector<double> times = solver.times();
       const std::vector<double> step_sizes = solver.step_sizes();
@@ -55,10 +60,10 @@ compile_step_record_interface <- function() {
       for (size_t i = 0; i < times.size(); ++i) {
         recording.push_back({times[i], step_sizes[i]});
       }
-      ode::Solver<LorenzD> by_steps = make_solver(y0, t0);
+      ode::Solver<LorenzD> by_steps = make_solver(y0, t0, method);
       by_steps.advance_recorded(recording);
 
-      ode::Solver<LorenzD> by_times = make_solver(y0, t0);
+      ode::Solver<LorenzD> by_times = make_solver(y0, t0, method);
       by_times.advance_fixed(times);
 
       return Rcpp::List::create(
@@ -76,10 +81,10 @@ compile_step_record_interface <- function() {
 bits <- function(x) vapply(x, function(v) paste(writeBin(v, raw()), collapse = ""),
                            character(1))
 
-test_that("the solver records a step size beside each recorded time", {
+for (method in c("rkck", "dopri")) test_that(paste0("[", method, "] the solver records a step size beside each recorded time"), {
   compile_step_record_interface()
   # t of order 100 against h of order 0.01, where fl(fl(t + h) - t) != h bites.
-  res <- step_record_replays(c(1, 1, 1), 100, 101)
+  res <- step_record_replays(c(1, 1, 1), 100, 101, method)
 
   expect_equal(length(res$step_sizes), length(res$times))
   expect_true(is.nan(res$step_sizes[1]))
@@ -94,9 +99,9 @@ test_that("the solver records a step size beside each recorded time", {
               max(res$step_sizes[-1]), reached - 101))
 })
 
-test_that("a replay over the recorded step sizes reproduces the adaptive run bitwise", {
+for (method in c("rkck", "dopri")) test_that(paste0("[", method, "] a replay over the recorded step sizes reproduces the adaptive run bitwise"), {
   compile_step_record_interface()
-  res <- step_record_replays(c(1, 1, 1), 100, 101)
+  res <- step_record_replays(c(1, 1, 1), 100, 101, method)
 
   expect_identical(bits(res$y_by_steps), bits(res$y_adaptive))
 
