@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.4</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.5</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,11 @@
       <small>Source: <a href="https://github.com/traitecoevo/odelia/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.7.5" id="odelia-075">odelia 0.7.5<a class="anchor" aria-label="anchor" href="#odelia-075"></a></h2>
+<p><strong>A cubic read at an active position is one tape statement.</strong> <code>hermite_spline&lt;S&gt;::eval</code> at an active query took the value and the slope through the span’s Horner loops and then added the query’s derivative, and every named intermediate on that path was a statement: eight per read. A model that integrates over a field reads it at every quadrature point, so in plant’s FF16 those reads were a large share of a sweep’s tape (plant#677). Inside the knots a cubic’s read is now one expression (<code>Span::value_at_query</code>), with the same operations in the same order, so the value and its derivative with respect to the position do not move; the quintic and the end extensions are unchanged. A knot’s partial is now one product taken from the root of that expression rather than a chain through the Horner steps, so an adjoint reaching the knot values agrees with before to rounding and not bit for bit (up to 1e-11 relative through <code>natural_slopes</code>); a unit seed hides this, since then the two products are equal. A test in <code>test-spline-ad.R</code> reads at an active position inside a span, on an interior knot, on each end knot and past each end, under a seed other than one. It holds the value and the position derivative to the composed read bit for bit and the knot adjoints to it within rounding, checks the knot adjoints against central differences, and counts one statement for the interior read.</p>
+<p>A <strong>patch</strong> bump: no signature changes, and no value moves; a gradient through the knot values moves at rounding.</p>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.7.4" id="odelia-074">odelia 0.7.4<a class="anchor" aria-label="anchor" href="#odelia-074"></a></h2>
 <p><strong>A Dormand-Prince run can now be recorded, replayed and swept (<a href="https://github.com/traitecoevo/odelia/issues/65" class="external-link">#65</a>).</strong> Only <code>method = "rkck"</code> recorded a run, and <code>"dopri"</code> refused a sweep and a replay, so a run that wanted dense output and a gradient could not take both from one stepper. Dormand-Prince is explicit like Cash-Karp, and everything the sweep does transfers; what it lacked was its own row and transpose. <code>DopriStep::step</code> now takes the row a step solves into, or loads from where it is handed a const one, and <code>DopriStep::step_adjoint</code> records one step and sweeps it once per seed on the Dormand-Prince tableau. The forward step and that recording build each stage through one set of kernels, so the sweep transposes the arithmetic the step performed, and a dopri run’s forward numbers are bit-identical to before. The two agree to the last place where the compiler does not contract <code>a * b + c</code> into a fused multiply-add; under clang’s default it does so for doubles and not through the adjoint scalar’s operators, and a stage state can then differ by an ulp. Cash-Karp’s kernels have always shared this, and the header comments now say so.</p>

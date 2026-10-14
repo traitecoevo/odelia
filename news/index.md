@@ -1,5 +1,31 @@
 # Changelog
 
+## odelia 0.7.5
+
+**A cubic read at an active position is one tape statement.**
+`hermite_spline<S>::eval` at an active query took the value and the
+slope through the span’s Horner loops and then added the query’s
+derivative, and every named intermediate on that path was a statement:
+eight per read. A model that integrates over a field reads it at every
+quadrature point, so in plant’s FF16 those reads were a large share of a
+sweep’s tape (plant#677). Inside the knots a cubic’s read is now one
+expression (`Span::value_at_query`), with the same operations in the
+same order, so the value and its derivative with respect to the position
+do not move; the quintic and the end extensions are unchanged. A knot’s
+partial is now one product taken from the root of that expression rather
+than a chain through the Horner steps, so an adjoint reaching the knot
+values agrees with before to rounding and not bit for bit (up to 1e-11
+relative through `natural_slopes`); a unit seed hides this, since then
+the two products are equal. A test in `test-spline-ad.R` reads at an
+active position inside a span, on an interior knot, on each end knot and
+past each end, under a seed other than one. It holds the value and the
+position derivative to the composed read bit for bit and the knot
+adjoints to it within rounding, checks the knot adjoints against central
+differences, and counts one statement for the interior read.
+
+A **patch** bump: no signature changes, and no value moves; a gradient
+through the knot values moves at rounding.
+
 ## odelia 0.7.4
 
 **A Dormand-Prince run can now be recorded, replayed and swept
