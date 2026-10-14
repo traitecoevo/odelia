@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.4</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -90,8 +90,8 @@
 
       <dt><code>method</code></dt>
 <dd><p>Integration method: <code>"rkck"</code> (default, explicit Cash-Karp
-RK 4(5)) or <code>"rodas"</code> (implicit RODAS4(3) Rosenbrock, for stiff
-systems).</p></dd>
+RK 4(5)), <code>"dopri"</code> (explicit Dormand-Prince 5(4)) or <code>"rodas"</code>
+(implicit RODAS4(3) Rosenbrock, for stiff systems).</p></dd>
 
 
 </dl><p></p></div>
@@ -290,7 +290,10 @@ each row of <code>target</code> was observed.</p></dd>
 <p></p><hr><a id="method-Lorenz_Solver-fit"></a><div class="section">
 <h3 id="lorenz-solver-fit-"><code>Lorenz_Solver$fit()</code><a class="anchor" aria-label="anchor" href="#lorenz-solver-fit-"></a></h3>
 <p>Least-squares loss against the target, and its exact
-  gradient by reverse-mode automatic differentiation.</p><div class="section">
+  gradient by reverse-mode automatic differentiation. The schedule is
+  replayed under this solver's <code>method</code>, except that a
+  <code>"rodas"</code> solver's is replayed under <code>"rkck"</code>: the
+  Rosenbrock stepper cannot be swept.</p><div class="section">
 <h4 id="usage-15">Usage<a class="anchor" aria-label="anchor" href="#usage-15"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">Lorenz_Solver</span><span class="op">$</span><span class="fu">fit</span><span class="op">(</span>ic <span class="op">=</span> <span class="cn">NULL</span>, params <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">

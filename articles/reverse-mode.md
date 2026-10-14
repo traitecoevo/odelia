@@ -181,8 +181,15 @@ holding only the last sub-step’s solved values. The row is marked
 treating the interval as one step. Record a run adaptively, or pin it
 finely enough that nothing is refused.
 
-Only `method = "rkck"` records a run. `"dopri"` and `"rodas"` keep no
-per-stage row and refuse a sweep or a replay.
+Both explicit steppers record a run: `method = "rkck"` (Cash-Karp) and
+`"dopri"` (Dormand-Prince) make the same six new rate evaluations a
+step, five stages and the one at the state the step ends at, so their
+rows have the same shape and a sweep or a replay reads them the same
+way. A Dormand-Prince run can therefore give dense output and a gradient
+from one stepper. The shape is shared but the meaning is not: entry i is
+each tableau’s own stage, so a recording names its method and replays
+only under it. `"rodas"` keeps no per-stage row and refuses a sweep or a
+replay.
 
 ## Where the state grows
 
@@ -349,7 +356,8 @@ hands the gradient to [`optim()`](https://rdrr.io/r/stats/optim.html).
     `vector_jacobian_product`, `state_and_parameter_adjoints`, the
     transpose of one map.
 5.  `ode_step_rkck.hpp`: `Step::step_adjoint`, the transpose of one
-    step, and the `solved` channel.
+    step, and the `solved` channel; `ode_step_dopri.hpp`:
+    `DopriStep::step_adjoint`, the same on the Dormand-Prince tableau.
 6.  `ode_solver.hpp`: `solve_adjoint`, the loop over rows and
     insertions; `advance_recorded`, the replay.
 7.  `implicit_node.hpp`: supplied rows and `implicit_value`, independent

@@ -32,7 +32,7 @@ those above it.
 | `adjoint.hpp` | `adjoint_rows`, `active_system`, `vector_jacobian_product`, `state_and_parameter_adjoints`: the transpose of one map |
 | `implicit_node.hpp` | `record_with_derivatives`, `implicit_value`: a value on the tape carrying rows obtained elsewhere; independent of the solver |
 | `ode_linalg.hpp`, `ode_jacobian.hpp` | dense LU and eigenvalues; the Jacobian from a System’s hook or by forward AD |
-| `ode_step_rkck.hpp`, `ode_step_dopri.hpp`, `ode_step_rodas.hpp` | the three steppers; only `rkck` records a run and carries `Step::step_adjoint` |
+| `ode_step_rkck.hpp`, `ode_step_dopri.hpp`, `ode_step_rodas.hpp` | the three steppers; the two explicit ones, `rkck` and `dopri`, record a run and carry `step_adjoint` |
 | `ode_callback_system.hpp` | `CallbackSystem`, a System over `std::function`s |
 | `ode_solver_internal.hpp` → `ode_solver.hpp` | `SolverInternal` (stepping, the record), `Solver<System>` (`advance_*`, `recording()`, `solve_adjoint`, `advance_recorded`) |
 | `sweep.hpp`, `ode_steady_state.hpp` | range helpers for a consumer driving a sweep itself; Newton to a fixed point with implicit-function-theorem sensitivity |
@@ -187,7 +187,12 @@ accepted step from the step’s own stages, and
 `Solver::advance_collect(times, dense = true)` uses it to report at
 requested times without making a step end on each. Under the other
 steppers the interpolant is cubic Hermite on the step’s endpoints, one
-order short.
+order short. Dormand-Prince records, replays and sweeps a run exactly as
+Cash-Karp does: the same six-entry `solved_row`, filled with its five
+later stages and the evaluation at the state the step ends at, and a
+`DopriStep::step_adjoint` on its own tableau. The entries mean different
+stages under the two tableaux, so each `step_record` names its `Method`
+and a replay under the other stepper is refused.
 
 ## The solver core contains no R
 

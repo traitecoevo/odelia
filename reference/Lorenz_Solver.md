@@ -68,8 +68,9 @@ Initialize a solver for a Lorenz system.
 
 - `method`:
 
-  Integration method: `"rkck"` (default, explicit Cash-Karp RK 4(5)) or
-  `"rodas"` (implicit RODAS4(3) Rosenbrock, for stiff systems).
+  Integration method: `"rkck"` (default, explicit Cash-Karp RK 4(5)),
+  `"dopri"` (explicit Dormand-Prince 5(4)) or `"rodas"` (implicit
+  RODAS4(3) Rosenbrock, for stiff systems).
 
 ------------------------------------------------------------------------
 
@@ -274,7 +275,9 @@ Set the calibration target for `$fit()`.
 ### `Lorenz_Solver$fit()`
 
 Least-squares loss against the target, and its exact gradient by
-reverse-mode automatic differentiation.
+reverse-mode automatic differentiation. The schedule is replayed under
+this solver's `method`, except that a `"rodas"` solver's is replayed
+under `"rkck"`: the Rosenbrock stepper cannot be swept.
 
 #### Usage
 
