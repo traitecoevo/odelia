@@ -20,11 +20,6 @@
 namespace odelia {
 namespace ode {
 
-// Integration method: the explicit Cash-Karp RKCK 4(5) stepper (default), the
-// implicit RODAS4(3) Rosenbrock stepper for stiff systems, or the explicit
-// Dormand-Prince 5(4) stepper with order-4 dense output.
-enum class Method { rkck, rodas, dopri };
-
 template <class System>
 class SolverInternal {
 public:
@@ -52,33 +47,42 @@ public:
   void step(System& system);
 
   // The adjoint of one step, from the state that step started at, for several
-  // seeds at once. RKCK only: neither the Rosenbrock nor the Dormand-Prince
-  // stepper records its stages, so neither carries a reverse
-  // counterpart.
+  // seeds at once. The two explicit steppers only: the Rosenbrock stepper
+  // records no stages, so it carries no reverse counterpart.
   void step_adjoint(active_system<System>& active,
-                    const typename Step<System>::solved_row& solved,
-                    const typename Step<System>::carried_rates* k1, double time,
+                    const solved_row<System>& solved,
+                    const carried_rates<System>* k1, double time,
                     double step_size, const state_type& y,
                     const adjoint_rows& lambda_out, adjoint_rows& lambda_in,
                     adjoint_rows& parameter_adjoint) {
     if (method == Method::rodas) {
-      util::stop("method='rodas' has no adjoint; use method='rkck'.");
-    }
-    if (method == Method::dopri) {
-      util::stop("method='dopri' has no adjoint; use method='rkck'.");
+      util::stop("method='rodas' has no adjoint; use method='rkck' or "
+                 "method='dopri'.");
     }
     // The System can be a different width from the one the forward pass left,
     // because a caller sweeping a range narrows it between ranges. Every seed
     // carries that same width, and the stage buffers are sized to it here. A sweep
     // is the end of the solver's forward state either way.
     resize(lambda_out.width());
-    stepper.step_adjoint(active, solved, k1, time, step_size, y,
-                         lambda_out, lambda_in, parameter_adjoint);
+    if (method == Method::dopri) {
+      dopri_stepper.step_adjoint(active, solved, k1, time, step_size, y,
+                                 lambda_out, lambda_in, parameter_adjoint);
+    } else {
+      stepper.step_adjoint(active, solved, k1, time, step_size, y,
+                           lambda_out, lambda_in, parameter_adjoint);
+    }
   }
 
-  // Rate evaluations recorded since the count was last cleared.
-  std::size_t recorded_rates() const { return stepper.recorded_rates; }
-  void clear_recorded_rates() { stepper.recorded_rates = 0; }
+  // Rate evaluations the selected stepper's sweeps recorded since the count was
+  // last cleared.
+  std::size_t recorded_rates() const {
+    return method == Method::dopri ? dopri_stepper.recorded_rates
+                                   : stepper.recorded_rates;
+  }
+  void clear_recorded_rates() {
+    stepper.recorded_rates = 0;
+    dopri_stepper.recorded_rates = 0;
+  }
 
 
   // Keep the state at each accepted step as well as the time and the size. The
@@ -154,7 +158,7 @@ public:
   // `reached` is the time a recording says this step ended at; NaN accumulates.
   // `replay`, where a recording is being walked, is that step's own solved row.
   void step_by(System& system, double step_size, double reached,
-               const typename Step<System>::solved_row* replay = nullptr);
+               const solved_row<System>* replay = nullptr);
   void step_euler(System& system, double time_max_);
 
   void set_time_max(double time_max_);
@@ -191,6 +195,7 @@ public:
   // unavailable until a step has been accepted since the last reset.
   bool can_interpolate() const { return have_prev; }
   double previous_time() const { return time_prev; }
+  Method get_method() const { return method; }
   void interpolate(double t, state_type& out) const;
 
 private:
@@ -199,9 +204,9 @@ private:
   void save_dydt_out_as_in();
   void set_time(double t);
 
-  // Stepper dispatch: SolverInternal holds both steppers and forwards to the one
-  // selected at construction. The adaptive controller (see step()) is otherwise
-  // stepper-agnostic.
+  // Stepper dispatch: SolverInternal holds all three steppers and forwards to
+  // the one selected at construction. The adaptive controller (see step()) is
+  // otherwise stepper-agnostic.
   // The step index the stages are addressed by is this object's own count of
   // accepted steps, which is the step about to be taken -- read here rather than
   // passed, so no caller can disagree with it.
@@ -212,44 +217,19 @@ private:
   void stepper_step(System& system, double time_, double step_size,
                     state_type& y_, state_type& yerr_,
                     const state_type& dydt_in_, state_type& dydt_out_,
-                    const typename Step<System>::solved_row* replay = nullptr) {
+                    const solved_row<System>* replay = nullptr) {
     // Each stepper's last evaluation is at the state the step ends at, at this
     // time, which is what first-same-as-last carries on with dydt_out.
     dydt_out_time = time_ + step_size;
-    if (method == Method::dopri) {
-      if (replay != nullptr) {
-        util::stop("method='dopri' cannot replay what a run solved for: the "
-                   "Dormand-Prince stepper keeps no per-stage row; use "
-                   "method='rkck'.");
-      }
-      dopri_stepper.step(system, time_, step_size, y_, yerr_, dydt_in_, dydt_out_);
-    } else if (method == Method::rodas) {
-      if (replay != nullptr) {
-        // RODAS takes no row at all, so it has nowhere to put one. Said here
-        // rather than dropped silently, which would replay a run's choices by
-        // re-deriving them.
-        util::stop("method='rodas' cannot replay what a run solved for: the "
-                   "Rosenbrock stepper keeps no per-stage row; use method='rkck'.");
-      }
-      if constexpr (RodasStep<System>::supported) {
-        rodas_stepper.step(system, time_, step_size, y_, yerr_, dydt_in_,
-                           dydt_out_);
-      } else {
-        // RODAS is unavailable for this System: it has neither an
-        // ode_jacobian() hook nor a rebind_from() hook for the AD Jacobian, or its
-        // scalar type is itself active.
-        util::stop("method='rodas' is not available for this system/scalar type "
-                   "(needs an ode_jacobian() hook, or a rebind_from() hook with a "
-                   "non-active scalar); use method='rkck'.");
-      }
-    } else {
+    // The two explicit steppers take a row the same way.
+    auto with_row = [&](auto& explicit_stepper) -> void {
       // Into scratch, because a step that is rejected and retried writes here twice
       // and only the one that is accepted is committed -- which is what makes
       // "a rejected attempt writes the same slot as its retry" nothing anyone has
       // to arrange.
       if (replay != nullptr) {
-        stepper.step(system, *replay, time_, step_size, y_, yerr_, dydt_in_,
-                     dydt_out_);
+        explicit_stepper.step(system, *replay, time_, step_size, y_, yerr_,
+                              dydt_in_, dydt_out_);
         // A replay that keeps its states keeps the rows it loaded too, so its
         // own recording can be swept with the same loads: a sweep of it then
         // hands each stage the value the replay stood in, exogenous and
@@ -263,9 +243,34 @@ private:
         }
       } else {
         for (solved_values_t<System>& row : solved_scratch_) { row = {}; }
-        stepper.step(system, solved_scratch_, time_, step_size, y_, yerr_,
-                     dydt_in_, dydt_out_);
+        explicit_stepper.step(system, solved_scratch_, time_, step_size, y_,
+                              yerr_, dydt_in_, dydt_out_);
       }
+    };
+    if (method == Method::dopri) {
+      with_row(dopri_stepper);
+    } else if (method == Method::rodas) {
+      if (replay != nullptr) {
+        // RODAS takes no row at all, so it has nowhere to put one. Said here
+        // rather than dropped silently, which would replay a run's choices by
+        // re-deriving them.
+        util::stop("method='rodas' cannot replay what a run solved for: the "
+                   "Rosenbrock stepper keeps no per-stage row; use "
+                   "method='rkck' or method='dopri'.");
+      }
+      if constexpr (RodasStep<System>::supported) {
+        rodas_stepper.step(system, time_, step_size, y_, yerr_, dydt_in_,
+                           dydt_out_);
+      } else {
+        // RODAS is unavailable for this System: it has neither an
+        // ode_jacobian() hook nor a rebind_from() hook for the AD Jacobian, or its
+        // scalar type is itself active.
+        util::stop("method='rodas' is not available for this system/scalar type "
+                   "(needs an ode_jacobian() hook, or a rebind_from() hook with a "
+                   "non-active scalar); use method='rkck' or method='dopri'.");
+      }
+    } else {
+      with_row(stepper);
     }
   }
   size_t stepper_order() const {
@@ -337,7 +342,7 @@ private:
 
   // The step being attempted writes what it solves for here, and an accepted step
   // moves it onto its row.
-  typename Step<System>::solved_row solved_scratch_;
+  solved_row<System> solved_scratch_;
 
   state_type y;        // Vector of current system state
   state_type yerr;     // Vector of error estimates
@@ -410,6 +415,7 @@ void SolverInternal<System>::push_step(System& system, double time_,
     record.solved = std::move(solved_scratch_);
     record.subdivided = subdivided;
     record.k1_time = k1_carried_at;
+    record.method = method;
     prev_steps.push_back(std::move(record));
   }
 }
@@ -429,6 +435,7 @@ void SolverInternal<System>::push_insertion(System& system) {
     step_record<System> record{row, state_type()};
     record.state.resize(system.ode_size());
     system.ode_state(record.state.begin());
+    record.method = method;
     prev_steps.push_back(std::move(record));
   }
 }
@@ -492,10 +499,10 @@ void SolverInternal<System>::advance_fixed(System& system,
 }
 
 // Plain forward (explicit) Euler integration over a supplied grid
-// {t_0, t_1, ...}.  Unlike advance_fixed (which still drives the full multi-stage
-// RKCK stepper at each interval), this does ONE derivative evaluation per
+// {t_0, t_1, ...}.  Unlike advance_fixed (which still drives the selected
+// multi-stage stepper at each interval), this does ONE derivative evaluation per
 // interval: derivatives at the current state, then y <- y + h * dydt, advancing
-// the time exactly to each grid point.  The `Step` (RKCK) machinery is bypassed
+// the time exactly to each grid point.  The stepper machinery is bypassed
 // entirely, so there is no error estimate and no step-size control.  Used to run
 // systems the way fixed-step DGVMs do (e.g. a daily step).
 template <class System>
@@ -814,8 +821,7 @@ void SolverInternal<System>::step_to(System& system, double time_max_) {
 template <class System>
 void SolverInternal<System>::step_by(System& system, double step_size,
                                      double reached,
-                                     const typename Step<System>::solved_row*
-                                       replay) {
+                                     const solved_row<System>* replay) {
   if (!util::is_finite(step_size)) {
     util::stop("step_size must be finite!");
   }
@@ -936,6 +942,7 @@ void SolverInternal<System>::set_time(double t) {
     prev_schedule.push_back(row);
     if (keep_states_) {
       prev_steps.push_back(step_record<System>{row, state_type()});
+      prev_steps.back().method = method;
       first_row_unfilled_ = true;
     }
   }

@@ -227,6 +227,46 @@ struct instruction {
   bool insertion = false;
 };
 
+// Integration method: the explicit Cash-Karp RKCK 4(5) stepper (default), the
+// implicit RODAS4(3) Rosenbrock stepper for stiff systems, or the explicit
+// Dormand-Prince 5(4) stepper with order-4 dense output. Here rather than with
+// the solver because a recorded row names the stepper that made it.
+enum class Method { rkck, rodas, dopri };
+
+// The name R passes for each, for messages.
+inline const char* method_name(Method m) {
+  switch (m) {
+    case Method::rodas: return "rodas";
+    case Method::dopri: return "dopri";
+    default: return "rkck";
+  }
+}
+
+// What one step's rate evaluations solve for, in the order the explicit
+// steppers (Cash-Karp and Dormand-Prince) take them. One name, because the
+// forward walk, the sweep and the record (step_record::solved) all have to agree
+// on the shape.
+//
+// SIX AND NOT FIVE. Five are the stages after the first; the sixth is the
+// evaluation at the state the step ends at, which first-same-as-last hands the
+// next step as its own k1. The first stage has no entry: it is carried from the
+// step before or derived afresh, and step_record::k1_time says which. A SWEEP
+// reads 0..4 for its stages and, where the run carried k1 over, the sixth entry
+// of the step before (see carried_rates) -- and a FORWARD replay cannot
+// re-derive it at all, because re-deriving is exactly what it is replaying to
+// avoid, and a step whose k1 was re-derived is wrong at first order in h.
+template <class System>
+using solved_row = std::array<solved_values_t<System>, 6>;
+
+// A step's first rates where first-same-as-last carried them from the step
+// before: that step's sixth evaluation, the row it was taken in and the time it
+// ran at (step_record::k1_time says why that time is its own).
+template <class System>
+struct carried_rates {
+  const solved_values_t<System>& row;
+  double time;
+};
+
 // One row of a recording: the instruction the run executed and the state it left
 // the System holding. A recording row IS a program row plus its state, so it
 // derives rather than repeating the two fields, and a time cannot be paired with a
@@ -236,6 +276,7 @@ struct instruction {
 // no row carries two states and nothing has to choose between them. A insertion row
 // shares its time with the row below it, which is the row that holds the state the
 // map ran on.
+//
 // A run of n steps on a state of width w holds n rows of w scalars and one row of
 // solved values each, and nothing else: stage rates and stage states are
 // recomputed by the sweep, which is cheaper than holding them.
@@ -243,9 +284,16 @@ template <typename System>
 struct step_record : instruction {
   state_type<System> state;
 
-  // What this step's rate evaluations solved for, in the stepper's order; see
-  // Step::solved_row for what the six entries are and which pass reads which.
-  std::array<solved_values_t<System>, 6> solved;
+  // What this step's rate evaluations solved for; see solved_row.
+  solved_row<System> solved;
+
+  // The stepper that took this step. Both explicit steppers fill a row of the
+  // same shape, but entry i is the answer at THEIR stage i + 2, and the two
+  // tableaux put stages 4..6 at different times and states. A replay under the
+  // other stepper would load every one of those at the wrong stage, finitely, so
+  // advance_recorded refuses it; a program (schedule()) carries no rows and
+  // replays under either.
+  Method method = Method::rkck;
 
   // A pinned step that was refused and crossed its interval in several sub-steps.
   // The row still holds the interval, which is what a replay of the caller's times

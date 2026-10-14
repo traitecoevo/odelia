@@ -1,4 +1,5 @@
-# Tests for the recording one step is transposed by -- all six Runge-Kutta stages
+# Tests, under both explicit steppers (Cash-Karp and Dormand-Prince), for the
+# recording one step is transposed by -- all six Runge-Kutta stages
 # and the combination closing them, taken on a System rebound to the adjoint
 # scalar for that recording -- and for Solver::solve_adjoint over the recorded
 # steps. The adjoint records a tape, so the snippet must link against the odelia
@@ -111,6 +112,7 @@ compile_recording_interface <- function() {
   Rcpp::sourceCpp(code = paste0('
     // [[Rcpp::plugins(cpp20)]]
     #include <Rcpp.h>
+    #include <string>
     #include <vector>
     #include <odelia/ode_solver.hpp>
     #include <examples/lorenz_system.hpp>
@@ -126,20 +128,25 @@ compile_recording_interface <- function() {
     // [[Rcpp::export]]
     bool both_systems_rebind() { return true; }
 
-    // One RKCK step and its adjoint, plus what the step cost and how many times
-    // a System was copied for it.
-    // [[Rcpp::export]]
-    Rcpp::List lv_step_and_adjoint(std::vector<double> pars, double time,
-                                   double step_size, std::vector<double> y,
-                                   std::vector<double> lambda_out) {
+    static odelia::ode::Method lv_method(const std::string& method) {
+      return method == "dopri" ? odelia::ode::Method::dopri
+                               : odelia::ode::Method::rkck;
+    }
+
+    // One step and its adjoint, plus what the step cost and how many times a
+    // System was copied for it.
+    template <template <class> class Stepper>
+    Rcpp::List step_and_adjoint_under(std::vector<double> pars, double time,
+                                      double step_size, std::vector<double> y,
+                                      std::vector<double> lambda_out) {
       LotkaVolterra<double> system(pars[0], pars[1], pars[2], pars[3]);
-      odelia::ode::Step<LotkaVolterra<double> > stepper;
+      Stepper<LotkaVolterra<double> > stepper;
       stepper.resize(y.size());
 
       std::vector<double> dydt_in(y.size()), dydt_out(y.size()), yerr(y.size());
       std::vector<double> y_end(y);
       odelia::ode::derivs(system, y, dydt_in, time);
-      decltype(stepper)::solved_row solved{};
+      odelia::ode::solved_row<LotkaVolterra<double> > solved{};
       stepper.step(system, solved, time, step_size, y_end, yerr, dydt_in,
                    dydt_out);
 
@@ -165,14 +172,25 @@ compile_recording_interface <- function() {
                                   (int) stepper.recorded_rates);
     }
 
+    // [[Rcpp::export]]
+    Rcpp::List lv_step_and_adjoint(std::vector<double> pars, double time,
+                                   double step_size, std::vector<double> y,
+                                   std::vector<double> lambda_out,
+                                   std::string method = "rkck") {
+      return method == "dopri"
+        ? step_and_adjoint_under<odelia::ode::DopriStep>(pars, time, step_size, y, lambda_out)
+        : step_and_adjoint_under<odelia::ode::Step>(pars, time, step_size, y, lambda_out);
+    }
+
     // The recorded run, the states it passed through, and the adjoint swept back
     // over them.
     // [[Rcpp::export]]
     Rcpp::List lv_solve_adjoint(std::vector<double> pars, std::vector<double> y0,
-                                double t_end, std::vector<double> lambda_end) {
+                                double t_end, std::vector<double> lambda_end,
+        std::string method = "rkck") {
       odelia::ode::OdeControl ctl;
       LotkaVolterra<double> system(pars[0], pars[1], pars[2], pars[3]);
-      odelia::ode::Solver<LotkaVolterra<double> > solver(system, ctl);
+      odelia::ode::Solver<LotkaVolterra<double> > solver(system, ctl, lv_method(method));
       solver.set_state(y0, 0.0);
       solver.advance_adaptive({0.0, t_end});
       const std::vector<odelia::ode::instruction> recording = solver.schedule();
@@ -180,7 +198,7 @@ compile_recording_interface <- function() {
       // Replays the recorded sizes, keeping its states, so the sweep reads the
       // record the replay itself kept -- rather than copying a whole System per
       // step out of the history to pull one state vector back out of it.
-      odelia::ode::Solver<LotkaVolterra<double> > replay(system, ctl);
+      odelia::ode::Solver<LotkaVolterra<double> > replay(system, ctl, lv_method(method));
       replay.set_keep_states(true);
       replay.set_state(y0, 0.0);
       replay.advance_recorded(recording);
@@ -207,16 +225,17 @@ compile_recording_interface <- function() {
                                                   std::vector<double> y0,
                                                   double t_end,
                                                   std::vector<double> lambda_end,
-                                                  int split) {
+                                                  int split,
+        std::string method = "rkck") {
       odelia::ode::OdeControl ctl;
       LotkaVolterra<double> system(pars[0], pars[1], pars[2], pars[3]);
-      odelia::ode::Solver<LotkaVolterra<double> > solver(system, ctl);
+      odelia::ode::Solver<LotkaVolterra<double> > solver(system, ctl, lv_method(method));
       solver.set_state(y0, 0.0);
       solver.advance_adaptive({0.0, t_end});
       const std::vector<odelia::ode::instruction> recording = solver.schedule();
 
       // Keeps its states, so the sweep reads the record this replay kept.
-      odelia::ode::Solver<LotkaVolterra<double> > replay(system, ctl);
+      odelia::ode::Solver<LotkaVolterra<double> > replay(system, ctl, lv_method(method));
       replay.set_keep_states(true);
       replay.set_state(y0, 0.0);
       replay.advance_recorded(recording);
@@ -237,18 +256,19 @@ compile_recording_interface <- function() {
     // [[Rcpp::export]]
     std::vector<double> lv_replay_at(std::vector<double> schedule_pars,
                                      std::vector<double> run_pars,
-                                     std::vector<double> y0, double t_end) {
+                                     std::vector<double> y0, double t_end,
+        std::string method = "rkck") {
       odelia::ode::OdeControl ctl;
       LotkaVolterra<double> schedule_system(schedule_pars[0], schedule_pars[1],
                                             schedule_pars[2], schedule_pars[3]);
-      odelia::ode::Solver<LotkaVolterra<double> > solver(schedule_system, ctl);
+      odelia::ode::Solver<LotkaVolterra<double> > solver(schedule_system, ctl, lv_method(method));
       solver.set_state(y0, 0.0);
       solver.advance_adaptive({0.0, t_end});
       const std::vector<odelia::ode::instruction> recording = solver.schedule();
 
       LotkaVolterra<double> run_system(run_pars[0], run_pars[1], run_pars[2],
                                        run_pars[3]);
-      odelia::ode::Solver<LotkaVolterra<double> > replay(run_system, ctl);
+      odelia::ode::Solver<LotkaVolterra<double> > replay(run_system, ctl, lv_method(method));
       replay.set_state(y0, 0.0);
       replay.advance_recorded(recording);
       return replay.state();
@@ -259,15 +279,16 @@ compile_recording_interface <- function() {
     // [[Rcpp::export]]
     std::vector<double> lv_replay(std::vector<double> pars,
                                   std::vector<double> y0, double t_end,
-                                  std::vector<double> y_start) {
+                                  std::vector<double> y_start,
+        std::string method = "rkck") {
       odelia::ode::OdeControl ctl;
       LotkaVolterra<double> system(pars[0], pars[1], pars[2], pars[3]);
-      odelia::ode::Solver<LotkaVolterra<double> > solver(system, ctl);
+      odelia::ode::Solver<LotkaVolterra<double> > solver(system, ctl, lv_method(method));
       solver.set_state(y0, 0.0);
       solver.advance_adaptive({0.0, t_end});
       const std::vector<odelia::ode::instruction> recording = solver.schedule();
 
-      odelia::ode::Solver<LotkaVolterra<double> > replay(system, ctl);
+      odelia::ode::Solver<LotkaVolterra<double> > replay(system, ctl, lv_method(method));
       replay.set_state(y_start, 0.0);
       replay.advance_recorded(recording);
       return replay.state();
@@ -275,19 +296,28 @@ compile_recording_interface <- function() {
 
     // The same one step, run forward at perturbed coefficients, so a difference
     // of it referees the parameter half of the recording.
-    // [[Rcpp::export]]
-    std::vector<double> lv_step_end(std::vector<double> pars, double time,
-                                    double step_size, std::vector<double> y) {
+    template <template <class> class Stepper>
+    std::vector<double> step_end_under(std::vector<double> pars, double time,
+                                       double step_size, std::vector<double> y) {
       LotkaVolterra<double> system(pars[0], pars[1], pars[2], pars[3]);
-      odelia::ode::Step<LotkaVolterra<double> > stepper;
+      Stepper<LotkaVolterra<double> > stepper;
       stepper.resize(y.size());
       std::vector<double> dydt_in(y.size()), dydt_out(y.size()), yerr(y.size());
       std::vector<double> y_end(y);
       odelia::ode::derivs(system, y, dydt_in, time);
-      decltype(stepper)::solved_row solved{};
+      odelia::ode::solved_row<LotkaVolterra<double> > solved{};
       stepper.step(system, solved, time, step_size, y_end, yerr, dydt_in,
                    dydt_out);
       return y_end;
+    }
+
+    // [[Rcpp::export]]
+    std::vector<double> lv_step_end(std::vector<double> pars, double time,
+                                    double step_size, std::vector<double> y,
+                                    std::string method = "rkck") {
+      return method == "dopri"
+        ? step_end_under<odelia::ode::DopriStep>(pars, time, step_size, y)
+        : step_end_under<odelia::ode::Step>(pars, time, step_size, y);
     }
   '), verbose = FALSE)
 }
@@ -300,7 +330,7 @@ testthat::test_that("both systems declare the hook the recording rebinds them wi
   expect_true(both_systems_rebind())
 })
 
-testthat::test_that("step_adjoint matches a finite difference of one step", {
+for (method in c("rkck", "dopri")) testthat::test_that(paste0("[", method, "] step_adjoint matches a finite difference of one step"), {
   compile_recording_interface()
 
   step_size <- 0.05
@@ -308,7 +338,7 @@ testthat::test_that("step_adjoint matches a finite difference of one step", {
   lambda_out <- c(0.7, -1.9)
   eps <- 1e-7
 
-  step_end <- function(y) lv_step_end(lv_pars, 0.0, step_size, y)
+  step_end <- function(y) lv_step_end(lv_pars, 0.0, step_size, y, method = method)
   jacobian <- sapply(seq_along(lv_y), function(j) {
     up <- lv_y; up[j] <- up[j] + eps
     down <- lv_y; down[j] <- down[j] - eps
@@ -316,14 +346,14 @@ testthat::test_that("step_adjoint matches a finite difference of one step", {
   })
   expected <- as.vector(t(jacobian) %*% lambda_out)
 
-  got <- lv_step_and_adjoint(lv_pars, 0.0, step_size, lv_y, lambda_out)$lambda_in
+  got <- lv_step_and_adjoint(lv_pars, 0.0, step_size, lv_y, lambda_out, method = method)$lambda_in
   expect_equal(got, expected, tolerance = 1e-6)
   # The transpose is load-bearing: J is not symmetric here.
   expect_false(isTRUE(all.equal(expected, as.vector(jacobian %*% lambda_out),
                                 tolerance = 1e-3)))
 })
 
-testthat::test_that("the coefficients' rows come back with the state's", {
+for (method in c("rkck", "dopri")) testthat::test_that(paste0("[", method, "] the coefficients' rows come back with the state's"), {
   compile_recording_interface()
 
   # The parameters ride in the same recording as the state, so an active System carried
@@ -336,17 +366,17 @@ testthat::test_that("the coefficients' rows come back with the state's", {
   expected <- sapply(seq_along(lv_pars), function(j) {
     up <- lv_pars; up[j] <- up[j] + eps
     down <- lv_pars; down[j] <- down[j] - eps
-    sum(((lv_step_end(up, 0.0, step_size, lv_y) -
-          lv_step_end(down, 0.0, step_size, lv_y)) / (2 * eps)) * lambda_out)
+    sum(((lv_step_end(up, 0.0, step_size, lv_y, method = method) -
+          lv_step_end(down, 0.0, step_size, lv_y, method = method)) / (2 * eps)) * lambda_out)
   })
 
   got <- lv_step_and_adjoint(lv_pars, 0.0, step_size, lv_y,
-                             lambda_out)$parameter_adjoint
+                             lambda_out, method = method)$parameter_adjoint
   expect_equal(got, expected, tolerance = 1e-6)
   expect_false(any(abs(expected) < 1e-8))
 })
 
-testthat::test_that("one component of lambda_out at a time agrees, row by row", {
+for (method in c("rkck", "dopri")) testthat::test_that(paste0("[", method, "] one component of lambda_out at a time agrees, row by row"), {
   compile_recording_interface()
 
   step_size <- 0.05
@@ -357,19 +387,19 @@ testthat::test_that("one component of lambda_out at a time agrees, row by row", 
     row <- sapply(seq_along(lv_y), function(j) {
       up <- lv_y; up[j] <- up[j] + eps
       down <- lv_y; down[j] <- down[j] - eps
-      (lv_step_end(lv_pars, 0.0, step_size, up)[i] -
-       lv_step_end(lv_pars, 0.0, step_size, down)[i]) / (2 * eps)
+      (lv_step_end(lv_pars, 0.0, step_size, up, method = method)[i] -
+       lv_step_end(lv_pars, 0.0, step_size, down, method = method)[i]) / (2 * eps)
     })
-    got <- lv_step_and_adjoint(lv_pars, 0.0, step_size, lv_y, seed)$lambda_in
+    got <- lv_step_and_adjoint(lv_pars, 0.0, step_size, lv_y, seed, method = method)$lambda_in
     expect_equal(got, row, tolerance = 1e-6,
                  info = paste("seeded component", i))
   }
 })
 
-testthat::test_that("a step is one recording of six rates, on one copy of the System", {
+for (method in c("rkck", "dopri")) testthat::test_that(paste0("[", method, "] a step is one recording of six rates, on one copy of the System"), {
   compile_recording_interface()
 
-  r <- lv_step_and_adjoint(lv_pars, 0.0, 0.05, lv_y, c(0.7, -1.9))
+  r <- lv_step_and_adjoint(lv_pars, 0.0, 0.05, lv_y, c(0.7, -1.9), method = method)
   # One recording spans the step, so the System is rebound once for it. Every
   # scalar a recording writes has to arrive holding no tape slot, and a copy
   # taken for the recording is what gives it that.
@@ -382,14 +412,14 @@ testthat::test_that("a step is one recording of six rates, on one copy of the Sy
   expect_identical(r$rate_calls, 0L)
 })
 
-testthat::test_that("solve_adjoint over the recorded steps matches a finite difference of the run", {
+for (method in c("rkck", "dopri")) testthat::test_that(paste0("[", method, "] solve_adjoint over the recorded steps matches a finite difference of the run"), {
   compile_recording_interface()
 
   t_end <- 1.5
   lambda_end <- c(0.4, -1.3)
   eps <- 1e-6
 
-  r <- lv_solve_adjoint(lv_pars, lv_y, t_end, lambda_end)
+  r <- lv_solve_adjoint(lv_pars, lv_y, t_end, lambda_end, method = method)
   expect_gt(r$n_steps, 3)
   # Six rate evaluations recorded per step swept. The recording's first entry is
   # the state no step reached, so the sweep takes one fewer.
@@ -398,14 +428,14 @@ testthat::test_that("solve_adjoint over the recorded steps matches a finite diff
   jacobian <- sapply(seq_along(lv_y), function(j) {
     up <- lv_y; up[j] <- up[j] + eps
     down <- lv_y; down[j] <- down[j] - eps
-    (lv_replay(lv_pars, lv_y, t_end, up) -
-     lv_replay(lv_pars, lv_y, t_end, down)) / (2 * eps)
+    (lv_replay(lv_pars, lv_y, t_end, up, method = method) -
+     lv_replay(lv_pars, lv_y, t_end, down, method = method)) / (2 * eps)
   })
   expected <- as.vector(t(jacobian) %*% lambda_end)
   expect_equal(r$lambda, expected, tolerance = 1e-5)
 })
 
-testthat::test_that("the coefficients' rows over a whole run match a finite difference of it", {
+for (method in c("rkck", "dopri")) testthat::test_that(paste0("[", method, "] the coefficients' rows over a whole run match a finite difference of it"), {
   compile_recording_interface()
 
   # The state channel above and the coefficients' channel below fail
@@ -418,12 +448,12 @@ testthat::test_that("the coefficients' rows over a whole run match a finite diff
   lambda_end <- c(0.4, -1.3)
   eps <- 1e-6
 
-  got <- lv_solve_adjoint(lv_pars, lv_y, t_end, lambda_end)$parameter_adjoint
+  got <- lv_solve_adjoint(lv_pars, lv_y, t_end, lambda_end, method = method)$parameter_adjoint
   expected <- sapply(seq_along(lv_pars), function(j) {
     up <- lv_pars; up[j] <- up[j] + eps
     down <- lv_pars; down[j] <- down[j] - eps
-    sum(((lv_replay_at(lv_pars, up, lv_y, t_end) -
-          lv_replay_at(lv_pars, down, lv_y, t_end)) / (2 * eps)) * lambda_end)
+    sum(((lv_replay_at(lv_pars, up, lv_y, t_end, method = method) -
+          lv_replay_at(lv_pars, down, lv_y, t_end, method = method)) / (2 * eps)) * lambda_end)
   })
 
   expect_equal(got, expected, tolerance = 1e-5)
@@ -431,32 +461,32 @@ testthat::test_that("the coefficients' rows over a whole run match a finite diff
   expect_false(any(abs(expected) < 1e-6))
 })
 
-testthat::test_that("the sweep taken as two segments equals the sweep taken whole", {
+for (method in c("rkck", "dopri")) testthat::test_that(paste0("[", method, "] the sweep taken as two segments equals the sweep taken whole"), {
   compile_recording_interface()
 
   t_end <- 1.5
   lambda_end <- c(0.4, -1.3)
-  whole <- lv_solve_adjoint(lv_pars, lv_y, t_end, lambda_end)
+  whole <- lv_solve_adjoint(lv_pars, lv_y, t_end, lambda_end, method = method)
 
   # Every interior split, so no segment is empty and every boundary is a step
   # boundary. Bit-identity, not a tolerance: a segment sweeps the same steps in
   # the same order and the arithmetic does not change.
   for (split in seq_len(whole$n_steps - 2L)) {
-    got <- lv_solve_adjoint_segments(lv_pars, lv_y, t_end, lambda_end, split)
+    got <- lv_solve_adjoint_segments(lv_pars, lv_y, t_end, lambda_end, split, method = method)
     expect_identical(got, whole$lambda, info = paste("split at", split))
   }
 })
 
-testthat::test_that("a segment that is not a range of recorded steps is refused", {
+for (method in c("rkck", "dopri")) testthat::test_that(paste0("[", method, "] a segment that is not a range of recorded steps is refused"), {
   compile_recording_interface()
 
   t_end <- 1.5
   lambda_end <- c(0.4, -1.3)
-  n <- lv_solve_adjoint(lv_pars, lv_y, t_end, lambda_end)$n_steps
+  n <- lv_solve_adjoint(lv_pars, lv_y, t_end, lambda_end, method = method)$n_steps
   # A split at either end leaves one of the two segments empty.
-  expect_error(lv_solve_adjoint_segments(lv_pars, lv_y, t_end, lambda_end, 0L),
+  expect_error(lv_solve_adjoint_segments(lv_pars, lv_y, t_end, lambda_end, 0L, method = method),
                "not a range of recorded steps")
   expect_error(lv_solve_adjoint_segments(lv_pars, lv_y, t_end, lambda_end,
-                                         n - 1L),
+                                         n - 1L, method = method),
                "not a range of recorded steps")
 })

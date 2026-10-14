@@ -51,8 +51,8 @@ R6 wrapper for the Lorenz ODE solver.
       \item{\code{System_xp}}{External pointer to the Lorenz system object.}
       \item{\code{control_xp}}{External pointer to the ODE control object.}
       \item{\code{method}}{Integration method: \code{"rkck"} (default, explicit Cash-Karp
-RK 4(5)) or \code{"rodas"} (implicit RODAS4(3) Rosenbrock, for stiff
-systems).}
+RK 4(5)), \code{"dopri"} (explicit Dormand-Prince 5(4)) or \code{"rodas"}
+(implicit RODAS4(3) Rosenbrock, for stiff systems).}
     }
     \if{html}{\out{</div>}}
   }
@@ -287,7 +287,10 @@ each row of \code{target} was observed.}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-fit}{}}}
 \subsection{\code{Lorenz_Solver$fit()}}{
   Least-squares loss against the target, and its exact
-  gradient by reverse-mode automatic differentiation.
+  gradient by reverse-mode automatic differentiation. The schedule is
+  replayed under this solver's \code{method}, except that a
+  \code{"rodas"} solver's is replayed under \code{"rkck"}: the
+  Rosenbrock stepper cannot be swept.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{Lorenz_Solver$fit(ic = NULL, params = NULL)}

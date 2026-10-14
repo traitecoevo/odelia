@@ -205,6 +205,16 @@ public:
     if constexpr (std::is_same_v<U, double>) {
       return value_at(up);
     } else {
+      static_assert(std::is_constructible_v<S, U>,
+                    "hermite_spline: reading at an active position needs the "
+                    "knot values on the same scalar, so the derivative of the query "
+                    "has somewhere to go -- an active position with S = double would "
+                    "silently drop it.");
+      if constexpr (Order == 3) {
+        if (up > x.front() && up < x.back()) {
+          return spans[span_of(up)].value_at_query(u, up);
+        }
+      }
       // One span load for both halves. The with_query_derivative needs the slope too, and taking
       // them separately resolves the same position twice on the read this class
       // exists for.
@@ -272,8 +282,9 @@ public:
 private:
   // One span's whole polynomial, contiguous: a query touches a single cache line
   // rather than one per coefficient array. The cubic and its derivative are written
-  // here, beside the coefficients they read, so the three readers share one spelling
-  // of each instead of restating it and needing a test that they agree.
+  // here, beside the coefficients they read, so the readers share one spelling of
+  // each instead of restating it. value_at_query is the one restatement, and a
+  // test holds it to the other two.
   struct Span {
     double x0 = 0.0, inv_h = 0.0;
     S y0{};
@@ -296,6 +307,21 @@ private:
       // keeps on every read.
       return (c[0] + t * r) * inv_h;
     }
+    // A cubic's value at an active position u, whose passive part up lies in this
+    // span, and the query's derivative carried through the slope, as ONE
+    // expression: at an active scalar every named intermediate is a tape
+    // statement, and a model that integrates over a field reads at every
+    // quadrature point. value and slope above, term for term, so the value and
+    // d(value)/du are theirs bit for bit. A knot coefficient's partial is the same
+    // product associated from the root rather than through the Horner chain, so
+    // an adjoint reaching the knots agrees with theirs to rounding, not bit for bit.
+    template <typename U>
+    S value_at_query(const U& u, double up) const {
+      static_assert(Order == 3, "value_at_query spells the cubic only.");
+      const double t = local(up);
+      return S(y0 + t * (c[0] + t * (c[1] + t * c[2])) +
+               (c[0] + t * (2.0 * c[1] + t * (3.0 * c[2]))) * inv_h * (u - up));
+    }
   };
 
   // The two length checks and the two vectors every order stores.
@@ -312,11 +338,6 @@ private:
   // temporaries of this return statement, which die on return.
   template <typename U>
   static S with_query_derivative(const S& value, const S& dydu, const U& u, double up) {
-    static_assert(std::is_constructible_v<S, U>,
-                  "hermite_spline: reading at an active position needs the "
-                  "knot values on the same scalar, so the derivative of the query "
-                  "has somewhere to go -- an active position with S = double would "
-                  "silently drop it.");
     return value + dydu * (u - up);
   }
 
