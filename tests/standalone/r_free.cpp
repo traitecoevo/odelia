@@ -2310,6 +2310,59 @@ void test_controller_switch() {
         "a domain refusal is a rejection under the hairer rule too");
 }
 
+// The hairer rule remembers the last step's error ratio. That memory must not
+// turn NaN on a state with no components, must not shrink an accepted step past
+// step_size_min, and must not outlive a reset.
+void test_controller_memory() {
+  using odelia::ode::Method;
+  const std::vector<double> none;
+  odelia::ode::OdeControl c;
+  c.adjust_step_size(0, 5, 0.1, none, none, none);
+  check(std::isfinite(c.get_ratio_prev()), "a step with no state leaves the memory finite");
+
+  // A run that starts empty and gains a cell steps on from the insertion, as it
+  // does under the classical rule.
+  const auto empty_start = [&](const odelia::ode::OdeControl& ctl) -> double {
+    Cells<double> cells(2.0, {});
+    odelia::ode::Solver<Cells<double>> s(cells, ctl, Method::dopri);
+    s.reset();
+    s.advance_adaptive(std::vector<double>{0.0, 0.5});
+    insert_cell(s);
+    try {
+      s.advance_adaptive(std::vector<double>{0.5, 1.0});
+    } catch (const std::exception&) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return s.state()[0];
+  };
+  odelia::ode::OdeControl classical;
+  classical.set_stabilisation(0.0);
+  const double stabilised = empty_start(odelia::ode::OdeControl());
+  check(std::abs(stabilised - empty_start(classical)) < 1e-6,
+        "an empty start widened by an insertion runs on under the default rule");
+
+  // An accepted step at the edge, after a quiet one, shrinks by about 0.62.
+  odelia::ode::OdeControl edge(1e-6, 1e-6, 1.0, 0.0, 0.1, 10.0, 0.1);
+  const State y{1.0}, dydt{0.0}, at_edge{2e-6};
+  check(edge.adjust_step_size(1, 5, 0.1, y, at_edge, dydt) == 0.1,
+        "an accepted step does not shrink below step_size_min");
+
+  // A solver reused after reset() takes the steps a new one takes. The first
+  // step is larger than the rule's growth cap, so the memory is read.
+  const State y0{1.0, 1.0, 1.0};
+  odelia::ode::OdeControl control(1e-6, 1e-6, 1.0, 0.0, 1e-12, 10.0, 0.02);
+  const std::vector<double> times{0.0, 5.0};
+  CallbackSystem a(lorenz_rhs, y0, 0.0), b(lorenz_rhs, y0, 0.0);
+  odelia::ode::Solver<CallbackSystem> fresh(a, control, Method::dopri);
+  fresh.advance_adaptive(times);
+  odelia::ode::Solver<CallbackSystem> reused(b, control, Method::dopri);
+  reused.advance_adaptive(times);
+  reused.set_state(y0, 0.0);
+  reused.advance_adaptive(times);
+  check(reused.times() == fresh.times() && reused.state() == fresh.state(),
+        "a solver reused after reset() steps as a new one does, bit for bit");
+}
+
 } // namespace
 
 int main() {
@@ -2357,6 +2410,7 @@ int main() {
   test_dopri();
   test_dopri_records();
   test_controller_switch();
+  test_controller_memory();
   if (failures == 0) {
     std::printf("all checks passed\n");
     return 0;

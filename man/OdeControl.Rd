@@ -219,9 +219,11 @@ R6 wrapper for ODE solver control settings
     \describe{
       \item{\code{controller}}{Which rule turns the error estimate into the next step:
 `"hairer"` (the default; the error in the RMS norm over components,
-accept at 1 and rescale after every step, as `deSolve` and Hairer's codes
-do, stabilised as `dopri5.f` is; see `set_stabilisation()`) or `"gsl"` (the worst component's error, accept below 1.1, grow only
-below 0.5, otherwise keep the step). `"gsl"` rejects many more attempts;
+accept at 1 and rescale after every step, as Hairer's codes and
+`deSolve` do, damped by the previous step's error as `dopri5.f` is and
+`deSolve`'s `rk` is not; see `set_stabilisation()`) or `"gsl"` (the
+worst component's error, accept below 1.1, grow only below 0.5,
+otherwise keep the step). `"gsl"` rejects many more attempts;
 `"hairer"`'s RMS norm bounds each component more loosely when the state
 is large and the error sits in a few components.}
     }

@@ -124,7 +124,8 @@ runner_stiff <- Lorenz_Solver$new(lz$ptr, ctrl$ptr, method = "rodas")
 All three share the same adaptive step-size controller and `OdeControl`
 tolerances, so you can switch between them without changing anything else.
 The controller's rule is itself a switch, `OdeControl$set_controller()`:
-`"hairer"` (the default, the classical rule of Hairer's codes and `deSolve`) or
+`"hairer"` (the default, Hairer's rule stabilised as `dopri5.f` has it;
+`OdeControl$set_stabilisation(0)` gives the classical rule of `deSolve`) or
 `"gsl"` (odelia's earlier rule, which rejects far more attempts; see the package
 NEWS for 0.8.0).
 

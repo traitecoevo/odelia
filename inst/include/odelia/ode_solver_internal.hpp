@@ -371,6 +371,7 @@ void SolverInternal<System>::reset(System& system) {
   prev_steps.clear();
   prev_schedule.clear();
   step_size_last = control.step_size_initial;
+  control.reset_memory();
   time_max = std::numeric_limits<double>::infinity();
   in_step = false;
   have_prev = false;
@@ -568,6 +569,9 @@ template <class System>
 void SolverInternal<System>::step(System& system) {
   const double time_orig = time, time_remaining = time_max - time;
   double step_size = step_size_last;
+  // The step-size rule's memory of the last step of the solution, put back if
+  // this step turns out not to be one (see OdeControl::get_ratio_prev).
+  const double ratio_prev_orig = control.get_ratio_prev();
 
 
   // Save y in case of failure in a step (recall that stepper.step
@@ -624,6 +628,7 @@ void SolverInternal<System>::step(System& system) {
         invalid_reason = "ode_state_valid() refused the state after the step";
         // Overrides whatever the error estimate concluded, including "accept".
         step_size_next = control.reject_step(step_size);
+        control.set_ratio_prev(ratio_prev_orig);
       }
     }
 
@@ -676,6 +681,7 @@ void SolverInternal<System>::step(System& system) {
       //  small compared to previous step, to reach time_max.
       if (final_step) {
 	      time = time_max;
+	      control.set_ratio_prev(ratio_prev_orig);
       } else {
 	      time += step_size;
 	      step_size_last = step_size_next;

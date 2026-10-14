@@ -4,6 +4,8 @@
 
 The stabilisation matters at an explicit stepper's stability limit. Without it (`set_stabilisation(0)`, the classical rule and `deSolve`'s `rk`), the step grows past the limit, is rejected and grows again: 310 rejections where the stabilised rule makes 1 on a stiff scalar problem under Cash–Karp at 1e-3. It can also grow until the stages cancel and a step returns to where it began, with an error estimate small enough to accept, so the solution stalls short of the equilibrium it should reach. The classical rule takes fewer steps on smooth problems whose step is set by accuracy rather than stability, and plant uses it for that reason.
 
+The rule's memory of the last step is the solution's alone. `reset()`, and so `set_state()`, clears it, so a solver reused for a second run steps as a new one does. A step the solver refuses after the rule accepted it, or one cut short to land on a requested time, leaves it as it was. A state with no components reads as zero error, so a run that starts empty and widens at an insertion steps on from it. An accepted step, which the stabilisation can shrink, stops at `step_size_min`. A rejected step shrinks by `0.9 r^(-1/ord)`, slightly harder than `dopri5.f`'s stabilised exponent; the two agree at `set_stabilisation(0)`.
+
 A **minor** bump, because every adaptive step sequence changes. `set_controller(Controller::gsl)` restores the old sequences exactly. Because the RMS norm averages the error over components, a System with a large state whose error sits in a few components gets a looser bound on each component than the same tolerance gave under `gsl`, and should tighten its tolerance to keep the same accuracy.
 
 ## odelia 0.7.5

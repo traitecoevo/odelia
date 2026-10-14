@@ -30,13 +30,18 @@ namespace ode {
 //           (beta = 0, the classical rule and deSolve's rk) the step can grow
 //           until the stages cancel and the step returns to where it began
 //           with a small error estimate, short of the equilibrium it should
-//           reach.
+//           reach. One departure from dopri5.f: a rejected step shrinks by
+//           0.9 r^(-1/ord), where dopri5.f uses the stabilised exponent
+//           -1/ord + 0.75 beta (0.2 against 0.17 for a fifth-order pair at
+//           beta = 0.04), so it shrinks slightly harder. The two agree at
+//           beta = 0. A state with no components has no error, and reads as
+//           r = 0.
 //
-// The default is hairer with dopri5.f's stabilisation, 0.04. The RMS norm averages the error over components, so a
-// caller whose state is large and whose error sits in a few components gets a
-// looser per-component bound than the same tolerance gives under gsl, and
-// should tighten it. Rejection of a non-finite estimate and reject_step() are
-// the same under both.
+// The default is hairer with dopri5.f's stabilisation, 0.04. The RMS norm
+// averages the error over components, so a caller whose state is large and
+// whose error sits in a few components gets a looser per-component bound than
+// the same tolerance gives under gsl, and should tighten it. Rejection of a
+// non-finite estimate and reject_step() are the same under both.
 enum class Controller { gsl, hairer };
 
 struct OdeControl {
@@ -67,10 +72,24 @@ struct OdeControl {
     set_step_size_min(step_size_min_);
     set_step_size_max(step_size_max_);
     set_step_size_initial(step_size_initial_);
+    reset_memory();
+  }
+
+  // What the rules carry from one step to the next. reset_memory() returns it
+  // to a new control's, and the solver calls it from reset(), so a solver
+  // reused for a second run steps as a new one does.
+  void reset_memory() {
     last_step_size_shrank = false;
     last_rejected = false;
     ratio_prev = 1e-4;
   }
+
+  // The hairer rule's memory of the last accepted step's error ratio. A step
+  // the solver refuses after the rule accepted it, or one cut short to land on
+  // a requested time, is not a step of the solution, so the solver puts back
+  // the ratio from before it.
+  double get_ratio_prev() const { return ratio_prev; }
+  void set_ratio_prev(double value) { ratio_prev = value; }
 
   std::vector<double> get_controls() const {
     return {tol_abs, tol_rel, a_y, a_dydt, 
@@ -168,7 +187,10 @@ struct OdeControl {
         const double rr = std::abs(yerr[i]) / std::abs(errlevel(y[i], dydt[i], step_size));
         ss += rr * rr;
       }
-      step_size = adjust_step_size_hairer(ord, step_size, std::sqrt(ss / dim));
+      // With no components, 0 / 0 would make the ratio NaN, and NaN would
+      // become ratio_prev and then every later step size.
+      const double rms = dim > 0 ? std::sqrt(ss / dim) : 0.0;
+      step_size = adjust_step_size_hairer(ord, step_size, rms);
     }
     else if (rmax > 1.1)
     {
@@ -251,7 +273,11 @@ struct OdeControl {
     if (r > 5.0) r = 5.0;
     if (r < 0.2) r = 0.2;
     if (last_rejected && r > 1.0) r = 1.0;
+    // An accepted step can shrink (r is at least 0.9 r_prev^beta, about 0.62),
+    // but not past step_size_min; a step already below it is not raised.
+    const double lowest = std::min(step_size, step_size_min);
     step_size *= r;
+    if (step_size < lowest) step_size = lowest;
     if (step_size > step_size_max) step_size = step_size_max;
     last_step_size_shrank = false;
     last_rejected = false;
