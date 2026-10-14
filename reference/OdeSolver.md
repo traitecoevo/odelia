@@ -349,5 +349,5 @@ s$state()   # exp(-1)
 #> [1] 0.3678794
 s$counts()
 #>        n_rhs        n_jac      n_steps n_rejections 
-#>          103            0           17            0 
+#>          109            0           18            0 
 ```

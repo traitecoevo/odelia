@@ -76,7 +76,7 @@ res0 <- ad_runner$fit(params = initial_guess)
 res0$loss
 #> [1] 3.480593
 res0$gradient
-#> [1] 1.0865743 0.4861987 1.9423226
+#> [1] 1.0865744 0.4861987 1.9423247
 ```
 
 ## Optimise
@@ -116,7 +116,7 @@ res <- optim(
 res$convergence # 0 indicates successful convergence
 #> [1] 0
 res$value       # final loss, should be ~0
-#> [1] 2.697385e-13
+#> [1] 2.698849e-13
 ```
 
 ## Check the recovered parameters

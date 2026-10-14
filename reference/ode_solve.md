@@ -21,7 +21,7 @@ ode_solve(
   control = NULL,
   rtol = 1e-06,
   atol = 1e-06,
-  controller = "gsl",
+  controller = "hairer",
   autonomous = FALSE,
   jac_fd_step = 1e-06,
   jac_fd_floor = 1e-05,
@@ -72,8 +72,8 @@ ode_solve(
 
 - controller:
 
-  The step-size rule when \`control\` is \`NULL\`: \`"gsl"\` (the
-  default) or \`"hairer"\`; see \[OdeControl\].
+  The step-size rule when \`control\` is \`NULL\`: \`"hairer"\` (the
+  default) or \`"gsl"\`; see \[OdeControl\].
 
 - autonomous:
 
@@ -114,12 +114,12 @@ out <- ode_solve(lorenz, y0 = c(x = 1, y = 1, z = 1), times = seq(0, 2, by = 0.1
 head(out)
 #>      time         x         y         z
 #> [1,]  0.0  1.000000  1.000000  1.000000
-#> [2,]  0.1  2.133108  4.471421  1.113900
-#> [3,]  0.2  6.542529 13.731189  4.180196
-#> [4,]  0.3 16.684825 27.183509 26.206476
-#> [5,]  0.4 15.366195  1.113016 46.757851
-#> [6,]  0.5  1.198264 -8.867204 32.454742
+#> [2,]  0.1  2.133108  4.471420  1.113899
+#> [3,]  0.2  6.542529 13.731191  4.180198
+#> [4,]  0.3 16.684823 27.183494 26.206474
+#> [5,]  0.4 15.366194  1.113012 46.757851
+#> [6,]  0.5  1.198262 -8.867206 32.454741
 ode_counts(out)
 #>        n_rhs        n_jac      n_steps n_rejections 
-#>          601            0           89           11 
+#>          541            0           88            2 
 ```

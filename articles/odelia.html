@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.5</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.8.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -216,10 +216,11 @@ keeps large steps.</li>
 <p>All three share the same adaptive step-size controller and
 <code>OdeControl</code> tolerances, so you can switch between them
 without changing anything else. The controller’s rule is itself a
-switch, <code>OdeControl$set_controller()</code>: <code>"gsl"</code>
-(the default, odelia’s long-standing rule) or <code>"hairer"</code> (the
-classical rule of Hairer’s codes and <code>deSolve</code>, which rejects
-far fewer attempts; see the package NEWS for 0.6.0).</p>
+switch, <code>OdeControl$set_controller()</code>: <code>"hairer"</code>
+(the default, Hairer’s rule stabilised as <code>dopri5.f</code> has it;
+<code>OdeControl$set_stabilisation(0)</code> gives the classical rule of
+<code>deSolve</code>) or <code>"gsl"</code> (odelia’s earlier rule,
+which rejects far more attempts; see the package NEWS for 0.8.0).</p>
 <p>To use <code>method = "rodas"</code> with your own C++ system, give
 it either a
 <code>template&lt;class U&gt; System&lt;U&gt; rebind_from() const</code>
@@ -255,11 +256,11 @@ a <code>time</code> column and one column per state variable.</p>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">out_r</span><span class="op">)</span></span>
 <span><span class="co">#&gt;      time         x         y         z</span></span>
 <span><span class="co">#&gt; [1,]  0.0  1.000000  1.000000  1.000000</span></span>
-<span><span class="co">#&gt; [2,]  0.1  2.133108  4.471421  1.113900</span></span>
-<span><span class="co">#&gt; [3,]  0.2  6.542529 13.731189  4.180196</span></span>
-<span><span class="co">#&gt; [4,]  0.3 16.684825 27.183509 26.206476</span></span>
-<span><span class="co">#&gt; [5,]  0.4 15.366195  1.113016 46.757851</span></span>
-<span><span class="co">#&gt; [6,]  0.5  1.198264 -8.867204 32.454742</span></span></code></pre></div>
+<span><span class="co">#&gt; [2,]  0.1  2.133108  4.471420  1.113899</span></span>
+<span><span class="co">#&gt; [3,]  0.2  6.542529 13.731191  4.180198</span></span>
+<span><span class="co">#&gt; [4,]  0.3 16.684823 27.183494 26.206474</span></span>
+<span><span class="co">#&gt; [5,]  0.4 15.366194  1.113012 46.757851</span></span>
+<span><span class="co">#&gt; [6,]  0.5  1.198262 -8.867206 32.454741</span></span></code></pre></div>
 <p>The steps are the controller’s own, and the rows asked for are read
 off each step’s dense output (<code>dense = TRUE</code>, the default
 under <code>"dopri"</code>), so asking for ten thousand rows costs the
@@ -286,7 +287,7 @@ number that matters:</p>
 <span>                       jacfunc <span class="op">=</span> <span class="va">lorenz_jac</span>, method <span class="op">=</span> <span class="st">"rodas"</span>, autonomous <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/ode_counts.html">ode_counts</a></span><span class="op">(</span><span class="va">out_rodas</span><span class="op">)</span></span>
 <span><span class="co">#&gt;        n_rhs        n_jac      n_steps n_rejections </span></span>
-<span><span class="co">#&gt;         1339          211          211           12</span></span></code></pre></div>
+<span><span class="co">#&gt;         1195          198          198            1</span></span></code></pre></div>
 <p>A stiff problem is where the implicit stepper earns its keep. Van der
 Pol with a small <code>eps</code> forces the explicit stepper into
 thousands of tiny steps for stability while RODAS stays
@@ -300,8 +301,8 @@ accuracy-limited:</p>
 <span><span class="va">stiff_dopri</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/ode_solve.html">ode_solve</a></span><span class="op">(</span><span class="va">vdp</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">0</span><span class="op">)</span>, <span class="va">times</span>, parms <span class="op">=</span> <span class="fl">1e-4</span>, method <span class="op">=</span> <span class="st">"dopri"</span>, autonomous <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span>rodas <span class="op">=</span> <span class="fu"><a href="../reference/ode_counts.html">ode_counts</a></span><span class="op">(</span><span class="va">stiff_rodas</span><span class="op">)</span>, dopri <span class="op">=</span> <span class="fu"><a href="../reference/ode_counts.html">ode_counts</a></span><span class="op">(</span><span class="va">stiff_dopri</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;       n_rhs n_jac n_steps n_rejections</span></span>
-<span><span class="co">#&gt; rodas  7449   823     823          144</span></span>
-<span><span class="co">#&gt; dopri 79939     0   11938         1385</span></span></code></pre></div>
+<span><span class="co">#&gt; rodas  6353   782     782           16</span></span>
+<span><span class="co">#&gt; dopri 71623     0   11904           33</span></span></code></pre></div>
 <p>Underneath <code><a href="../reference/ode_solve.html">ode_solve()</a></code> is the R6 class
 <code>OdeSolver</code>, which is driven a step at a time. That is what a
 caller with <em>events</em> needs: after each accepted step it can look
@@ -324,7 +325,7 @@ smaller rather than committed:</p>
 <span><span class="co">#&gt;    1    1</span></span>
 <span><span class="va">s</span><span class="op">$</span><span class="fu">counts</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt;        n_rhs        n_jac      n_steps n_rejections </span></span>
-<span><span class="co">#&gt;         1343            0          143           99</span></span></code></pre></div>
+<span><span class="co">#&gt;         1048            0          143           47</span></span></code></pre></div>
 <p>Between steps <code>s$set_state(y, time)</code> re-seeds the state at
 any length and <code>s$set_step_size(h)</code> carries a step size
 across it; <code>s$advance_collect(times)</code> is the output loop of

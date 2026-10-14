@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.5</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.8.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -133,10 +133,10 @@ initial state.</p>
 <span><span class="co">#&gt; [1] -8.1735</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $steps</span></span>
-<span><span class="co">#&gt; [1] 174</span></span>
+<span><span class="co">#&gt; [1] 171</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $d_params</span></span>
-<span><span class="co">#&gt; [1]  0.05454032 -0.89512580 -5.02177203</span></span>
+<span><span class="co">#&gt; [1]  0.05454032 -0.89512581 -5.02177202</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $d_initial</span></span>
 <span><span class="co">#&gt; [1] -0.6388429 -0.5176358  0.2560254</span></span></code></pre></div>
@@ -156,8 +156,8 @@ differentiates the run that was taken, with its steps held fixed.</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span>sweep <span class="op">=</span> <span class="va">r</span><span class="op">$</span><span class="va">d_params</span>, difference <span class="op">=</span> <span class="va">fd</span>, relative <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">r</span><span class="op">$</span><span class="va">d_params</span> <span class="op">-</span> <span class="va">fd</span><span class="op">)</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">fd</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;                    [,1]          [,2]          [,3]</span></span>
 <span><span class="co">#&gt; sweep      5.454032e-02 -8.951258e-01 -5.021772e+00</span></span>
-<span><span class="co">#&gt; difference 5.454038e-02 -8.951258e-01 -5.021926e+00</span></span>
-<span><span class="co">#&gt; relative   1.018676e-06  4.026238e-08  3.070057e-05</span></span></code></pre></div>
+<span><span class="co">#&gt; difference 5.454037e-02 -8.951257e-01 -5.021773e+00</span></span>
+<span><span class="co">#&gt; relative   8.291362e-07  7.669012e-08  2.905570e-07</span></span></code></pre></div>
 <p>The cost of <code>solve_adjoint</code> is one more pass over the
 trajectory, which re-runs the model’s rate evaluations as it goes. It is
 not one pass per parameter, which is the point, and it is not free.</p>

@@ -69,10 +69,10 @@ r
 #> [1] -8.1735
 #> 
 #> $steps
-#> [1] 174
+#> [1] 171
 #> 
 #> $d_params
-#> [1]  0.05454032 -0.89512580 -5.02177203
+#> [1]  0.05454032 -0.89512581 -5.02177202
 #> 
 #> $d_initial
 #> [1] -0.6388429 -0.5176358  0.2560254
@@ -96,8 +96,8 @@ fd <- sapply(1:3, function(j) {
 rbind(sweep = r$d_params, difference = fd, relative = abs(r$d_params - fd) / abs(fd))
 #>                    [,1]          [,2]          [,3]
 #> sweep      5.454032e-02 -8.951258e-01 -5.021772e+00
-#> difference 5.454038e-02 -8.951258e-01 -5.021926e+00
-#> relative   1.018676e-06  4.026238e-08  3.070057e-05
+#> difference 5.454037e-02 -8.951257e-01 -5.021773e+00
+#> relative   8.291362e-07  7.669012e-08  2.905570e-07
 ```
 
 The cost of `solve_adjoint` is one more pass over the trajectory, which

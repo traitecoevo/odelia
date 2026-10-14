@@ -39,5 +39,5 @@ A named numeric vector.
 out <- ode_solve(function(t, y, p) -y, y0 = 1, times = c(0, 1))
 ode_counts(out)
 #>        n_rhs        n_jac      n_steps n_rejections 
-#>           73            0           12            0 
+#>           79            0           13            0 
 ```

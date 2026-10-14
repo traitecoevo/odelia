@@ -156,10 +156,10 @@ runner_stiff <- Lorenz_Solver$new(lz$ptr, ctrl$ptr, method = "rodas")
 All three share the same adaptive step-size controller and `OdeControl`
 tolerances, so you can switch between them without changing anything
 else. The controller’s rule is itself a switch,
-`OdeControl$set_controller()`: `"gsl"` (the default, odelia’s
-long-standing rule) or `"hairer"` (the classical rule of Hairer’s codes
-and `deSolve`, which rejects far fewer attempts; see the package NEWS
-for 0.6.0).
+`OdeControl$set_controller()`: `"hairer"` (the default, Hairer’s rule
+stabilised as `dopri5.f` has it; `OdeControl$set_stabilisation(0)` gives
+the classical rule of `deSolve`) or `"gsl"` (odelia’s earlier rule,
+which rejects far more attempts; see the package NEWS for 0.8.0).
 
 To use `method = "rodas"` with your own C++ system, give it either a
 `template<class U> System<U> rebind_from() const` method (a one-liner
@@ -197,11 +197,11 @@ out_r <- ode_solve(lorenz_r, y0 = c(x = 1, y = 1, z = 1),
 head(out_r)
 #>      time         x         y         z
 #> [1,]  0.0  1.000000  1.000000  1.000000
-#> [2,]  0.1  2.133108  4.471421  1.113900
-#> [3,]  0.2  6.542529 13.731189  4.180196
-#> [4,]  0.3 16.684825 27.183509 26.206476
-#> [5,]  0.4 15.366195  1.113016 46.757851
-#> [6,]  0.5  1.198264 -8.867204 32.454742
+#> [2,]  0.1  2.133108  4.471420  1.113899
+#> [3,]  0.2  6.542529 13.731191  4.180198
+#> [4,]  0.3 16.684823 27.183494 26.206474
+#> [5,]  0.4 15.366194  1.113012 46.757851
+#> [6,]  0.5  1.198262 -8.867206 32.454741
 ```
 
 The steps are the controller’s own, and the rows asked for are read off
@@ -232,7 +232,7 @@ out_rodas <- ode_solve(lorenz_r, y0 = c(x = 1, y = 1, z = 1),
                        jacfunc = lorenz_jac, method = "rodas", autonomous = TRUE)
 ode_counts(out_rodas)
 #>        n_rhs        n_jac      n_steps n_rejections 
-#>         1339          211          211           12
+#>         1195          198          198            1
 ```
 
 A stiff problem is where the implicit stepper earns its keep. Van der
@@ -249,8 +249,8 @@ stiff_rodas <- ode_solve(vdp, c(2, 0), times, parms = 1e-4, method = "rodas", au
 stiff_dopri <- ode_solve(vdp, c(2, 0), times, parms = 1e-4, method = "dopri", autonomous = TRUE)
 rbind(rodas = ode_counts(stiff_rodas), dopri = ode_counts(stiff_dopri))
 #>       n_rhs n_jac n_steps n_rejections
-#> rodas  7449   823     823          144
-#> dopri 79939     0   11938         1385
+#> rodas  6353   782     782           16
+#> dopri 71623     0   11904           33
 ```
 
 Underneath
@@ -278,7 +278,7 @@ c(time = s$time(), y = s$state())
 #>    1    1
 s$counts()
 #>        n_rhs        n_jac      n_steps n_rejections 
-#>         1343            0          143           99
+#>         1048            0          143           47
 ```
 
 Between steps `s$set_state(y, time)` re-seeds the state at any length

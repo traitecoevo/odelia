@@ -34,6 +34,10 @@ R6 wrapper for ODE solver control settings
 
 - [`OdeControl$get_controller()`](#method-OdeControl-get_controller)
 
+- [`OdeControl$set_stabilisation()`](#method-OdeControl-set_stabilisation)
+
+- [`OdeControl$get_stabilisation()`](#method-OdeControl-get_stabilisation)
+
 - [`OdeControl$set_step_size_initial()`](#method-OdeControl-set_step_size_initial)
 
 - [`OdeControl$clone()`](#method-OdeControl-clone)
@@ -216,12 +220,15 @@ Set the step-size rule, \`"gsl"\` or \`"hairer"\`.
 
 - `controller`:
 
-  Which rule turns the error estimate into the next step: \`"gsl"\` (the
-  default; accept below 1.1, grow only below 0.5, otherwise keep the
-  step) or \`"hairer"\` (accept at 1, rescale after every step, as
-  \`deSolve\` and Hairer's codes do). The default is kept for continuity
-  of step sequences; \`"hairer"\` makes far fewer rejected attempts and
-  lets the step track a smoothing solution (odelia#64).
+  Which rule turns the error estimate into the next step: \`"hairer"\`
+  (the default; the error in the RMS norm over components, accept at 1
+  and rescale after every step, as Hairer's codes and \`deSolve\` do,
+  damped by the previous step's error as \`dopri5.f\` is and
+  \`deSolve\`'s \`rk\` is not; see \`set_stabilisation()\`) or \`"gsl"\`
+  (the worst component's error, accept below 1.1, grow only below 0.5,
+  otherwise keep the step). \`"gsl"\` rejects many more attempts;
+  \`"hairer"\`'s RMS norm bounds each component more loosely when the
+  state is large and the error sits in a few components.
 
 ------------------------------------------------------------------------
 
@@ -232,6 +239,35 @@ The step-size rule in force.
 #### Usage
 
     OdeControl$get_controller()
+
+------------------------------------------------------------------------
+
+### `OdeControl$set_stabilisation()`
+
+Set the \`"hairer"\` rule's stabilisation, \`beta\` in \`dopri5.f\`:
+0.04 (the default) damps step growth while the error is rising, which
+keeps an explicit stepper off its stability limit; 0 is the classical
+rule, which takes fewer steps on smooth problems.
+
+#### Usage
+
+    OdeControl$set_stabilisation(stabilisation)
+
+#### Arguments
+
+- `stabilisation`:
+
+  A number in \`\[0, 0.2)\`.
+
+------------------------------------------------------------------------
+
+### `OdeControl$get_stabilisation()`
+
+The \`"hairer"\` rule's stabilisation in force.
+
+#### Usage
+
+    OdeControl$get_stabilisation()
 
 ------------------------------------------------------------------------
 
