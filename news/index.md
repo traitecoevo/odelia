@@ -1,5 +1,66 @@
 # Changelog
 
+## odelia 0.9.0
+
+**Each rate evaluation is handed its slot of the step’s row.**
+`store_solved` and `load_solved` take the slot as a second argument: 0
+to 4 for the stages after the first, and `end_slot` (5) for the
+evaluation at the state the step ends at. A System that reads another
+run’s recording finds the same evaluation there by its slot and its
+time. The time alone does not identify it, because Cash–Karp’s stage at
+t + h and the step’s end share a time but not a state. `derivs` takes
+the row and the slot rather than one slot’s values, and `carried_rates`
+holds the row.
+
+A **minor** bump: every System that declares `SolvesForValues` must take
+the slot. No number moves.
+
+## odelia 0.8.1
+
+**A Cash-Karp step can integrate a System’s subsystem in substeps of its
+own.** A System that names a subsystem (`HasSubsystem`: a range of its
+state whose rates read the rest only through one input per component)
+has it substepped on any step that spans one of its forcing’s knots,
+that is past Cash-Karp’s stability limit on it, or that follows a step
+whose size Cash-Karp’s error on the subsystem set and substepping’s
+coupling error would not have. The stiffness is read off the step
+before, as the subsystem’s rates’ change over its state’s change between
+the stage at t + h and the end (`Step::subsystem_stiffness`), and the
+step is past the limit where it times the step exceeds 3.735, the end of
+Cash-Karp’s real stability interval; a step whose two states coincide
+keeps the last measure. The coupling error is the one a substepped step
+measures and, on a step that did not substep, half the step times the
+inputs’ miss at t + h of the line along the input slope.
+`OdeControl::substep_subsystem` (default `true`) turns off all but the
+knots’ substepping. The System no longer reports whether its subsystem
+is weakly coupled: `subsystem_weakly_coupled()` is gone from
+`HasSubsystem`. The rest takes Cash-Karp’s step; the subsystem is
+integrated over substeps chosen at 1e-9 under its inputs extrapolated
+along their slope since the last step (the predictor, which the stages
+read), then again under the line from the start’s inputs to those at the
+stage at t + h (the corrector, which is the step’s end). The larger of
+the passes’ gap and the stage inputs’ defect against the line is the
+subsystem’s error. The substeps land on every stage fraction and every
+knot, so a step need not stop at a knot to read the forcing between its
+stages.
+
+A step that substepped records its input slope and substep ends on its
+row (`instruction::subsystem`), and every other pass takes them as
+recorded: a program’s replay, a recording’s replay, a replay at another
+scalar and the sweep. So a replay at other parameters takes the run’s
+substeps, and the sweep differentiates the step the run took. A grid of
+times alone (`step_to`) is refused across a step that would substep, and
+a recorded row without substeps across a knot of the forcing, since
+neither holds the substeps and the subsystem taken with the rest can run
+past its stability limit, finitely. Only `method = "rkck"` substeps;
+`"rodas"` and `"dopri"` refuse a row that substepped.
+`drivers::Function::knots(from, to)` and `Drivers::knots` give where a
+driver changes from one cubic to the next.
+
+A **patch** bump: `instruction` gains a defaulted field, `step_by` takes
+the row it steps by, and a System without a subsystem steps as before,
+bit for bit.
+
 ## odelia 0.8.0
 
 **Hairer’s step-size rule is the default, stabilised as `dopri5.f` has
