@@ -20,16 +20,21 @@ compile_spline_ad_interface <- function() {
   } else {
     Sys.getenv("PKG_LIBS", unset = "")
   }
+  # Without contraction, because read_linear is held to eval bit for bit: fused,
+  # its end line's y + m * dx rounds once where the tape's arithmetic rounds twice.
   withr::local_envvar(PKG_CPPFLAGS = odelia_cppflags(include_dir),
+                      PKG_CXXFLAGS = "-ffp-contract=off",
                       PKG_LIBS = pkg_libs)
 
   res <- tryCatch({
     Rcpp::sourceCpp(code = '
       #include <Rcpp.h>
+      // [[Rcpp::plugins(cpp20)]]
       #include <vector>
       #include <XAD/XAD.hpp>
       #include <odelia/spline.hpp>
       #include <odelia/interpolator.hpp>
+      #include <odelia/tangent.hpp>
 
       // Reverse-mode gradient of the spline value at q w.r.t. each knot value.
       // [[Rcpp::export]]
@@ -130,6 +135,57 @@ compile_spline_ad_interface <- function() {
         odelia::interpolator::Interpolator I;   // = hermite_interpolator<double>
         I.init(x, y);
         return I.eval(q);
+      }
+
+      // read_linear at q on a spline with active knot data: its value and slope
+      // beside eval and slope, its weights summed per knot value and slope, and
+      // the tape gradient of eval with respect to the same knot data.
+      // [[Rcpp::export]]
+      Rcpp::List spline_read_linear(std::vector<double> x, std::vector<double> y,
+                                    std::vector<double> m, double q) {
+        using ad = xad::adj<double>;
+        using ad_t = ad::active_type;
+        ad::tape_type tape;
+        std::vector<ad_t> ya(y.begin(), y.end()), ma(m.begin(), m.end());
+        for (auto& v : ya) tape.registerInput(v);
+        for (auto& v : ma) tape.registerInput(v);
+        tape.newRecording();
+        odelia::interpolator::hermite_spline<ad_t> s;
+        s.init(x, ya, ma);
+        const auto r = s.read_linear(q);
+        const ad_t* held_y = s.values().data();
+        const ad_t* held_m = s.slopes().data();
+        Rcpp::NumericVector wy(y.size()), wm(m.size());
+        for (std::size_t i = 0; i < 4; ++i) {
+          if (r.input[i] >= held_y && r.input[i] < held_y + y.size()) {
+            wy[r.input[i] - held_y] += r.weight[i];
+          } else {
+            wm[r.input[i] - held_m] += r.weight[i];
+          }
+        }
+        ad_t val = s.eval(q);
+        tape.registerOutput(val);
+        xad::derivative(val) = 1.0;
+        tape.computeAdjoints();
+        Rcpp::NumericVector gy(y.size()), gm(m.size());
+        for (std::size_t i = 0; i < y.size(); ++i) {
+          gy[i] = xad::derivative(ya[i]);
+          gm[i] = xad::derivative(ma[i]);
+        }
+        return Rcpp::List::create(
+            Rcpp::_["value"] = r.value, Rcpp::_["slope"] = r.slope,
+            Rcpp::_["eval"] = xad::value(val),
+            Rcpp::_["eval_slope"] = xad::value(s.slope(q)),
+            Rcpp::_["weight_y"] = wy, Rcpp::_["weight_m"] = wm,
+            Rcpp::_["grad_y"] = gy, Rcpp::_["grad_m"] = gm);
+      }
+
+      // a b / (a + b) and its two partials, from value_and_partials.
+      // [[Rcpp::export]]
+      Rcpp::NumericVector tangent_value_and_partials(double a, double b) {
+        const auto r = odelia::ode::value_and_partials(
+            [](const auto& p, const auto& q) { return p * q / (p + q); }, a, b);
+        return Rcpp::NumericVector::create(r.value, r.partial[0], r.partial[1]);
       }', verbose = FALSE)
     NULL
   }, error = function(e) e)
@@ -234,4 +290,34 @@ testthat::test_that("hermite_spline<ad> read at an active position", {
   # composed read takes several.
   expect_equal(spline_active_query(x, y, 3.3, w, composed = FALSE)$statements, 1)
   expect_gt(spline_active_query(x, y, 3.3, w, composed = TRUE)$statements, 1)
+})
+
+testthat::test_that("read_linear is eval's read, and its weights are the read's gradient", {
+  testthat::skip_if(is_pkgload_dll(), "Skipping sourceCpp build in load_all session.")
+  compile_spline_ad_interface()
+
+  x <- c(0.0, 1.0, 2.5, 4.0, 6.0, 9.0)
+  y <- sin(0.4 * x) + 0.1 * x
+  m <- 0.4 * cos(0.4 * x) + 0.1
+  # Inside, on a knot, and beyond either end, where eval extends the end line.
+  for (q in c(3.3, 0.2, 4.0, 8.99, -0.5, 9.7)) {
+    r <- spline_read_linear(x, y, m, q)
+    expect_identical(r$value, r$eval, label = paste("value at", q))
+    expect_identical(r$slope, r$eval_slope, label = paste("slope at", q))
+    # The weights are the Hermite basis; the tape reaches the knots through the
+    # span coefficients, which associate differently. Absolute, because a weight
+    # near zero (3e-5 at 8.99) has no relative precision to compare.
+    expect_lt(max(abs(r$weight_y - r$grad_y)), 1e-14, label = paste("y weights at", q))
+    expect_lt(max(abs(r$weight_m - r$grad_m)), 1e-14, label = paste("m weights at", q))
+  }
+})
+
+testthat::test_that("value_and_partials is f and its exact partials", {
+  testthat::skip_if(is_pkgload_dll(), "Skipping sourceCpp build in load_all session.")
+  compile_spline_ad_interface()
+
+  a <- 0.7; b <- 0.3
+  r <- tangent_value_and_partials(a, b)
+  expect_identical(r[1], a * b / (a + b))
+  expect_equal(r[2:3], c(b^2, a^2) / (a + b)^2, tolerance = 1e-15)
 })

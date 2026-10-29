@@ -3,6 +3,10 @@
 #define ODELIA_TANGENT_HPP_
 
 #include <XAD/XAD.hpp>
+#include <array>
+#include <cstddef>
+#include <tuple>
+#include <utility>
 
 // The forward-mode vocabulary, apart from the reverse-mode one because a
 // consumer can want this and not that: a package with no tape reaches for the
@@ -60,6 +64,36 @@ template <typename S>
   requires CarriesDirection<S>
 typename S::derivative_type derivative_along(const S& x) {
   return xad::derivative(x);
+}
+
+// A function's value and its partial in each argument.
+template <std::size_t N>
+struct value_with_partials {
+  double value;
+  std::array<double, N> partial;
+};
+
+// f at x, with its partials, from one evaluation at a forward-mode scalar
+// carrying one direction per argument. For a small function written once over
+// its scalar, whose partials a caller then supplies: nothing is differentiated
+// by hand, and the value is f's arithmetic at double.
+template <class F, class... X>
+[[gnu::flatten]] value_with_partials<sizeof...(X)> value_and_partials(F&& f, X... x) {
+  constexpr std::size_t N = sizeof...(X);
+  using T = typename xad::fwd<double, N>::active_type;
+  const auto lane = [](auto& d, std::size_t i) -> double& {
+    if constexpr (N == 1) { return d; } else { return d[i]; }
+  };
+  std::array<T, N> at{T(static_cast<double>(x))...};
+  for (std::size_t i = 0; i < N; ++i) {
+    lane(xad::derivative(at[i]), i) = 1.0;
+  }
+  T r = std::apply(f, std::as_const(at));
+  value_with_partials<N> ret{xad::value(r), {}};
+  for (std::size_t i = 0; i < N; ++i) {
+    ret.partial[i] = lane(xad::derivative(r), i);
+  }
+  return ret;
 }
 
 }

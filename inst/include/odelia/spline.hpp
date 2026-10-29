@@ -8,6 +8,7 @@
 #include <list>
 #include <type_traits>
 #include <limits>
+#include <array>
 #include <vector>
 #include <odelia/ode_util.hpp>
 
@@ -226,6 +227,44 @@ public:
 
   template <typename U>
   S operator()(const U& u) const { return eval(u); }
+
+  // A read at u as the knot data it is linear in: value is the sum over i of
+  // weight[i] * *input[i], where the inputs are the value and slope at the two
+  // knots around u, and slope is d(value)/du. Inside the knots the weights are
+  // the Hermite basis; beyond either end the read is the end line eval extends.
+  // value and slope equal eval's and slope()'s bit for bit where the build does
+  // not contract floating point: fused into one rounding, the end line's
+  // y + m * dx can differ by an ulp from an active spline's eval, whose tape
+  // arithmetic is not fused. A caller summing many
+  // reads can supply weight[i] times its own derivative as the partial on
+  // *input[i], and record the sum as one statement rather than a statement a read.
+  struct linear_read {
+    double value, slope;
+    std::array<const S*, 4> input;
+    std::array<double, 4> weight;
+  };
+  [[gnu::always_inline]] linear_read read_linear(double u) const {
+    static_assert(Order == 3, "read_linear spells the cubic only.");
+    using util::to_passive;
+    check_initialised();
+    if (u <= x.front() || u >= x.back()) {
+      const std::size_t k = u <= x.front() ? 0 : x.size() - 1;
+      const double dx = u - x[k];
+      return {to_passive(y[k]) + to_passive(m[k]) * dx, to_passive(m[k]),
+              {&y[k], &m[k], &y[k], &m[k]}, {1.0, dx, 0.0, 0.0}};
+    }
+    const std::size_t k = span_of(u);
+    const Span& s = spans[k];
+    const double t = s.local(u);
+    const double c0 = to_passive(s.c[0]), c1 = to_passive(s.c[1]),
+                 c2 = to_passive(s.c[2]);
+    const double h = x[k + 1] - x[k], t2 = t * t, t3 = t2 * t;
+    return {to_passive(s.y0) + t * (c0 + t * (c1 + t * c2)),
+            (c0 + t * (2.0 * c1 + t * (3.0 * c2))) * s.inv_h,
+            {&y[k], &m[k], &y[k + 1], &m[k + 1]},
+            {1.0 - 3.0 * t2 + 2.0 * t3, h * (t - 2.0 * t2 + t3),
+             3.0 * t2 - 2.0 * t3, h * (t3 - t2)}};
+  }
 
 protected:
   // eval at a double position without the initialisation check, for a front end

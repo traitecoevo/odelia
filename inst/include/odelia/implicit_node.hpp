@@ -47,6 +47,92 @@ struct supply_report {
 template <class S>
 concept CarriesAdjoint = xad::ExprTraits<S>::isReverse;
 
+namespace internal {
+
+// supply_derivatives over n partials, partial i's input and derivative read
+// through input(i) and derivative(i), so each public form takes them in the
+// shape its callers hold them.
+template <class S, class Input, class Derivative>
+supply_report supply_partials(double value, std::size_t n, const Input& input,
+                              const Derivative& derivative, S& into) {
+  for (std::size_t i = 0; i < n; ++i) {
+    // Either half being non-finite poisons the VALUE and not only what is
+    // recorded against it: NaN times zero is not a number, and an infinite input
+    // minus its own passive copy is NaN rather than zero. Tested here, where the
+    // halves are still separable; downstream they are one expression.
+    const double at = util::to_passive(input(i));
+    if (!util::is_finite(derivative(i)) || !util::is_finite(at)) {
+      into = value;
+      return {false, i,
+              "input " + util::to_string(static_cast<int>(i)) + " of " +
+                  util::to_string(static_cast<int>(n)) +
+                  " has value " + util::format_double(at) + " and derivative " +
+                  util::format_double(derivative(i)) +
+                  ", one of which is not finite, so the value they belong to "
+                  "cannot be recorded"};
+    }
+  }
+  // A zero derivative contributes exactly zero to the value and exactly nothing to
+  // the transpose, and carrying it costs a tape edge the sweep then walks.
+  if constexpr (CarriesAdjoint<S>) {
+    using tape_type = typename S::tape_type;
+    // ⚠️ THE ORDER IS THE VALUE, THEN THE ROWS, THEN THE CLOSE, and each step
+    // is load-bearing. A statement's operations are everything pushed since the
+    // last left-hand side, so anything that pushes between the first partial
+    // and the close claims them -- which is why every partial is tested above
+    // rather than here. `registerOutput` is a no-op on a value that already
+    // holds a slot, leaving the partials for whatever statement closes next, so
+    // the destination is built here and moved out.
+    //
+    // Partials are pushed in batches from a buffer on the stack: operations
+    // accumulate until the left-hand side closes over them, so the batches make
+    // one run, and a push per partial costs a tape call per partial.
+    S out = value;
+    if (tape_type* tape = tape_type::getActive()) {
+      using slot_type = typename tape_type::slot_type;
+      constexpr unsigned batch = 64;
+      double muls[batch];
+      slot_type slots[batch];
+      unsigned held = 0;
+      for (std::size_t i = 0; i < n; ++i) {
+        const double d = derivative(i);
+        if (d == 0.0) {
+          continue;
+        }
+        // A passive input holds no slot, and the sweep indexes the slot it is
+        // pushed without a bounds check, so pushing one would corrupt memory
+        // rather than raise. It has no partial to carry either way.
+        const slot_type slot = input(i).getSlot();
+        if (slot == tape_type::INVALID_SLOT) {
+          continue;
+        }
+        muls[held] = d;
+        slots[held++] = slot;
+        if (held == batch) {
+          tape->pushAll(muls, slots, held);
+          held = 0;
+        }
+      }
+      tape->pushAll(muls, slots, held);
+      tape->registerOutput(out);
+    }
+    into = std::move(out);
+  } else {
+    S out = value;
+    for (std::size_t i = 0; i < n; ++i) {
+      if (derivative(i) == 0.0) {
+        continue;
+      }
+      // Zero in value and carrying the derivative, so the number is untouched.
+      out += derivative(i) * (input(i) - util::to_passive(input(i)));
+    }
+    into = out;
+  }
+  return {};
+}
+
+}  // namespace internal
+
 // Cost, in tape statements walked per solve of a submodel of T statements with
 // m outputs, read by a consumer sweeping k of its own outputs:
 //
@@ -83,70 +169,26 @@ concept CarriesAdjoint = xad::ExprTraits<S>::isReverse;
 template <class S>
 [[nodiscard]] supply_report supply_derivatives(
     double value, std::span<const input_and_derivative<S>> against, S& into) {
-  for (std::size_t i = 0; i < against.size(); ++i) {
-    // Either half being non-finite poisons the VALUE and not only what is
-    // recorded against it: NaN times zero is not a number, and an infinite input
-    // minus its own passive copy is NaN rather than zero. Tested here, where the
-    // halves are still separable; downstream they are one expression.
-    const double at = util::to_passive(against[i].input);
-    if (!util::is_finite(against[i].derivative) || !util::is_finite(at)) {
-      into = value;
-      return {false, i,
-              "input " + util::to_string(static_cast<int>(i)) + " of " +
-                  util::to_string(static_cast<int>(against.size())) +
-                  " has value " + util::format_double(at) + " and derivative " +
-                  util::format_double(against[i].derivative) +
-                  ", one of which is not finite, so the value they belong to "
-                  "cannot be recorded"};
-    }
-  }
-  // A zero derivative contributes exactly zero to the value and exactly nothing to
-  // the transpose, and carrying it costs a tape edge the sweep then walks.
-  if constexpr (CarriesAdjoint<S>) {
-    using tape_type = typename S::tape_type;
-    // ⚠️ THE ORDER IS THE VALUE, THEN THE ROWS, THEN THE CLOSE, and each step
-    // is load-bearing. A statement's operations are everything pushed since the
-    // last left-hand side, so anything that pushes between the first partial
-    // and the close claims them -- which is why every partial is tested above
-    // rather than here. `registerOutput` is a no-op on a value that already
-    // holds a slot, leaving the partials for whatever statement closes next, so
-    // the destination is built here and moved out.
-    //
-    // Pushed one partial at a time rather than gathered first: operations
-    // accumulate until the left-hand side closes over them, so the run is the
-    // same run and the two scratch arrays a gather needs are two allocations
-    // per call at a rate of millions.
-    S out = value;
-    if (tape_type* tape = tape_type::getActive()) {
-      for (const input_and_derivative<S>& term : against) {
-        if (term.derivative == 0.0) {
-          continue;
-        }
-        // A passive input holds no slot, and the sweep indexes the slot it is
-        // pushed without a bounds check, so pushing one would corrupt memory
-        // rather than raise. It has no partial to carry either way.
-        const typename tape_type::slot_type slot = term.input.getSlot();
-        if (slot == tape_type::INVALID_SLOT) {
-          continue;
-        }
-        tape->pushAll(&term.derivative, &slot, 1u);
-      }
-      tape->registerOutput(out);
-    }
-    into = std::move(out);
-  } else {
-    S out = value;
-    for (const input_and_derivative<S>& term : against) {
-      if (term.derivative == 0.0) {
-        continue;
-      }
-      // Zero in value and carrying the derivative, so the number is untouched.
-      out += term.derivative * (term.input - util::to_passive(term.input));
-    }
-    into = out;
-  }
-  return {};
+  return internal::supply_partials<S>(
+      value, against.size(),
+      [&](std::size_t i) -> const S& { return against[i].input; },
+      [&](std::size_t i) { return against[i].derivative; }, into);
 }
+
+// The same, with the partials as two parallel arrays: input i is *inputs[i] and
+// its derivative is derivatives[i]. For a caller that fills many partials into
+// storage it reuses, which a span of input_and_derivative, holding references,
+// cannot be.
+template <class S>
+[[nodiscard]] supply_report supply_derivatives(
+    double value, std::span<const S* const> inputs,
+    std::span<const double> derivatives, S& into) {
+  return internal::supply_partials<S>(
+      value, inputs.size(),
+      [&](std::size_t i) -> const S& { return *inputs[i]; },
+      [&](std::size_t i) { return derivatives[i]; }, into);
+}
+
 // The value y* defined implicitly by a scalar equation F(y) = 0, made
 // differentiable. y* is solved in double, off the tape, by whatever root-find the
 // caller already has; this returns it on the tape carrying the derivative the

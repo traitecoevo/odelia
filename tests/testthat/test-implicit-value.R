@@ -120,6 +120,42 @@ compile_implicit_value_interface <- function() {
           Rcpp::_["why"] = report.why);
     }
 
+    // The parallel-array form over one input per derivative. Input `passive` (1-based;
+    // 0 for none) is left off the tape. Returns the value, the derivative of
+    // each input, and the statements the supply recorded.
+    // [[Rcpp::export]]
+    Rcpp::List supply_derivatives_parallel(double value,
+                                           std::vector<double> derivatives,
+                                           int passive) {
+      tape_type tape;
+      const std::size_t n = derivatives.size();
+      std::vector<adouble> x(n);
+      std::vector<const adouble*> inputs(n);
+      for (std::size_t i = 0; i < n; ++i) {
+        x[i] = 0.5 + i;
+        if ((int) i + 1 != passive) tape.registerInput(x[i]);
+        inputs[i] = &x[i];
+      }
+      tape.newRecording();
+      const double before = tape.getNumStatements();
+      adouble y;
+      const odelia::supply_report report = odelia::supply_derivatives<adouble>(
+          value, std::span<const adouble* const>(inputs),
+          std::span<const double>(derivatives), y);
+      const double statements = tape.getNumStatements() - before;
+      tape.registerOutput(y);
+      xad::derivative(y) = 1.0;
+      tape.computeAdjoints();
+      Rcpp::NumericVector g(n);
+      for (std::size_t i = 0; i < n; ++i) g[i] = xad::derivative(x[i]);
+      return Rcpp::List::create(
+          Rcpp::_["identical"] = odelia::util::identical(xad::value(y), value),
+          Rcpp::_["gradient"] = g,
+          Rcpp::_["statements"] = statements,
+          Rcpp::_["whole"] = report.whole,
+          Rcpp::_["at"] = (int) report.at);
+    }
+
     // A root p of R(p; u, v) = 0 and one output that depends on p recorded against
     // it. The residual is written so that its derivatives ARE the two slopes and its
     // value at the root is exactly zero, so what comes back can only be the quotient
@@ -214,6 +250,29 @@ testthat::test_that("supply_derivatives returns the value and carries what it wa
   testthat::expect_equal(bad$at, 0L)
   testthat::expect_equal(bad$d_du, 0.0)
   testthat::expect_equal(bad$d_dv, 0.0)
+})
+
+testthat::test_that("the parallel form carries every derivative, in one statement", {
+  compile_implicit_value_interface()
+
+  # More partials than one push batch holds, with zeros among them and one input
+  # off the tape: each input gets its own derivative back, and the passive one
+  # and the zeros get nothing.
+  d <- sin(seq_len(150))
+  d[c(3, 64, 65, 129)] <- 0
+  got <- supply_derivatives_parallel(4.75, d, passive = 70L)
+  testthat::expect_true(got$whole)
+  testthat::expect_true(got$identical)
+  testthat::expect_equal(got$statements, 1)
+  testthat::expect_identical(got$gradient, replace(d, 70, 0))
+
+  # A bad derivative past the first batch still refuses every partial.
+  d[100] <- Inf
+  bad <- supply_derivatives_parallel(4.75, d, passive = 0L)
+  testthat::expect_false(bad$whole)
+  testthat::expect_equal(bad$at, 99L)
+  testthat::expect_true(bad$identical)
+  testthat::expect_true(all(bad$gradient == 0))
 })
 
 testthat::test_that("implicit_value returns the operating point and its IFT derivative", {
