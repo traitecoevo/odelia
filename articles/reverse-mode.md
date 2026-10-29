@@ -6,8 +6,8 @@ per parameter. Reverse mode costs one solve for all of them, but it must
 first record every operation the solve performed, and a run of several
 thousand adaptive steps performs far more of them than memory holds.
 This article is how `odelia` does it, from C++, and what a System has to
-provide to take part. The R surface, `$set_target()` and `$fit()`, is
-the last section.
+provide to take part. The R surface, `$set_target()` and
+`$loss_and_gradient()`, is the last section.
 
 > This is a website-only article rather than a packaged vignette,
 > because it compiles C++ at build time.
@@ -42,9 +42,9 @@ Rcpp::List lorenz_adjoint(double sigma, double R, double b, double t_end) {
   s.set_keep_states(true);                        // keep one step_record per step
   s.advance_adaptive(std::vector<double>{0.0, t_end});   // the ordinary solve
 
-  adjoint_rows lambda = adjoint_rows::one_row({1.0, 0.0, 0.0});  // seed: d x(t_end)
-  adjoint_rows dp(1, 3);                          // one row per seed, zeroed
-  s.solve_adjoint(lambda, dp);                    // one pass, every parameter
+  adjoint_batch lambda = adjoint_batch::one({1.0, 0.0, 0.0});  // output: d x(t_end)
+  adjoint_batch dp(1, 3);                          // one per output, zeroed
+  s.sweep_adjoint(lambda, dp);                    // one pass, every parameter
 
   return Rcpp::List::create(
     Rcpp::Named("x")         = s.state()[0],
@@ -55,11 +55,12 @@ Rcpp::List lorenz_adjoint(double sigma, double R, double b, double t_end) {
 ```
 
 Three lines are new against an ordinary solve: `set_keep_states`, the
-seed, and `solve_adjoint`. The seed says which output is wanted, as a
-vector over the final state; here the first component. `dp` comes back
-holding that output’s derivative with respect to each parameter in the
-order the System’s `ad_parameters()` lists them, and `lambda` is
-replaced by the derivative with respect to the initial state.
+output adjoint, and `sweep_adjoint`. The output adjoint says which
+output is wanted, as a vector over the final state; here the first
+component. `dp` comes back holding that output’s derivative with respect
+to each parameter in the order the System’s `ad_parameters()` lists
+them, and `lambda` is replaced by the derivative with respect to the
+initial state.
 
 ``` r
 
@@ -100,21 +101,21 @@ rbind(sweep = r$d_params, difference = fd, relative = abs(r$d_params - fd) / abs
 #> relative   8.291362e-07  7.669012e-08  2.905570e-07
 ```
 
-The cost of `solve_adjoint` is one more pass over the trajectory, which
+The cost of `sweep_adjoint` is one more pass over the trajectory, which
 re-runs the model’s rate evaluations as it goes. It is not one pass per
 parameter, which is the point, and it is not free.
 
 ## Forward, then reverse
 
       FORWARD                              REVERSE
-      advance_adaptive(times)              solve_adjoint(lambda, dp)
+      advance_adaptive(times)              sweep_adjoint(lambda, dp)
         |                                    |
-        +-> step()                           +-> range N ... 1          widest first
+        +-> step()                           +-> segment N ... 1          widest first
         |     6 x ode_rates()                |     |
         |     error, accept or shrink        |     +-> step k ... 1      last to first
         |                                    |     |     +- load rec[k-1].state
         +-> push_step() --> rec[k] ----------+     |     +- re-run the 6 stages ----+
-                                                   |     +- sweep, once per seed    |
+                                                   |     +- sweep, once per output    |
                                                    |     +- clear the tape          |
                                                    |                                |
                                                    +-> at an insertion:             |
@@ -127,7 +128,7 @@ The forward pass stores one `step_record` per accepted step and nothing
 else. The reverse pass takes the rows last to first; for each it loads
 the state the step started from, re-runs the step’s six stages on the
 adjoint scalar so they are recorded on the tape, sweeps that recording
-once per seed, and clears the tape. Peak tape is therefore one step’s
+once per output, and clears the tape. Peak tape is therefore one step’s
 arithmetic at any run length. What accumulates across a run is the rows,
 which are cheap.
 
@@ -139,7 +140,7 @@ of value that cannot be recomputed.
 
 ## What a recording holds
 
-        step_record<System> : instruction
+        step_record<System> : schedule_row
         |-- time        double         the time this step reached
         |-- step_size   double         h, as taken; NaN on the row the run started from
         |-- insertion   bool           did the state vector grow here
@@ -170,7 +171,7 @@ took it: where the run carried it over, at the start state in the step
 below’s sixth entry, at the time that evaluation ran at (`fl(t + h)`,
 which `k1_time` keeps because it can be an ulp from the time the row
 below records); where the run derived it afresh – at its start, after an
-insertion or a re-seed – afresh with no row. A forward replay reads all
+insertion or a reset – afresh with no row. A forward replay reads all
 six, because re-deriving is what a replay exists to avoid, and a step
 whose first stage was re-derived is wrong at first order in `h`.
 
@@ -221,9 +222,9 @@ parameters active, so a newborn’s initial conditions contribute
 parameter derivatives: the steps are not the only source of them. And
 the recording of the map is taken on a System at the wide width and
 cannot be swept at the narrow one, so the sweep rebinds the System once
-per range. A range is a run of rows at one width; a System of fixed
+per segment. A segment is a run of rows at one width; a System of fixed
 width has one, and a System that widens opens a new one at each
-insertion. `solve_adjoint` returns how many it swept.
+insertion. `sweep_adjoint` returns how many it swept.
 
 A caller can also ask for cuts at rows of its own choosing, with
 `extra_stops`, for a partial sweep. A cut is a row the sweep resumes at;
@@ -231,8 +232,8 @@ an insertion is a row it carries the adjoint across, so it resumes one
 row below, on the state the map ran on. A row that is both is treated as
 the insertion.
 
-The seed batch, `lambda`, is replaced as the sweep narrows. The
-parameter batch is accumulated with `+=` across ranges, so the caller
+The output adjoints, `lambda`, is replaced as the sweep narrows. The
+parameter batch is accumulated with `+=` across segments, so the caller
 zeroes it, and the two must be different objects; the same object for
 both is refused.
 
@@ -242,7 +243,7 @@ Inside a stage, `ode_rates` may reach a quantity a solve found by
 iteration. Recording the iterations would differentiate the solver: the
 answer becomes the sensitivity of wherever that particular sequence of
 iterations stopped, which depends on the starting guess and the
-tolerance. `record_with_derivatives(value, rows, into)` in
+tolerance. `supply_derivatives(value, rows, into)` in
 `implicit_node.hpp` puts the number on the tape carrying rows it was
 handed instead:
 
@@ -258,8 +259,8 @@ whatever the row count. Written the obvious way,
 assignments, and that is how a submodel’s entire arithmetic ends up on
 its consumer’s tape one row at a time.
 
-Counted in statements walked, with `T` submodel statements, `k` seeds
-and `m` outputs:
+Counted in statements walked, with `T` submodel statements, `k` consumer
+outputs and `m` submodel outputs:
 
 |                                        | walks per solve |
 |----------------------------------------|-----------------|
@@ -282,7 +283,7 @@ yields `dy*/dp = -(dF/dp) / (dF/dy)`.
 
 `tangent_scalar<T>` (`tangent.hpp`) carries a directional derivative
 forward and touches no tape. It is what the implicit stepper’s Jacobian
-is taken with. `active_scalar<T>` (`ode_interface.hpp`) is the adjoint
+is taken with. `adjoint_scalar<T>` (`ode_interface.hpp`) is the adjoint
 scalar a sweep rebinds a System to.
 
 Nesting a tangent above an adjoint is a compile error. At an active
@@ -292,12 +293,11 @@ superlinear in expression depth: three kernels costing 31 statements
 written flat cost 566 nested. A slope wanted at an adjoint scalar is
 taken through the kernel at `double` and handed over as a supplied row.
 
-`value_with_slope<T>` pairs a value with its slope in one type, for a
-quantity carried with its own derivative (a knot on an interpolated
-field, a coordinate at an operating point). It declares
-`for_each_active`, which is why it lives in `odelia`: a bare pair of
-scalars is a shape the sweep’s walk does not open, and would contribute
-no rows, silently.
+`with_slope<T>` pairs a value with its slope in one type, for a quantity
+carried with its own derivative (a knot on an interpolated field, a
+coordinate at an operating point). It declares `for_each_active`, which
+is why it lives in `odelia`: a bare pair of scalars is a shape the
+sweep’s walk does not open, and would contribute no rows, silently.
 
 ## Making a System sweepable
 
@@ -309,10 +309,10 @@ compiler-checked parts of that are the concepts `HasOdeTime`,
 `ode_interface.hpp`.
 
 A System a sweep walks adds four members, stated as the concept
-`Sweepable` there, which `solve_adjoint` asserts:
+`Sweepable` there, which `sweep_adjoint` asserts:
 
-- `rebind_from<U>()`: a copy of this System on scalar `U`, values only.
-  The sweep builds the adjoint-scalar copy with it.
+- `rebind<U>()`: a copy of this System on scalar `U`, values only. The
+  sweep builds the adjoint-scalar copy with it.
 - `ad_parameters()`: pointers to the parameters the sweep accumulates
   adjoints for, in a fixed order. The rates must read each one live; a
   quantity the constructor derived from a parameter carries no adjoint,
@@ -329,30 +329,31 @@ declares `solved_values` (`SolvesForValues`). The shipped Lorenz example
 marks which of its members belong to which tier; the smallest complete
 sweepable System in the tree is `Grow` in `tests/standalone/r_free.cpp`.
 
-## From R: what `$fit()` does
+## From R: what `$loss_and_gradient()` does
 
-`Lorenz_Solver$set_target(times, target, obs_indices)` stores a schedule
-and observations; `$fit(ic, params)` returns a least-squares loss and
-its exact gradient. Underneath (`solver_interface.hpp`,
-`Solver_fit_impl`): a program of steps is built from `times`, replayed
-with `advance_recorded` under `set_keep_states(true)`, one seed row of
-`2 * (y - target)` is placed at each observed index, and `solve_adjoint`
-is called once per observation interval from the last to the first.
-`times` must therefore be a step schedule, normally a reference run’s
-`$times()`, not an output grid; a replay that cannot take the schedule’s
-steps one row each is refused. The optimiser is the caller’s;
+`Lorenz_Solver$set_target(schedule, target, obs_indices)` stores a
+schedule and observations; `$loss_and_gradient(initial_state, params)`
+returns a least-squares loss and its exact gradient. Underneath
+(`solver_interface.hpp`, `Solver_loss_and_gradient_impl`): a schedule of
+steps is built from `times`, replayed with `advance_schedule` under
+`set_keep_states(true)`, an adjoint of `2 * (y - target)` is added at
+each observed index, and `sweep_adjoint` is called once per observation
+interval from the last to the first. `times` must therefore be a step
+schedule, normally a reference run’s `$times()`, not an output grid; a
+replay that cannot take the schedule’s steps one row each is refused.
+The optimiser is the caller’s;
 [`vignette("parameter-fitting")`](https://traitecoevo.github.io/odelia/articles/parameter-fitting.md)
 hands the gradient to [`optim()`](https://rdrr.io/r/stats/optim.html).
 
 ## Reading order through the headers
 
-1.  `tangent.hpp` and `value_with_slope.hpp`: the two scalars and the
-    pair. 130 lines, everything uses them.
-2.  `ode_interface.hpp`: the System concepts, `instruction` and
+1.  `tangent.hpp` and `with_slope.hpp`: the two scalars and the pair.
+    130 lines, everything uses them.
+2.  `ode_interface.hpp`: the System concepts, `schedule_row` and
     `step_record`, `Sweepable`, `visit_active`.
 3.  `ode_solver_internal.hpp`: `push_step` and `push_insertion`, the two
     places a row is written; `step_to` for the pinned path.
-4.  `adjoint.hpp`: `adjoint_rows`, `active_system`,
+4.  `adjoint.hpp`: `adjoint_batch`, `adjoint_system`,
     `vector_jacobian_product`, `state_and_parameter_adjoints`, the
     transpose of one map.
 5.  `ode_step_rkck.hpp`: `Step::step_adjoint`, the transpose of one
@@ -360,9 +361,9 @@ hands the gradient to [`optim()`](https://rdrr.io/r/stats/optim.html).
     `DopriStep::step_adjoint`, the same on the Dormand-Prince tableau;
     `ode_substeps.hpp`: the step both take where a System names a
     subsystem, which the sweep transposes with its substeps as recorded.
-6.  `ode_solver.hpp`: `solve_adjoint`, the loop over rows and
-    insertions; `advance_recorded`, the replay.
+6.  `ode_solver.hpp`: `sweep_adjoint`, the loop over rows and
+    insertions; `advance_schedule`, the replay.
 7.  `implicit_node.hpp`: supplied rows and `implicit_value`, independent
     of the solver.
-8.  `sweep.hpp`: helpers for a consumer that drives a sweep range by
-    range itself.
+8.  `sweep.hpp`: helpers for a consumer that drives a sweep segment by
+    segment itself.

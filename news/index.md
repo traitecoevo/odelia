@@ -1,5 +1,53 @@
 # Changelog
 
+## odelia 0.10.0
+
+**The reverse-mode names say what they name
+([\#66](https://github.com/traitecoevo/odelia/issues/66)).** A System on
+another scalar is `rebind<U>()`, not `rebind_from<U>()`. The adjoint
+scalar and the System lifted onto it are `adjoint_scalar` and
+`adjoint_system`, beside `tangent_scalar`. The sweep is
+`Solver::sweep_adjoint()`, not `solve_adjoint()`, and the rows it sweeps
+at one state width are a segment: `state_at_segment()`, and
+`AdjointOverflowError` (`util::stop_adjoint_overflow()`) for an adjoint
+that left the range of a double. A row of a schedule is a
+`schedule_row`, not an `instruction`, and `schedule_from()` builds one
+from a recording, replacing `program_from()`. `Solver::schedule()` is
+`steps_taken()`, because it leaves out the insertion rows. The two
+`advance_recorded()` overloads are `advance_schedule(schedule)`, which
+steps a schedule and solves its stages afresh, and `replay(recording)`,
+which loads what the recording’s stages solved for.
+`record_with_derivatives()` is `supply_derivatives()`, returning a
+`supply_report`, and `value_with_slope<T>` is `with_slope<T>`, in
+`with_slope.hpp`. In R, `$fit()` is `$loss_and_gradient()` on both
+example solvers, its `ic` argument is `initial_state`, and
+`$set_target()` takes `schedule` rather than `times`, since it is the
+step times replayed and not the times observed. Nothing else changes,
+and no number moves.
+
+**Adjoints, directions and partials have one word each
+([\#66](https://github.com/traitecoevo/odelia/issues/66)).**
+`adjoint_rows` is `adjoint_batch`: one adjoint per output, `size()`
+adjoints of `width()` entries, with `adjoint_batch::one()`,
+`adjoint_batch::identity()` and `to_vectors()` for `one_row()`,
+`all_rows()` and `to_rows()`. A “row” is now only a row of a schedule or
+a recording. `seed_direction()` is `set_direction()`, beside
+`derivative_along()`, and “seed” is gone from the library: what a sweep
+starts from is each output’s adjoint, and what a tangent carries is a
+direction. What `supply_derivatives()` attaches to a value is one
+partial per input. “Replay” now means only `replay(recording)`, which
+loads what a recording’s stages solved for; a run on a schedule’s steps
+that solves its stages afresh is a pinned run, and the messages that
+told a caller to “replay the run’s schedule” now say to step it. An
+evaluation’s place in its step’s row is its stage: `end_slot` is
+`end_stage`, and the slot argument of `store_solved`, `load_solved` and
+`derivs` is the stage. Cash–Karp’s stage at t + h, whose inputs a
+substepped step reads, is the last stage: `last_stage`,
+`inputs_at_last_stage`.
+
+A **minor** bump: every consumer re-pins once for the names. No number
+moves.
+
 ## odelia 0.9.1
 
 **A Dormand-Prince step substeps a System’s subsystem as a Cash-Karp

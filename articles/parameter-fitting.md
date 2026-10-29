@@ -58,21 +58,21 @@ ad_runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
 ad_runner$set_target(times, target_vals, obs_index)
 ```
 
-The `$fit()` method solves the system for a given parameter vector and
-returns both the loss and its exact gradient. Underneath, it replays the
-schedule in `times` step for step while keeping one record per step,
-seeds the adjoint at each observed index with the residual against the
-target, and sweeps the recording backwards once, which yields the
-derivative with respect to every parameter (and, when asked, every
-initial condition) from that single pass. The `times` must therefore be
-a step schedule rather than an output grid, which is why `obs_index`
-picks the observations out of it. The article [Reverse
+The `$loss_and_gradient()` method solves the system for a given
+parameter vector and returns both the loss and its exact gradient.
+Underneath, it replays the schedule in `times` step for step while
+keeping one record per step, sets the adjoint at each observed index
+with the residual against the target, and sweeps the recording backwards
+once, which yields the derivative with respect to every parameter (and,
+when asked, every initial condition) from that single pass. The `times`
+must therefore be a step schedule rather than an output grid, which is
+why `obs_index` picks the observations out of it. The article [Reverse
 mode](https://traitecoevo.github.io/odelia/articles/articles/reverse-mode.md)
 describes the machinery.
 
 ``` r
 
-res0 <- ad_runner$fit(params = initial_guess)
+res0 <- ad_runner$loss_and_gradient(params = initial_guess)
 res0$loss
 #> [1] 3.480593
 res0$gradient
@@ -81,9 +81,9 @@ res0$gradient
 
 ## Optimise
 
-Because each `$fit()` call returns both loss and gradient, we cache the
-most recent result so the optimiser does not have to re-run the solver
-to obtain the gradient separately.
+Because each `$loss_and_gradient()` call returns both loss and gradient,
+we cache the most recent result so the optimiser does not have to re-run
+the solver to obtain the gradient separately.
 
 ``` r
 
@@ -92,7 +92,7 @@ memoise_fit <- function(runner) {
   cache_res <- NULL
 
   fn <- function(p) {
-    cache_res <<- runner$fit(params = p)
+    cache_res <<- runner$loss_and_gradient(params = p)
     cache_p <<- p
     cache_res$loss
   }

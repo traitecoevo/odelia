@@ -5,7 +5,7 @@ adaptive step control and any of its steppers: the explicit Dormand–Prince
 own order), the explicit Cash–Karp 4(5) pair, or the implicit RODAS4(3)
 Rosenbrock stepper for stiff problems. The solver is
 driven a step at a time (or to a sequence of times), and the state can be
-re-seeded between steps – at a different length if need be – which is
+reset between steps – at a different length if need be – which is
 what a consumer with events needs.
 The right-hand side `rhs(t, y)` returns the rates as a numeric vector the
 length of `y`; with `parms` given it is called as `rhs(t, y, parms)`, and
@@ -36,7 +36,7 @@ adaptive step control and any of its steppers: the explicit Dormand–Prince
 own order), the explicit Cash–Karp 4(5) pair, or the implicit RODAS4(3)
 Rosenbrock stepper for stiff problems. The solver is
 driven a step at a time (or to a sequence of times), and the state can be
-re-seeded between steps – at a different length if need be – which is
+reset between steps – at a different length if need be – which is
 what a consumer with events needs.
 The right-hand side `rhs(t, y)` returns the rates as a numeric vector the
 length of `y`; with `parms` given it is called as `rhs(t, y, parms)`, and
@@ -69,7 +69,7 @@ solver's state."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -109,7 +109,7 @@ adaptive step control and any of its steppers: the explicit Dormand–Prince
 own order), the explicit Cash–Karp 4(5) pair, or the implicit RODAS4(3)
 Rosenbrock stepper for stiff problems. The solver is
 driven a step at a time (or to a sequence of times), and the state can be
-re-seeded between steps – at a different length if need be – which is
+reset between steps – at a different length if need be – which is
 what a consumer with events needs.</p>
 <p>The right-hand side `rhs(t, y)` returns the rates as a numeric vector the
 length of `y`; with `parms` given it is called as `rhs(t, y, parms)`, and
@@ -328,7 +328,7 @@ interpolant, `FALSE` to land a step on each; see `advance_collect()`.</p></dd>
 <p></p><hr><a id="method-OdeSolver-times"></a><div class="section">
 <h3 id="odesolver-times-"><code>OdeSolver$times()</code><a class="anchor" aria-label="anchor" href="#odesolver-times-"></a></h3>
 <p>Times of every accepted step since the last
-  `set_state()`, starting with the time it was seeded at.</p><div class="section">
+  `set_state()`, starting with the time it was set at.</p><div class="section">
 <h4 id="usage-7">Usage<a class="anchor" aria-label="anchor" href="#usage-7"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">OdeSolver</span><span class="op">$</span><span class="fu">times</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
@@ -337,7 +337,7 @@ interpolant, `FALSE` to land a step on each; see `advance_collect()`.</p></dd>
 
 <p></p><hr><a id="method-OdeSolver-set_state"></a><div class="section">
 <h3 id="odesolver-set-state-"><code>OdeSolver$set_state()</code><a class="anchor" aria-label="anchor" href="#odesolver-set-state-"></a></h3>
-<p>Re-seed the state and time. `y` may have a different
+<p>Reset the state and time. `y` may have a different
   length from before. Resets the step size to the control's initial
   value and the recorded times; evaluates `rhs` once; clears the
   effect of an error in a callback.</p><div class="section">

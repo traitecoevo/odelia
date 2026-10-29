@@ -25,19 +25,19 @@ those above it.
 |----|----|
 | `ode_util.hpp` | `util::stop` / `util::warning` (R-free), `to_passive`, `DomainError` |
 | `tangent.hpp` | `tangent_scalar<T>`, the forward-mode scalar; refuses a tangent above an adjoint |
-| `value_with_slope.hpp` | `value_with_slope<T>`, a value paired with its slope; no includes |
+| `with_slope.hpp` | `with_slope<T>`, a value paired with its slope; no includes |
 | `spline.hpp` → `interpolator.hpp` → `drivers.hpp` | cubic Hermite backend, `hermite_interpolator`, `Drivers` (time-varying forcing) |
 | `ode_control.hpp` | `OdeControl`: tolerances, step bounds, the `gsl` / `hairer` controller |
-| `ode_interface.hpp` | the System concepts (`HasOdeTime`, `Rebindable`, `SolvesForValues`, `ChecksState`, `Sweepable`), `active_scalar<T>`, `instruction`, `step_record`, `visit_active`, `be_at_step`, `apply_insertion` |
-| `adjoint.hpp` | `adjoint_rows`, `active_system`, `vector_jacobian_product`, `state_and_parameter_adjoints`: the transpose of one map |
-| `implicit_node.hpp` | `record_with_derivatives`, `implicit_value`: a value on the tape carrying rows obtained elsewhere; independent of the solver |
+| `ode_interface.hpp` | the System concepts (`HasOdeTime`, `Rebindable`, `SolvesForValues`, `ChecksState`, `Sweepable`), `adjoint_scalar<T>`, `schedule_row`, `step_record`, `visit_active`, `be_at_step`, `apply_insertion` |
+| `adjoint.hpp` | `adjoint_batch`, `adjoint_system`, `vector_jacobian_product`, `state_and_parameter_adjoints`: the transpose of one map |
+| `implicit_node.hpp` | `supply_derivatives`, `implicit_value`: a value on the tape carrying rows obtained elsewhere; independent of the solver |
 | `ode_linalg.hpp`, `ode_jacobian.hpp` | dense LU and eigenvalues; the Jacobian from a System’s hook or by forward AD |
 | `ode_substeps.hpp` | `SubsystemSubsteps`: a step that integrates a System’s subsystem (`HasSubsystem`) in substeps of its own, on whichever explicit tableau derives from it |
 | `ode_step_rkck.hpp`, `ode_step_dopri.hpp`, `ode_step_rodas.hpp` | the three steppers; the two explicit ones, `rkck` and `dopri`, record a run, carry `step_adjoint` and substep a subsystem |
 | `ode_callback_system.hpp` | `CallbackSystem`, a System over `std::function`s |
-| `ode_solver_internal.hpp` → `ode_solver.hpp` | `SolverInternal` (stepping, the record), `Solver<System>` (`advance_*`, `recording()`, `solve_adjoint`, `advance_recorded`) |
-| `sweep.hpp`, `ode_steady_state.hpp` | range helpers for a consumer driving a sweep itself; Newton to a fixed point with implicit-function-theorem sensitivity |
-| `rcpp_interface_helpers.hpp`, `solver_interface.hpp` | the two headers that need R: `Solver_*_impl` behind the R bindings, including `Solver_fit_impl` |
+| `ode_solver_internal.hpp` → `ode_solver.hpp` | `SolverInternal` (stepping, the record), `Solver<System>` (`advance_*`, `recording()`, `sweep_adjoint`, `advance_schedule`) |
+| `sweep.hpp`, `ode_steady_state.hpp` | segment helpers for a consumer driving a sweep itself; Newton to a fixed point with implicit-function-theorem sensitivity |
+| `rcpp_interface_helpers.hpp`, `solver_interface.hpp` | the two headers that need R: `Solver_*_impl` behind the R bindings, including `Solver_loss_and_gradient_impl` |
 
 Everything is C++20 (concepts). A consumer compiles with
 `CXX_STD = CXX20` and the two XAD defines from `src/Makevars`,
@@ -153,8 +153,8 @@ does), and the last call of an accepted step is at the accepted state.
 
 The implicit stepper takes its Jacobian from a System’s own
 `ode_jacobian()` hook when there is one, else by forward-mode AD on a
-`rebind_from()`-able system (`ode_jacobian.hpp`); `fd_jacobian()` there
-is the one-line finite-difference body for a hook. A system declaring
+`rebind()`-able system (`ode_jacobian.hpp`); `fd_jacobian()` there is
+the one-line finite-difference body for a hook. A system declaring
 `ode_autonomous()` is not asked for a `df/dt` term.
 
 `ode_steady_state.hpp` reuses that Jacobian and the dense LU away from
@@ -163,14 +163,14 @@ reads the fixed point’s stability off the eigenvalues of `df/dy`
 (`ode_linalg.hpp`, Hessenberg reduction then Francis QR), and takes the
 parameter sensitivity `dy*/dθ = −(df/dy)⁻¹ (df/dθ)` from the same
 factorisation. `df/dθ` is the same forward sweep as `df/dy` with the
-seed on a parameter instead of a state component; which parameters is
-the System’s `ad_parameters()` hook, a vector of pointers to them in a
-fixed order, which the rates must read live (a quantity cached from a
+direction on a parameter instead of a state component; which parameters
+is the System’s `ad_parameters()` hook, a vector of pointers to them in
+a fixed order, which the rates must read live (a quantity cached from a
 parameter at construction carries no tangent and yields a zero column;
-`check_parameters()` detects that through `rebind_from()`). Newton finds
-any root, attracting or not; `solve_with_warmup()` integrates the
-transient when the root it finds is not attracting. Endpoint-only and
-tape-free by design: the transient is never differentiated,
+`check_parameters()` detects that through `rebind()`). Newton finds any
+root, attracting or not; `solve_with_warmup()` integrates the transient
+when the root it finds is not attracting. Endpoint-only and tape-free by
+design: the transient is never differentiated,
 [`solve()`](https://rdrr.io/r/base/solve.html) refuses an active scalar
 type, and a consumer that needs `y*` on its own adjoint tape attaches
 the sensitivity rows as a supplied derivative rather than taping the

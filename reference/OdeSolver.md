@@ -6,8 +6,8 @@ Dormand–Prince 5(4) pair (the method behind \`deSolve\`'s \`ode45\`,
 with dense output of its own order), the explicit Cash–Karp 4(5) pair,
 or the implicit RODAS4(3) Rosenbrock stepper for stiff problems. The
 solver is driven a step at a time (or to a sequence of times), and the
-state can be re-seeded between steps – at a different length if need be
-– which is what a consumer with events needs.
+state can be reset between steps – at a different length if need be –
+which is what a consumer with events needs.
 
 The right-hand side \`rhs(t, y)\` returns the rates as a numeric vector
 the length of \`y\`; with \`parms\` given it is called as \`rhs(t, y,
@@ -253,7 +253,7 @@ step or \`set_state()\`).
 ### `OdeSolver$times()`
 
 Times of every accepted step since the last \`set_state()\`, starting
-with the time it was seeded at.
+with the time it was set at.
 
 #### Usage
 
@@ -263,10 +263,10 @@ with the time it was seeded at.
 
 ### `OdeSolver$set_state()`
 
-Re-seed the state and time. \`y\` may have a different length from
-before. Resets the step size to the control's initial value and the
-recorded times; evaluates \`rhs\` once; clears the effect of an error in
-a callback.
+Reset the state and time. \`y\` may have a different length from before.
+Resets the step size to the control's initial value and the recorded
+times; evaluates \`rhs\` once; clears the effect of an error in a
+callback.
 
 #### Usage
 

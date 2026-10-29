@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -59,9 +59,9 @@
 </tr><tr><td><code>tangent.hpp</code></td>
 <td>
 <code>tangent_scalar&lt;T&gt;</code>, the forward-mode scalar; refuses a tangent above an adjoint</td>
-</tr><tr><td><code>value_with_slope.hpp</code></td>
+</tr><tr><td><code>with_slope.hpp</code></td>
 <td>
-<code>value_with_slope&lt;T&gt;</code>, a value paired with its slope; no includes</td>
+<code>with_slope&lt;T&gt;</code>, a value paired with its slope; no includes</td>
 </tr><tr><td>
 <code>spline.hpp</code> → <code>interpolator.hpp</code> → <code>drivers.hpp</code>
 </td>
@@ -70,14 +70,14 @@
 <td>
 <code>OdeControl</code>: tolerances, step bounds, the <code>gsl</code> / <code>hairer</code> controller</td>
 </tr><tr><td><code>ode_interface.hpp</code></td>
-<td>the System concepts (<code>HasOdeTime</code>, <code>Rebindable</code>, <code>SolvesForValues</code>, <code>ChecksState</code>, <code>Sweepable</code>), <code>active_scalar&lt;T&gt;</code>, <code>instruction</code>, <code>step_record</code>, <code>visit_active</code>, <code>be_at_step</code>, <code>apply_insertion</code>
+<td>the System concepts (<code>HasOdeTime</code>, <code>Rebindable</code>, <code>SolvesForValues</code>, <code>ChecksState</code>, <code>Sweepable</code>), <code>adjoint_scalar&lt;T&gt;</code>, <code>schedule_row</code>, <code>step_record</code>, <code>visit_active</code>, <code>be_at_step</code>, <code>apply_insertion</code>
 </td>
 </tr><tr><td><code>adjoint.hpp</code></td>
 <td>
-<code>adjoint_rows</code>, <code>active_system</code>, <code>vector_jacobian_product</code>, <code>state_and_parameter_adjoints</code>: the transpose of one map</td>
+<code>adjoint_batch</code>, <code>adjoint_system</code>, <code>vector_jacobian_product</code>, <code>state_and_parameter_adjoints</code>: the transpose of one map</td>
 </tr><tr><td><code>implicit_node.hpp</code></td>
 <td>
-<code>record_with_derivatives</code>, <code>implicit_value</code>: a value on the tape carrying rows obtained elsewhere; independent of the solver</td>
+<code>supply_derivatives</code>, <code>implicit_value</code>: a value on the tape carrying rows obtained elsewhere; independent of the solver</td>
 </tr><tr><td>
 <code>ode_linalg.hpp</code>, <code>ode_jacobian.hpp</code>
 </td>
@@ -96,15 +96,15 @@
 <code>ode_solver_internal.hpp</code> → <code>ode_solver.hpp</code>
 </td>
 <td>
-<code>SolverInternal</code> (stepping, the record), <code>Solver&lt;System&gt;</code> (<code>advance_*</code>, <code>recording()</code>, <code>solve_adjoint</code>, <code>advance_recorded</code>)</td>
+<code>SolverInternal</code> (stepping, the record), <code>Solver&lt;System&gt;</code> (<code>advance_*</code>, <code>recording()</code>, <code>sweep_adjoint</code>, <code>advance_schedule</code>)</td>
 </tr><tr><td>
 <code>sweep.hpp</code>, <code>ode_steady_state.hpp</code>
 </td>
-<td>range helpers for a consumer driving a sweep itself; Newton to a fixed point with implicit-function-theorem sensitivity</td>
+<td>segment helpers for a consumer driving a sweep itself; Newton to a fixed point with implicit-function-theorem sensitivity</td>
 </tr><tr><td>
 <code>rcpp_interface_helpers.hpp</code>, <code>solver_interface.hpp</code>
 </td>
-<td>the two headers that need R: <code>Solver_*_impl</code> behind the R bindings, including <code>Solver_fit_impl</code>
+<td>the two headers that need R: <code>Solver_*_impl</code> behind the R bindings, including <code>Solver_loss_and_gradient_impl</code>
 </td>
 </tr></tbody></table><p>Everything is C++20 (concepts). A consumer compiles with <code>CXX_STD = CXX20</code> and the two XAD defines from <code>src/Makevars</code>, <code>-DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE</code>, on every platform: the storage class of the active tape does not change the symbol’s name, so a translation unit built without them reaches the same tape through the other storage class.</p>
 </div>
@@ -157,8 +157,8 @@ PKG_LIBS = "$(ODELIA_LIBDIR)$(R_ARCH)/odelia.dll"</code></pre>
 <div class="section level2">
 <h2 id="a-right-hand-side-handed-in-at-run-time">A right-hand side handed in at run time<a class="anchor" aria-label="anchor" href="#a-right-hand-side-handed-in-at-run-time"></a></h2>
 <p><code>ode_callback_system.hpp</code> holds <code>CallbackSystem</code>, a System whose right-hand side (and optionally Jacobian and validity predicate) are <code>std::function</code>s handed in at construction, so a callable from any language is stepped by the same solver as a compiled system. It is part of the R-free core and is exercised as plain C++ in <code>tests/standalone/</code>; the R adapter in <code>src/r_system.h</code> is a few lines that wrap <code>Rcpp::Function</code>s, and a Python binding would be the same lines over a <code>py::function</code>. Two contracts the adapter relies on and the core keeps: evaluation is lazy (setting the state makes no call; reading the rates does), and the last call of an accepted step is at the accepted state.</p>
-<p>The implicit stepper takes its Jacobian from a System’s own <code>ode_jacobian()</code> hook when there is one, else by forward-mode AD on a <code>rebind_from()</code>-able system (<code>ode_jacobian.hpp</code>); <code>fd_jacobian()</code> there is the one-line finite-difference body for a hook. A system declaring <code>ode_autonomous()</code> is not asked for a <code>df/dt</code> term.</p>
-<p><code>ode_steady_state.hpp</code> reuses that Jacobian and the dense LU away from the stepper: <code>SteadyState&lt;System&gt;</code> solves <code>f(y*) = 0</code> by damped Newton, reads the fixed point’s stability off the eigenvalues of <code>df/dy</code> (<code>ode_linalg.hpp</code>, Hessenberg reduction then Francis QR), and takes the parameter sensitivity <code>dy*/dθ = −(df/dy)⁻¹ (df/dθ)</code> from the same factorisation. <code>df/dθ</code> is the same forward sweep as <code>df/dy</code> with the seed on a parameter instead of a state component; which parameters is the System’s <code>ad_parameters()</code> hook, a vector of pointers to them in a fixed order, which the rates must read live (a quantity cached from a parameter at construction carries no tangent and yields a zero column; <code>check_parameters()</code> detects that through <code>rebind_from()</code>). Newton finds any root, attracting or not; <code>solve_with_warmup()</code> integrates the transient when the root it finds is not attracting. Endpoint-only and tape-free by design: the transient is never differentiated, <code><a href="https://rdrr.io/r/base/solve.html" class="external-link">solve()</a></code> refuses an active scalar type, and a consumer that needs <code>y*</code> on its own adjoint tape attaches the sensitivity rows as a supplied derivative rather than taping the Newton iteration. The callback System reaches the same Newton through its Jacobian hook, which is how <code><a href="reference/ode_steady_state.html">ode_steady_state()</a></code> serves an R right-hand side (<code>src/r_steady_state_interface.cpp</code>); its parameter sensitivity is a finite difference through <code>func</code> done in R, since nothing differentiates R code.</p>
+<p>The implicit stepper takes its Jacobian from a System’s own <code>ode_jacobian()</code> hook when there is one, else by forward-mode AD on a <code>rebind()</code>-able system (<code>ode_jacobian.hpp</code>); <code>fd_jacobian()</code> there is the one-line finite-difference body for a hook. A system declaring <code>ode_autonomous()</code> is not asked for a <code>df/dt</code> term.</p>
+<p><code>ode_steady_state.hpp</code> reuses that Jacobian and the dense LU away from the stepper: <code>SteadyState&lt;System&gt;</code> solves <code>f(y*) = 0</code> by damped Newton, reads the fixed point’s stability off the eigenvalues of <code>df/dy</code> (<code>ode_linalg.hpp</code>, Hessenberg reduction then Francis QR), and takes the parameter sensitivity <code>dy*/dθ = −(df/dy)⁻¹ (df/dθ)</code> from the same factorisation. <code>df/dθ</code> is the same forward sweep as <code>df/dy</code> with the direction on a parameter instead of a state component; which parameters is the System’s <code>ad_parameters()</code> hook, a vector of pointers to them in a fixed order, which the rates must read live (a quantity cached from a parameter at construction carries no tangent and yields a zero column; <code>check_parameters()</code> detects that through <code>rebind()</code>). Newton finds any root, attracting or not; <code>solve_with_warmup()</code> integrates the transient when the root it finds is not attracting. Endpoint-only and tape-free by design: the transient is never differentiated, <code><a href="https://rdrr.io/r/base/solve.html" class="external-link">solve()</a></code> refuses an active scalar type, and a consumer that needs <code>y*</code> on its own adjoint tape attaches the sensitivity rows as a supplied derivative rather than taping the Newton iteration. The callback System reaches the same Newton through its Jacobian hook, which is how <code><a href="reference/ode_steady_state.html">ode_steady_state()</a></code> serves an R right-hand side (<code>src/r_steady_state_interface.cpp</code>); its parameter sensitivity is a finite difference through <code>func</code> done in R, since nothing differentiates R code.</p>
 <p><code>ode_step_dopri.hpp</code> is a third stepper, Dormand-Prince 5(4), whose value over Cash-Karp is a free continuous extension of order 4: <code>SolverInternal::interpolate</code> reads the state anywhere inside the last accepted step from the step’s own stages, and <code>Solver::advance_collect(times, dense = true)</code> uses it to report at requested times without making a step end on each. Under the other steppers the interpolant is cubic Hermite on the step’s endpoints, one order short. Dormand-Prince records, replays and sweeps a run exactly as Cash-Karp does: the same six-entry <code>solved_row</code>, filled with its five later stages and the evaluation at the state the step ends at, and a <code>DopriStep::step_adjoint</code> on its own tableau. The entries mean different stages under the two tableaux, so each <code>step_record</code> names its <code>Method</code> and a replay under the other stepper is refused.</p>
 </div>
 <div class="section level2">

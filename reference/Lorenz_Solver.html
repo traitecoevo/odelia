@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -73,7 +73,7 @@
 <li><p><a href="#method-Lorenz_Solver-history_step"><code>Lorenz_Solver$history_step()</code></a></p></li>
 <li><p><a href="#method-Lorenz_Solver-history"><code>Lorenz_Solver$history()</code></a></p></li>
 <li><p><a href="#method-Lorenz_Solver-set_target"><code>Lorenz_Solver$set_target()</code></a></p></li>
-<li><p><a href="#method-Lorenz_Solver-fit"><code>Lorenz_Solver$fit()</code></a></p></li>
+<li><p><a href="#method-Lorenz_Solver-loss_and_gradient"><code>Lorenz_Solver$loss_and_gradient()</code></a></p></li>
 <li><p><a href="#method-Lorenz_Solver-clone"><code>Lorenz_Solver$clone()</code></a></p></li>
 </ul></div><p></p><hr><a id="method-Lorenz_Solver-initialize"></a><div class="section">
 <h3 id="lorenz-solver-new-"><code>Lorenz_Solver$new()</code><a class="anchor" aria-label="anchor" href="#lorenz-solver-new-"></a></h3>
@@ -263,22 +263,24 @@ RK 4(5)), <code>"dopri"</code> (explicit Dormand-Prince 5(4)) or <code>"rodas"</
 
 <p></p><hr><a id="method-Lorenz_Solver-set_target"></a><div class="section">
 <h3 id="lorenz-solver-set-target-"><code>Lorenz_Solver$set_target()</code><a class="anchor" aria-label="anchor" href="#lorenz-solver-set-target-"></a></h3>
-<p>Set the calibration target for <code>$fit()</code>.</p><div class="section">
+<p>Set the calibration target for
+  <code>$loss_and_gradient()</code>.</p><div class="section">
 <h4 id="usage-14">Usage<a class="anchor" aria-label="anchor" href="#usage-14"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">Lorenz_Solver</span><span class="op">$</span><span class="fu">set_target</span><span class="op">(</span><span class="va">times</span>, <span class="va">target</span>, <span class="va">obs_indices</span><span class="op">)</span></span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">Lorenz_Solver</span><span class="op">$</span><span class="fu">set_target</span><span class="op">(</span><span class="va">schedule</span>, <span class="va">target</span>, <span class="va">obs_indices</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
 <h4 id="arguments-7">Arguments<a class="anchor" aria-label="anchor" href="#arguments-7"></a></h4>
-<p></p><div class="arguments"><dl><dt><code>times</code></dt>
-<dd><p>Numeric vector: the schedule <code>$fit()</code> replays, one entry
-per step. Normally a reference run's <code>$times()</code>, so each fit takes
-the same steps and the loss is a smooth function of the inputs.</p></dd>
+<p></p><div class="arguments"><dl><dt><code>schedule</code></dt>
+<dd><p>Numeric vector: the step times
+<code>$loss_and_gradient()</code> replays, one entry per step. Normally a
+reference run's <code>$times()</code>, so each evaluation takes the same steps
+and the loss is a smooth function of the inputs.</p></dd>
 
       <dt><code>target</code></dt>
 <dd><p>Numeric matrix of observed states, one row per entry of
 <code>obs_indices</code> and one column per state variable.</p></dd>
 
       <dt><code>obs_indices</code></dt>
-<dd><p>Integer indices (1-based) into <code>times</code> at which
+<dd><p>Integer indices (1-based) into <code>schedule</code> at which
 each row of <code>target</code> was observed.</p></dd>
 
 
@@ -287,30 +289,32 @@ each row of <code>target</code> was observed.</p></dd>
 
 </div>
 
-<p></p><hr><a id="method-Lorenz_Solver-fit"></a><div class="section">
-<h3 id="lorenz-solver-fit-"><code>Lorenz_Solver$fit()</code><a class="anchor" aria-label="anchor" href="#lorenz-solver-fit-"></a></h3>
+<p></p><hr><a id="method-Lorenz_Solver-loss_and_gradient"></a><div class="section">
+<h3 id="lorenz-solver-loss-and-gradient-"><code>Lorenz_Solver$loss_and_gradient()</code><a class="anchor" aria-label="anchor" href="#lorenz-solver-loss-and-gradient-"></a></h3>
 <p>Least-squares loss against the target, and its exact
   gradient by reverse-mode automatic differentiation. The schedule is
   replayed under this solver's <code>method</code>, except that a
   <code>"rodas"</code> solver's is replayed under <code>"rkck"</code>: the
   Rosenbrock stepper cannot be swept.</p><div class="section">
 <h4 id="usage-15">Usage<a class="anchor" aria-label="anchor" href="#usage-15"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">Lorenz_Solver</span><span class="op">$</span><span class="fu">fit</span><span class="op">(</span>ic <span class="op">=</span> <span class="cn">NULL</span>, params <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">Lorenz_Solver</span><span class="op">$</span><span class="fu">loss_and_gradient</span><span class="op">(</span>initial_state <span class="op">=</span> <span class="cn">NULL</span>, params <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
 <h4 id="arguments-8">Arguments<a class="anchor" aria-label="anchor" href="#arguments-8"></a></h4>
-<p></p><div class="arguments"><dl><dt><code>ic</code></dt>
-<dd><p>Initial state to fit from, or <code>NULL</code> to keep the system's.</p></dd>
+<p></p><div class="arguments"><dl><dt><code>initial_state</code></dt>
+<dd><p>Initial state to evaluate at, or <code>NULL</code> to keep
+the system's.</p></dd>
 
       <dt><code>params</code></dt>
-<dd><p>Parameters to fit at, or <code>NULL</code> to keep the system's.</p></dd>
+<dd><p>Parameters to evaluate at, or <code>NULL</code> to keep the
+system's.</p></dd>
 
 
 </dl><p></p></div>
 </div><p></p><div class="section">
 <h4 id="returns">Returns<a class="anchor" aria-label="anchor" href="#returns"></a></h4>
 <p>A list with <code>loss</code> (sum of squared differences) and
-  <code>gradient</code>:
-  d(loss)/d(params), then d(loss)/d(ic), for whichever were given.</p>
+  <code>gradient</code>: d(loss)/d(params), then d(loss)/d(initial_state), for
+  whichever were given.</p>
 </div>
 
 </div>

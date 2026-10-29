@@ -22,7 +22,7 @@
 
     <a class="navbar-brand me-2" href="index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -132,26 +132,26 @@
 <span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>odelia<span class="op">::</span>ode<span class="op">::</span>Solver<span class="op">&lt;</span>LorenzSystem<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;&gt;</span> s<span class="op">(</span>system<span class="op">,</span> odelia<span class="op">::</span>ode<span class="op">::</span>OdeControl<span class="op">());</span></span>
 <span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>s<span class="op">.</span>advance_adaptive<span class="op">({</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">10.0</span><span class="op">});</span></span>
 <span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> y <span class="op">=</span> s<span class="op">.</span>state<span class="op">();</span></span></code></pre></div>
-<p>A gradient of that run is three more lines: keep the record, seed the output wanted, and sweep.</p>
+<p>A gradient of that run is three more lines: keep the record, set the output’s adjoint wanted, and sweep.</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>s<span class="op">.</span>set_keep_states<span class="op">(</span><span class="kw">true</span><span class="op">);</span>                       <span class="co">// before the run</span></span>
 <span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>s<span class="op">.</span>advance_adaptive<span class="op">({</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">10.0</span><span class="op">});</span></span>
-<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="kw">auto</span> lambda <span class="op">=</span> odelia<span class="op">::</span>ode<span class="op">::</span>adjoint_rows<span class="op">::</span>one_row<span class="op">({</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">});</span>   <span class="co">// d x(10)</span></span>
-<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>odelia<span class="op">::</span>ode<span class="op">::</span>adjoint_rows dp<span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">3</span><span class="op">);</span>            <span class="co">// one row per seed, zeroed</span></span>
-<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>s<span class="op">.</span>solve_adjoint<span class="op">(</span>lambda<span class="op">,</span> dp<span class="op">);</span>                   <span class="co">// dp[0][j] = d x(10) / d parameter j</span></span></code></pre></div>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="kw">auto</span> lambda <span class="op">=</span> odelia<span class="op">::</span>ode<span class="op">::</span>adjoint_batch<span class="op">::</span>one<span class="op">({</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">});</span>   <span class="co">// d x(10)</span></span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>odelia<span class="op">::</span>ode<span class="op">::</span>adjoint_batch dp<span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">3</span><span class="op">);</span>            <span class="co">// one per output, zeroed</span></span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>s<span class="op">.</span>sweep_adjoint<span class="op">(</span>lambda<span class="op">,</span> dp<span class="op">);</span>                   <span class="co">// dp[0][j] = d x(10) / d parameter j</span></span></code></pre></div>
 <p>A package that uses the headers adds <code>odelia</code> to <code>LinkingTo</code> and <code>Imports</code>, compiles as C++20 with <code>-DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE</code>, and on Windows links against odelia’s DLL; <a href="ARCHITECTURE.html">ARCHITECTURE.md</a> has the details and a map of the headers. <code>inst/include/examples/lorenz_system.hpp</code> is the template for a System of your own, with its members marked by which contract they serve; the article <a href="https://traitecoevo.github.io/odelia/articles/leaf-thermal.html">Building your own model</a> walks through one with external drivers.</p>
 </div>
 <div class="section level2">
 <h2 id="parameter-fitting-with-automatic-differentiation">Parameter fitting with automatic differentiation<a class="anchor" aria-label="anchor" href="#parameter-fitting-with-automatic-differentiation"></a>
 </h2>
-<p>The shipped Lorenz and leaf-thermal runners expose a <code>$fit()</code> method that returns the least-squares loss against a target trajectory and its exact gradient with respect to the parameters (and initial conditions), by one reverse sweep over a replay of the reference run. Hand it to a gradient-based optimiser such as <code><a href="https://rdrr.io/r/stats/optim.html" class="external-link">optim()</a></code>:</p>
+<p>The shipped Lorenz and leaf-thermal runners expose a <code>$loss_and_gradient()</code> method that returns the least-squares loss against a target trajectory and its exact gradient with respect to the parameters (and initial conditions), by one reverse sweep over a replay of the reference run. Hand it to a gradient-based optimiser such as <code><a href="https://rdrr.io/r/stats/optim.html" class="external-link">optim()</a></code>:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit_runner</span> <span class="op">&lt;-</span> <span class="va"><a href="reference/Lorenz_Solver.html">Lorenz_Solver</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="va">lz</span><span class="op">$</span><span class="va">ptr</span>, <span class="va">ctrl</span><span class="op">$</span><span class="va">ptr</span><span class="op">)</span></span>
 <span><span class="va">fit_runner</span><span class="op">$</span><span class="fu">set_target</span><span class="op">(</span><span class="va">times</span>, <span class="va">target_vals</span>, <span class="va">obs_index</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="va">fit_runner</span><span class="op">$</span><span class="fu">fit</span><span class="op">(</span>params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>sigma <span class="op">=</span> <span class="fl">12</span>, R <span class="op">=</span> <span class="fl">30</span>, b <span class="op">=</span> <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="va">fit_runner</span><span class="op">$</span><span class="fu">loss_and_gradient</span><span class="op">(</span>params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>sigma <span class="op">=</span> <span class="fl">12</span>, R <span class="op">=</span> <span class="fl">30</span>, b <span class="op">=</span> <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">res</span><span class="op">$</span><span class="va">loss</span>      <span class="co"># scalar mismatch with the target trajectory</span></span>
 <span><span class="va">res</span><span class="op">$</span><span class="va">gradient</span>  <span class="co"># exact gradient w.r.t. each parameter</span></span></code></pre></div>
-<p>A complete optimisation workflow (recovering known Lorenz parameters) is walked through in <code><a href="articles/parameter-fitting.html">vignette("parameter-fitting")</a></code>. A runner for your own System gets <code>$fit()</code> by instantiating <code>Solver_fit_impl</code> from <code>solver_interface.hpp</code>, as the leaf-thermal example does.</p>
+<p>A complete optimisation workflow (recovering known Lorenz parameters) is walked through in <code><a href="articles/parameter-fitting.html">vignette("parameter-fitting")</a></code>. A runner for your own System gets <code>$loss_and_gradient()</code> by instantiating <code>Solver_loss_and_gradient_impl</code> from <code>solver_interface.hpp</code>, as the leaf-thermal example does.</p>
 </div>
 <div class="section level2">
 <h2 id="vocabulary">Vocabulary<a class="anchor" aria-label="anchor" href="#vocabulary"></a>
@@ -171,11 +171,11 @@
 <li>
 <strong>Recording</strong> — what a run keeps when asked (<code>set_keep_states</code>): one row per accepted step with its time, step size, state, and whatever the step solved for inside a stage. A sweep reads it; a replay reproduces the run from it.</li>
 <li>
-<strong>Sweep</strong> — the backward pass over a recording (<code>solve_adjoint</code>). It is seeded with the derivative wanted of the final state, one <strong>seed</strong> per output, and returns one <strong>row</strong> of derivatives per seed against the parameters and the initial state; <code>adjoint_rows</code> is the batch.</li>
+<strong>Sweep</strong> — the backward pass over a recording (<code>sweep_adjoint</code>). It starts from the derivative wanted of the final state, one <strong>adjoint</strong> per output, and returns one <strong>row</strong> of derivatives per output against the parameters and the initial state; <code>adjoint_batch</code> is the batch.</li>
 <li>
 <strong>Insertion</strong> — a scheduled growth of the state vector mid-run. The sweep transposes the System’s own widening map across it.</li>
 <li>
-<strong>Supplied derivative</strong> — a value put on the tape with rows obtained by other means (<code>record_with_derivatives</code>, <code>implicit_value</code>), for a quantity a submodel solved for by iteration.</li>
+<strong>Supplied derivative</strong> — a value put on the tape with rows obtained by other means (<code>supply_derivatives</code>, <code>implicit_value</code>), for a quantity a submodel solved for by iteration.</li>
 </ul>
 </div>
 <div class="section level2">
@@ -195,7 +195,7 @@
 </h3>
 <p>An ODE system in odelia consists of:</p>
 <ul>
-<li><p><strong>A system header</strong> (<code>inst/include/examples/lorenz_system.hpp</code>, <code>inst/examples/leaf_thermal/src/leaf_thermal_system.hpp</code>) — a C++ class templated on its scalar type. To be solved it implements <code>ode_size()</code>, <code>set_ode_state()</code>, <code>ode_state()</code> and <code>ode_rates()</code>; to be swept it adds <code>rebind_from&lt;U&gt;()</code>, <code>ad_parameters()</code>, <code>for_each_active(f)</code> and <code>set_recorded_state(y, time)</code> (the <code>Sweepable</code> concept in <code>ode_interface.hpp</code>).</p></li>
+<li><p><strong>A system header</strong> (<code>inst/include/examples/lorenz_system.hpp</code>, <code>inst/examples/leaf_thermal/src/leaf_thermal_system.hpp</code>) — a C++ class templated on its scalar type. To be solved it implements <code>ode_size()</code>, <code>set_ode_state()</code>, <code>ode_state()</code> and <code>ode_rates()</code>; to be swept it adds <code>rebind&lt;U&gt;()</code>, <code>ad_parameters()</code>, <code>for_each_active(f)</code> and <code>set_recorded_state(y, time)</code> (the <code>Sweepable</code> concept in <code>ode_interface.hpp</code>).</p></li>
 <li><p><strong>An Rcpp interface</strong> (<code>src/*_interface.cpp</code>, <code>inst/examples/leaf_thermal/src/*_interface.cpp</code>) — <code>[[Rcpp::export]]</code> functions exposing the system to R, built on the <code>Solver_*_impl</code> templates in <code>solver_interface.hpp</code>.</p></li>
 <li><p><strong>An R wrapper</strong> (<code>R/*-interface.R</code>, optional) — R6 classes providing a friendlier API around the external pointers.</p></li>
 <li><p><strong>A worked example</strong> — the article for the leaf-thermal model, built by pkgdown.</p></li>

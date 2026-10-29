@@ -59,7 +59,7 @@ Templating on `T` is what makes the system **AD-ready**: the same code
 runs at `double` and at an active scalar. That is all a System needs to
 be *solved*. To have a run *swept* for its gradient it adds four
 members, stated as the concept `Sweepable` in
-`odelia/ode_interface.hpp`: `rebind_from<U>()`, `ad_parameters()`,
+`odelia/ode_interface.hpp`: `rebind<U>()`, `ad_parameters()`,
 `for_each_active(f)` and `set_recorded_state(y, time)`. The shipped
 header has them under a comment marking that tier, and the article
 [Reverse

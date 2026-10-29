@@ -42,7 +42,7 @@ R6 wrapper for the Lorenz ODE solver.
 
 - [`Lorenz_Solver$set_target()`](#method-Lorenz_Solver-set_target)
 
-- [`Lorenz_Solver$fit()`](#method-Lorenz_Solver-fit)
+- [`Lorenz_Solver$loss_and_gradient()`](#method-Lorenz_Solver-loss_and_gradient)
 
 - [`Lorenz_Solver$clone()`](#method-Lorenz_Solver-clone)
 
@@ -246,19 +246,20 @@ Return history as a tibble.
 
 ### `Lorenz_Solver$set_target()`
 
-Set the calibration target for `$fit()`.
+Set the calibration target for `$loss_and_gradient()`.
 
 #### Usage
 
-    Lorenz_Solver$set_target(times, target, obs_indices)
+    Lorenz_Solver$set_target(schedule, target, obs_indices)
 
 #### Arguments
 
-- `times`:
+- `schedule`:
 
-  Numeric vector: the schedule `$fit()` replays, one entry per step.
-  Normally a reference run's `$times()`, so each fit takes the same
-  steps and the loss is a smooth function of the inputs.
+  Numeric vector: the step times `$loss_and_gradient()` replays, one
+  entry per step. Normally a reference run's `$times()`, so each
+  evaluation takes the same steps and the loss is a smooth function of
+  the inputs.
 
 - `target`:
 
@@ -267,12 +268,12 @@ Set the calibration target for `$fit()`.
 
 - `obs_indices`:
 
-  Integer indices (1-based) into `times` at which each row of `target`
-  was observed.
+  Integer indices (1-based) into `schedule` at which each row of
+  `target` was observed.
 
 ------------------------------------------------------------------------
 
-### `Lorenz_Solver$fit()`
+### `Lorenz_Solver$loss_and_gradient()`
 
 Least-squares loss against the target, and its exact gradient by
 reverse-mode automatic differentiation. The schedule is replayed under
@@ -281,22 +282,23 @@ under `"rkck"`: the Rosenbrock stepper cannot be swept.
 
 #### Usage
 
-    Lorenz_Solver$fit(ic = NULL, params = NULL)
+    Lorenz_Solver$loss_and_gradient(initial_state = NULL, params = NULL)
 
 #### Arguments
 
-- `ic`:
+- `initial_state`:
 
-  Initial state to fit from, or `NULL` to keep the system's.
+  Initial state to evaluate at, or `NULL` to keep the system's.
 
 - `params`:
 
-  Parameters to fit at, or `NULL` to keep the system's.
+  Parameters to evaluate at, or `NULL` to keep the system's.
 
 #### Returns
 
 A list with `loss` (sum of squared differences) and `gradient`:
-d(loss)/d(params), then d(loss)/d(ic), for whichever were given.
+d(loss)/d(params), then d(loss)/d(initial_state), for whichever were
+given.
 
 ------------------------------------------------------------------------
 

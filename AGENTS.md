@@ -116,7 +116,7 @@ AD surface is held to:
 The contract a System implements is stated as concepts in
 `inst/include/odelia/ode_interface.hpp` – `HasOdeTime`, `Rebindable`,
 `SolvesForValues`, `ChecksState` for solving, and `Sweepable` for a
-reverse sweep, which `Solver::solve_adjoint` asserts – so a System that
+reverse sweep, which `Solver::sweep_adjoint` asserts – so a System that
 does not satisfy one fails to compile naming the requirement it missed.
 Read those rather than any prose account: a prose copy of a
 compiler-checked contract drifts. The two members a widening System adds

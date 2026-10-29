@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -148,9 +148,8 @@ type). It must implement a small contract:</p>
 at an active scalar. That is all a System needs to be <em>solved</em>.
 To have a run <em>swept</em> for its gradient it adds four members,
 stated as the concept <code>Sweepable</code> in
-<code>odelia/ode_interface.hpp</code>:
-<code>rebind_from&lt;U&gt;()</code>, <code>ad_parameters()</code>,
-<code>for_each_active(f)</code> and
+<code>odelia/ode_interface.hpp</code>: <code>rebind&lt;U&gt;()</code>,
+<code>ad_parameters()</code>, <code>for_each_active(f)</code> and
 <code>set_recorded_state(y, time)</code>. The shipped header has them
 under a comment marking that tier, and the article <a href="reverse-mode.html">Reverse mode</a> says what each is for. The
 remaining members of the header (<code>record_colnames</code>,

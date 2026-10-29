@@ -128,15 +128,15 @@ s.advance_adaptive({0.0, 10.0});
 std::vector<double> y = s.state();
 ```
 
-A gradient of that run is three more lines: keep the record, seed the
-output wanted, and sweep.
+A gradient of that run is three more lines: keep the record, set the
+output’s adjoint wanted, and sweep.
 
 ``` cpp
 s.set_keep_states(true);                       // before the run
 s.advance_adaptive({0.0, 10.0});
-auto lambda = odelia::ode::adjoint_rows::one_row({1.0, 0.0, 0.0});   // d x(10)
-odelia::ode::adjoint_rows dp(1, 3);            // one row per seed, zeroed
-s.solve_adjoint(lambda, dp);                   // dp[0][j] = d x(10) / d parameter j
+auto lambda = odelia::ode::adjoint_batch::one({1.0, 0.0, 0.0});   // d x(10)
+odelia::ode::adjoint_batch dp(1, 3);            // one per output, zeroed
+s.sweep_adjoint(lambda, dp);                   // dp[0][j] = d x(10) / d parameter j
 ```
 
 A package that uses the headers adds `odelia` to `LinkingTo` and
@@ -153,11 +153,11 @@ walks through one with external drivers.
 
 ## Parameter fitting with automatic differentiation
 
-The shipped Lorenz and leaf-thermal runners expose a `$fit()` method
-that returns the least-squares loss against a target trajectory and its
-exact gradient with respect to the parameters (and initial conditions),
-by one reverse sweep over a replay of the reference run. Hand it to a
-gradient-based optimiser such as
+The shipped Lorenz and leaf-thermal runners expose a
+`$loss_and_gradient()` method that returns the least-squares loss
+against a target trajectory and its exact gradient with respect to the
+parameters (and initial conditions), by one reverse sweep over a replay
+of the reference run. Hand it to a gradient-based optimiser such as
 [`optim()`](https://rdrr.io/r/stats/optim.html):
 
 ``` r
@@ -165,7 +165,7 @@ gradient-based optimiser such as
 fit_runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
 fit_runner$set_target(times, target_vals, obs_index)
 
-res <- fit_runner$fit(params = c(sigma = 12, R = 30, b = 3))
+res <- fit_runner$loss_and_gradient(params = c(sigma = 12, R = 30, b = 3))
 res$loss      # scalar mismatch with the target trajectory
 res$gradient  # exact gradient w.r.t. each parameter
 ```
@@ -173,9 +173,9 @@ res$gradient  # exact gradient w.r.t. each parameter
 A complete optimisation workflow (recovering known Lorenz parameters) is
 walked through in
 [`vignette("parameter-fitting")`](https://traitecoevo.github.io/odelia/articles/parameter-fitting.md).
-A runner for your own System gets `$fit()` by instantiating
-`Solver_fit_impl` from `solver_interface.hpp`, as the leaf-thermal
-example does.
+A runner for your own System gets `$loss_and_gradient()` by
+instantiating `Solver_loss_and_gradient_impl` from
+`solver_interface.hpp`, as the leaf-thermal example does.
 
 ## Vocabulary
 
@@ -203,14 +203,14 @@ example does.
   row per accepted step with its time, step size, state, and whatever
   the step solved for inside a stage. A sweep reads it; a replay
   reproduces the run from it.
-- **Sweep** — the backward pass over a recording (`solve_adjoint`). It
-  is seeded with the derivative wanted of the final state, one **seed**
-  per output, and returns one **row** of derivatives per seed against
-  the parameters and the initial state; `adjoint_rows` is the batch.
+- **Sweep** — the backward pass over a recording (`sweep_adjoint`). It
+  starts from the derivative wanted of the final state, one **adjoint**
+  per output, and returns one **row** of derivatives per output against
+  the parameters and the initial state; `adjoint_batch` is the batch.
 - **Insertion** — a scheduled growth of the state vector mid-run. The
   sweep transposes the System’s own widening map across it.
 - **Supplied derivative** — a value put on the tape with rows obtained
-  by other means (`record_with_derivatives`, `implicit_value`), for a
+  by other means (`supply_derivatives`, `implicit_value`), for a
   quantity a submodel solved for by iteration.
 
 ## License
@@ -241,7 +241,7 @@ An ODE system in odelia consists of:
   `inst/examples/leaf_thermal/src/leaf_thermal_system.hpp`) — a C++
   class templated on its scalar type. To be solved it implements
   `ode_size()`, `set_ode_state()`, `ode_state()` and `ode_rates()`; to
-  be swept it adds `rebind_from<U>()`, `ad_parameters()`,
+  be swept it adds `rebind<U>()`, `ad_parameters()`,
   `for_each_active(f)` and `set_recorded_state(y, time)` (the
   `Sweepable` concept in `ode_interface.hpp`).
 

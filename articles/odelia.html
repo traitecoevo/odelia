@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -223,7 +223,7 @@ switch, <code>OdeControl$set_controller()</code>: <code>"hairer"</code>
 which rejects far more attempts; see the package NEWS for 0.8.0).</p>
 <p>To use <code>method = "rodas"</code> with your own C++ system, give
 it either a
-<code>template&lt;class U&gt; System&lt;U&gt; rebind_from() const</code>
+<code>template&lt;class U&gt; System&lt;U&gt; rebind() const</code>
 method (a one-liner that copies the system with its scalar type swapped)
 so its right-hand side can be differentiated for the Jacobian, as the
 Lorenz example does, or an <code>ode_jacobian(y, t, dydt, J)</code>
@@ -326,7 +326,7 @@ smaller rather than committed:</p>
 <span><span class="va">s</span><span class="op">$</span><span class="fu">counts</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt;        n_rhs        n_jac      n_steps n_rejections </span></span>
 <span><span class="co">#&gt;         1048            0          143           47</span></span></code></pre></div>
-<p>Between steps <code>s$set_state(y, time)</code> re-seeds the state at
+<p>Between steps <code>s$set_state(y, time)</code> resets the state at
 any length and <code>s$set_step_size(h)</code> carries a step size
 across it; <code>s$advance_collect(times)</code> is the output loop of
 <code><a href="../reference/ode_solve.html">ode_solve()</a></code>, a matrix of states at the times asked for.</p>

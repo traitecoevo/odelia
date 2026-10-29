@@ -162,13 +162,13 @@ the classical rule of `deSolve`) or `"gsl"` (odelia’s earlier rule,
 which rejects far more attempts; see the package NEWS for 0.8.0).
 
 To use `method = "rodas"` with your own C++ system, give it either a
-`template<class U> System<U> rebind_from() const` method (a one-liner
-that copies the system with its scalar type swapped) so its right-hand
-side can be differentiated for the Jacobian, as the Lorenz example does,
-or an `ode_jacobian(y, t, dydt, J)` method that fills the Jacobian
-itself – the header `ode_jacobian.hpp` has `fd_jacobian()` for a
-one-line finite-difference version. The implicit stepper currently runs
-on the passive (non-AD) solver; differentiating a fit *through* RODAS is
+`template<class U> System<U> rebind() const` method (a one-liner that
+copies the system with its scalar type swapped) so its right-hand side
+can be differentiated for the Jacobian, as the Lorenz example does, or
+an `ode_jacobian(y, t, dydt, J)` method that fills the Jacobian itself –
+the header `ode_jacobian.hpp` has `fd_jacobian()` for a one-line
+finite-difference version. The implicit stepper currently runs on the
+passive (non-AD) solver; differentiating a fit *through* RODAS is
 planned (odelia issue \#36).
 
 ## Solving a system written in R
@@ -281,8 +281,8 @@ s$counts()
 #>         1048            0          143           47
 ```
 
-Between steps `s$set_state(y, time)` re-seeds the state at any length
-and `s$set_step_size(h)` carries a step size across it;
+Between steps `s$set_state(y, time)` resets the state at any length and
+`s$set_step_size(h)` carries a step size across it;
 `s$advance_collect(times)` is the output loop of
 [`ode_solve()`](https://traitecoevo.github.io/odelia/reference/ode_solve.md),
 a matrix of states at the times asked for.

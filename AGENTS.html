@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -92,7 +92,7 @@
 <strong>Be sparing.</strong> The code carries most of the meaning; a comment earns its place by helping the reader over a genuine hump. Don’t narrate a counter for a paragraph.</li>
 <li>
 <strong>Generic machinery is background.</strong> In a concrete System (Lorenz, leaf, canopy) the members required by the AD contract should read as ordinary code, not as the point of the file — the physics is the point. Give an example a real applied domain, not an abstract stand-in.</li>
-</ul><p>The contract a System implements is stated as concepts in <code>inst/include/odelia/ode_interface.hpp</code> – <code>HasOdeTime</code>, <code>Rebindable</code>, <code>SolvesForValues</code>, <code>ChecksState</code> for solving, and <code>Sweepable</code> for a reverse sweep, which <code>Solver::solve_adjoint</code> asserts – so a System that does not satisfy one fails to compile naming the requirement it missed. Read those rather than any prose account: a prose copy of a compiler-checked contract drifts. The two members a widening System adds (<code>apply_insertion</code>) and a System solving inside a stage adds (<code>solved_values</code>) are documented beside the concepts. Every header in <code>inst/include/odelia/</code> meets the comment standard above; keep it that way, and state an invariant once, at its owning definition, referring to it by name elsewhere. Don’t hand-edit generated files (<code>R/RcppExports.R</code>, <code>src/RcppExports.cpp</code>, <code>NAMESPACE</code>, <code>man/</code>).</p>
+</ul><p>The contract a System implements is stated as concepts in <code>inst/include/odelia/ode_interface.hpp</code> – <code>HasOdeTime</code>, <code>Rebindable</code>, <code>SolvesForValues</code>, <code>ChecksState</code> for solving, and <code>Sweepable</code> for a reverse sweep, which <code>Solver::sweep_adjoint</code> asserts – so a System that does not satisfy one fails to compile naming the requirement it missed. Read those rather than any prose account: a prose copy of a compiler-checked contract drifts. The two members a widening System adds (<code>apply_insertion</code>) and a System solving inside a stage adds (<code>solved_values</code>) are documented beside the concepts. Every header in <code>inst/include/odelia/</code> meets the comment standard above; keep it that way, and state an invariant once, at its owning definition, referring to it by name elsewhere. Don’t hand-edit generated files (<code>R/RcppExports.R</code>, <code>src/RcppExports.cpp</code>, <code>NAMESPACE</code>, <code>man/</code>).</p>
 </div>
 <div class="section level2">
 <h2 id="writing-in-this-guide">Writing in this guide<a class="anchor" aria-label="anchor" href="#writing-in-this-guide"></a></h2>
