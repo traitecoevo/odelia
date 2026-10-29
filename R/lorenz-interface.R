@@ -9,6 +9,8 @@
 #' @param times Numeric vector of requested output times.
 #' @param value Logical flag for collect-history behavior.
 #' @param i Integer index into solver history.
+#' @param params Numeric vector of system parameters, one entry per parameter
+#'   in the system's order (for Lorenz: sigma, R, b).
 #' @param method Integration method: \code{"rkck"} (default, explicit Cash-Karp
 #'   RK 4(5)), \code{"dopri"} (explicit Dormand-Prince 5(4)) or \code{"rodas"}
 #'   (implicit RODAS4(3) Rosenbrock, for stiff systems).
@@ -18,9 +20,26 @@ Lorenz_Solver <- R6::R6Class(
   public = list(
     ptr = NULL,
 
-    #' @description Initialize a solver for a Lorenz system.
+    #' @description Initialize a solver for a Lorenz system. The solver takes
+    #'   its own copy of the system as it is at this moment and steps that copy:
+    #'   \code{set_params()} or \code{set_state()} on the \code{LorenzSystem}
+    #'   afterwards do not reach the solver. Use the solver's own
+    #'   \code{$set_params()} and \code{$set_state()}.
     initialize = function(System_xp, control_xp, method = "rkck") {
       self$ptr <- Solver_new(System_xp, control_xp, method)
+    },
+
+    #' @description Parameters of the system this solver steps.
+    pars = function() {
+      Solver_params(self$ptr)
+    },
+
+    #' @description Set the parameters this solver steps with, and re-seed it
+    #'   at its current state and time as \code{$set_state()} would. Call
+    #'   \code{$reset()} as well to start again from the initial state.
+    set_params = function(params) {
+      Solver_set_params(self$ptr, params)
+      invisible(self)
     },
 
     #' @description Get current solver time.

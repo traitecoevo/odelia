@@ -57,6 +57,14 @@ Solver_set_state <- function(solver_xp, y, time) {
     invisible(.Call(`_odelia_Solver_set_state`, solver_xp, y, time))
 }
 
+Solver_params <- function(solver_xp) {
+    .Call(`_odelia_Solver_params`, solver_xp)
+}
+
+Solver_set_params <- function(solver_xp, params) {
+    invisible(.Call(`_odelia_Solver_set_params`, solver_xp, params))
+}
+
 Solver_advance_adaptive <- function(solver_xp, times) {
     invisible(.Call(`_odelia_Solver_advance_adaptive`, solver_xp, times))
 }

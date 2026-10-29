@@ -17,6 +17,8 @@ R6 wrapper for the Lorenz ODE solver.
 \subsection{Public methods}{
   \itemize{
     \item \href{#method-Lorenz_Solver-initialize}{\code{Lorenz_Solver$new()}}
+    \item \href{#method-Lorenz_Solver-pars}{\code{Lorenz_Solver$pars()}}
+    \item \href{#method-Lorenz_Solver-set_params}{\code{Lorenz_Solver$set_params()}}
     \item \href{#method-Lorenz_Solver-time}{\code{Lorenz_Solver$time()}}
     \item \href{#method-Lorenz_Solver-state}{\code{Lorenz_Solver$state()}}
     \item \href{#method-Lorenz_Solver-set_state}{\code{Lorenz_Solver$set_state()}}
@@ -39,7 +41,11 @@ R6 wrapper for the Lorenz ODE solver.
 \if{html}{\out{<a id="method-Lorenz_Solver-initialize"></a>}}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-initialize}{}}}
 \subsection{\code{Lorenz_Solver$new()}}{
-  Initialize a solver for a Lorenz system.
+  Initialize a solver for a Lorenz system. The solver takes
+  its own copy of the system as it is at this moment and steps that copy:
+  \code{set_params()} or \code{set_state()} on the \code{LorenzSystem}
+  afterwards do not reach the solver. Use the solver's own
+  \code{$set_params()} and \code{$set_state()}.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{Lorenz_Solver$new(System_xp, control_xp, method = "rkck")}
@@ -53,6 +59,40 @@ R6 wrapper for the Lorenz ODE solver.
       \item{\code{method}}{Integration method: \code{"rkck"} (default, explicit Cash-Karp
 RK 4(5)), \code{"dopri"} (explicit Dormand-Prince 5(4)) or \code{"rodas"}
 (implicit RODAS4(3) Rosenbrock, for stiff systems).}
+    }
+    \if{html}{\out{</div>}}
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Lorenz_Solver-pars"></a>}}
+\if{latex}{\out{\hypertarget{method-Lorenz_Solver-pars}{}}}
+\subsection{\code{Lorenz_Solver$pars()}}{
+  Parameters of the system this solver steps.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Lorenz_Solver$pars()}
+    \if{html}{\out{</div>}}
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Lorenz_Solver-set_params"></a>}}
+\if{latex}{\out{\hypertarget{method-Lorenz_Solver-set_params}{}}}
+\subsection{\code{Lorenz_Solver$set_params()}}{
+  Set the parameters this solver steps with, and re-seed it
+  at its current state and time as \code{$set_state()} would. Call
+  \code{$reset()} as well to start again from the initial state.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Lorenz_Solver$set_params(params)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{params}}{Numeric vector of system parameters, one entry per parameter
+in the system's order (for Lorenz: sigma, R, b).}
     }
     \if{html}{\out{</div>}}
   }

@@ -62,11 +62,14 @@ test_that("AD workflow optimizes Lorenz parameters", {
   expect_equal(res$par[2], true_pars[2], tolerance = 1e-6)
   expect_equal(res$par[3], true_pars[3], tolerance = 1e-6)
 
-  # Verify optimized parameters reproduce the target trajectory
-  lz$set_params(res$par)
-  runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
-  runner$advance_adaptive(c(0, 1))
-  optimized_hist <- runner$history()
+  # Verify optimized parameters reproduce the target trajectory, on the solver
+  # that fitted them: loss_and_gradient() stored nothing, so it still carries
+  # the initial guess until told otherwise.
+  expect_equal(ad_runner$pars(), unname(initial_guess))
+  ad_runner$set_params(res$par)
+  ad_runner$reset()
+  ad_runner$advance_adaptive(c(0, 1))
+  optimized_hist <- ad_runner$history()
 
   expect_equal(nrow(optimized_hist), nrow(hist))
   expect_equal(optimized_hist$x, hist$x, tolerance = 1e-6)
