@@ -1,0 +1,33 @@
+diff --git a/inst/include/XAD/Tape.hpp b/inst/include/XAD/Tape.hpp
+index 426afa6..ca90cd8 100644
+--- a/inst/include/XAD/Tape.hpp
++++ b/inst/include/XAD/Tape.hpp
+@@ -189,6 +189,10 @@ class Tape
+     derivative_type getDerivative(slot_type s) const { return derivative(s); }
+     void setDerivative(slot_type s, const derivative_type& d) { derivative(s) = d; }
+     void setDerivative(slot_type s, derivative_type&& d) { derivative(s) = std::move(d); }
++    // odelia local patch: every slot's adjoint as one array indexed by slot, for a
++    // caller reading or writing many slots at once. Unchecked, and valid only until
++    // the tape is next used: a registration, a sweep or a new recording can move it.
++    derivative_type* getDerivativesData();
+ 
+     // status
+     void printStatus() const;
+diff --git a/src/Tape.cpp b/src/Tape.cpp
+index 12e9f81..c899df4 100644
+--- a/src/Tape.cpp
++++ b/src/Tape.cpp
+@@ -413,6 +413,13 @@ typename Tape<T, N>::derivative_type& Tape<T, N>::derivative(slot_type s)
+     return derivatives_[s];
+ }
+ 
++template <class T, std::size_t N>
++typename Tape<T, N>::derivative_type* Tape<T, N>::getDerivativesData()
++{
++    initDerivatives();
++    return derivatives_.data();
++}
++
+ template <class T, std::size_t N>
+ const typename Tape<T, N>::derivative_type& Tape<T, N>::derivative(slot_type s) const
+ {

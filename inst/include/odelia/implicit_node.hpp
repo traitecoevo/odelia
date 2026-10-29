@@ -131,6 +131,45 @@ supply_report supply_partials(double value, std::size_t n, const Input& input,
   return {};
 }
 
+// The slots a residual taken off the tape reads, beside one double per slot: the
+// caller's adjoint while the residual is swept, then the partial that replaces it.
+// Two parallel arrays, so the partials push as one run. On the stack up to
+// `in_place` slots, which covers what a leaf hands over, and on the heap past it;
+// each call owns its own, so a residual that calls implicit_value itself does not
+// share them.
+template <class Slot>
+class held_adjoints {
+ public:
+  void add(Slot slot) {
+    if (n_ < in_place) {
+      slot_[n_++] = slot;
+      return;
+    }
+    if (n_ == in_place) {
+      spilled_slot_.assign(slot_, slot_ + in_place);
+    }
+    spilled_slot_.push_back(slot);
+    ++n_;
+  }
+  // Sizes the doubles to the slots added. Called once, after the last add.
+  void seal() {
+    if (n_ > in_place) {
+      spilled_value_.resize(n_);
+    }
+  }
+  std::size_t size() const { return n_; }
+  Slot* slots() { return n_ > in_place ? spilled_slot_.data() : slot_; }
+  double* values() { return n_ > in_place ? spilled_value_.data() : value_; }
+
+ private:
+  static constexpr std::size_t in_place = 64;
+  std::size_t n_ = 0;
+  Slot slot_[in_place];
+  double value_[in_place];
+  std::vector<Slot> spilled_slot_;
+  std::vector<double> spilled_value_;
+};
+
 }  // namespace internal
 
 // Cost, in tape statements walked per solve of a submodel of T statements with
@@ -229,12 +268,11 @@ S implicit_value(double y_star, double dFdy, Residual&& F) {
     }
     // corr's value is ~0, since y* is the root; its derivative is (dF/dp)/(dF/dy),
     // so y* against it with a coefficient of -1 is the theorem's own quotient.
-    std::vector<input_and_derivative<S>> corrections;
     const S corr = F(S(y_star)) / dFdy;
-    corrections.push_back({corr, -1.0});
+    const input_and_derivative<S> correction[] = {{corr, -1.0}};
     S out;
     const supply_report report =
-        supply_derivatives<S>(y_star, corrections, out);
+        supply_derivatives<S>(y_star, correction, out);
     if (!report.whole) {
       util::stop("implicit_value: " + report.why);
     }
@@ -304,18 +342,32 @@ S implicit_value(double y_star, double dFdy, Residual&& F, const First& first,
     //
     // Gathered before the sweep for the same reason: the slot list has to be the
     // one that was zeroed, not one read back out of a tape the sweep has touched.
-    std::vector<typename tape_type::slot_type> slots;
+    using slot_type = typename tape_type::slot_type;
+    internal::held_adjoints<slot_type> held;
+    slot_type top = 0;
     auto gather = [&](const S& x) {
-      const typename tape_type::slot_type slot = x.getSlot();
+      const slot_type slot = x.getSlot();
       if (slot != tape_type::INVALID_SLOT) {
-        slots.push_back(slot);
+        held.add(slot);
+        top = slot > top ? slot : top;
       }
     };
     odelia::ode::visit_active(gather, first, rest...);
-    std::vector<double> held(slots.size());
-    for (std::size_t i = 0; i < slots.size(); ++i) {
-      held[i] = tape->derivative(slots[i]);
-      tape->derivative(slots[i]) = 0.0;
+    held.seal();
+    const std::size_t n = held.size();
+    slot_type* const slots = held.slots();
+    double* const value = held.values();
+    // Read and written through the tape's adjoint array rather than through the
+    // inputs, so an input can arrive const -- which is how every caller already
+    // holds the things a residual reads. The array is unchecked: one checked read
+    // at the highest slot stands for every slot below it.
+    if (n > 0) {
+      static_cast<void>(tape->derivative(top));
+      double* const adjoint = tape->getDerivativesData();
+      for (std::size_t i = 0; i < n; ++i) {
+        value[i] = adjoint[slots[i]];
+        adjoint[slots[i]] = 0.0;
+      }
     }
 
     {
@@ -328,20 +380,24 @@ S implicit_value(double y_star, double dFdy, Residual&& F, const First& first,
     // carries them rather than the residual's own.
     tape->resetTo(mark);
     S out = y_star;
-    // Read and cleared through the TAPE, by slot, so an input can arrive const --
-    // which is how every caller already holds the things a residual reads.
-    for (std::size_t i = 0; i < held.size(); ++i) {
-      // What the slot holds now is the residual's deposit alone; the caller's
-      // own adjoint goes back.
-      const double adj = tape->derivative(slots[i]);
-      tape->derivative(slots[i]) = held[i];
-      const double partial = -adj;
+    // Fetched again: registering the residual's output can move the array.
+    double* const adjoint = tape->getDerivativesData();
+    // What a slot holds now is the residual's deposit alone; the caller's own
+    // adjoint goes back, and the non-zero partials close up into the front of the
+    // same two arrays as they are read.
+    std::size_t kept = 0;
+    for (std::size_t i = 0; i < n; ++i) {
+      const slot_type slot = slots[i];
+      const double partial = -adjoint[slot];
+      adjoint[slot] = value[i];
       if (partial == 0.0) {
         continue;
       }
       // -(dF/dp)/(dF/dy) is the theorem; dF/dy divided the residual above.
-      tape->pushAll(&partial, &slots[i], 1u);
+      value[kept] = partial;
+      slots[kept++] = slot;
     }
+    tape->pushAll(value, slots, static_cast<unsigned>(kept));
     tape->registerOutput(out);
     return out;
   }

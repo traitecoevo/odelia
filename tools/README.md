@@ -24,6 +24,12 @@ patches in [`patches/`](patches/):
   `__promote_t` alias. XAD's specializations are unnecessary and ill-formed
   there, so the patch restricts them to `_LIBCPP_VERSION < 210000`. Not yet
   fixed upstream — drop this patch once upstream handles the rename.
+- **`0002-xad-derivatives-data.patch`** — adds `Tape::getDerivativesData()`,
+  the adjoint array itself, indexed by slot. Upstream reaches an adjoint only
+  through `derivative(slot)`, an out-of-line call with a range check per slot;
+  `implicit_value` holds and restores every input's adjoint on each call, and
+  through the per-slot call that cost about 4% of plant's TF24 gradient sweep.
+  Drop this patch if upstream adds an equivalent accessor.
 
 ## Re-vendoring workflow
 
