@@ -382,12 +382,13 @@ struct state_range {
 };
 
 // A System with a subsystem: a range of its state whose rates read the rest only
-// through one input per component, so a Cash-Karp step can integrate it in
-// substeps of its own under given inputs. A step substeps it where the step is
-// past Cash-Karp's stability limit on it, where Cash-Karp's error on it set the
-// size of the step before (both unless OdeControl::substep_subsystem is off), or
-// where the step spans one of `subsystem_knots(from, to)`, the times in
-// (from, to) where its forcing changes form; its substeps then land on each knot.
+// through one input per component, so an explicit step (Cash-Karp or
+// Dormand-Prince) can integrate it in substeps of its own under given inputs. A
+// step substeps it where the step is past the stepper's stability limit on it,
+// where the stepper's error on it set the size of the step before (both unless
+// OdeControl::substep_subsystem is off), or where the step spans one of
+// `subsystem_knots(from, to)`, the times in (from, to) where its forcing changes
+// form; its substeps then land on each knot.
 template <typename System>
 concept HasSubsystem =
   requires(const System& s, double time,

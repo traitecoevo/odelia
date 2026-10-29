@@ -1,3 +1,11 @@
+## odelia 0.9.1
+
+**A Dormand-Prince step substeps a System's subsystem as a Cash-Karp step does.** The substepped step is `SubsystemSubsteps` (`ode_substeps.hpp`), which both explicit steppers derive from on their own tableau: `method = "dopri"` takes, replays and sweeps substeps as `"rkck"` does, and is past the stability limit on the subsystem where it times the step exceeds 3.306, the end of Dormand-Prince's real stability interval. Dense output inside a substepped step is the stages' for the rest of the state and no better than the predictor's for the subsystem, whose substeps are not kept. A System with a subsystem run under `"dopri"` or `"rodas"` read the Cash-Karp stepper's empty error vectors after every step; the solver now asks the stepper the method names, and `"rodas"` takes the subsystem with the rest.
+
+**Whether the stepper's error on the subsystem set the step is asked in the control's norm.** The subsystem's part of the error, the rest's and substepping's coupling error compare as the rule reads them (`OdeControl::error_ratio`: the largest ratio under `gsl`, the RMS under `hairer`), and the subsystem set the step where its part exceeds both. Under `gsl` that is the component-wise test as before, bit for bit; under `hairer` the sums of squares compare, so a subsystem of a few components among many sets the step only where its error is a larger part of the whole than the rest's.
+
+A **patch** bump: `error_ratio` and `ode_substeps.hpp` are additions, and a run under `gsl`, or of a System without a subsystem, steps as before.
+
 ## odelia 0.9.0
 
 **Each rate evaluation is handed its slot of the step's row.** `store_solved` and `load_solved` take the slot as a second argument: 0 to 4 for the stages after the first, and `end_slot` (5) for the evaluation at the state the step ends at. A System that reads another run's recording finds the same evaluation there by its slot and its time. The time alone does not identify it, because Cash–Karp's stage at t + h and the step's end share a time but not a state. `derivs` takes the row and the slot rather than one slot's values, and `carried_rates` holds the row.

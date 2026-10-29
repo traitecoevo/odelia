@@ -63,7 +63,6 @@ public:
       util::stop("method='rodas' has no adjoint; use method='rkck' or "
                  "method='dopri'.");
     }
-    refuse_substeps_unless_rkck(substeps);
     // The System can be a different width from the one the forward pass left,
     // because a caller sweeping a range narrows it between ranges. Every seed
     // carries that same width, and the stage buffers are sized to it here. A sweep
@@ -71,7 +70,8 @@ public:
     resize(lambda_out.width());
     if (method == Method::dopri) {
       dopri_stepper.step_adjoint(active, solved, k1, time, step_size, y,
-                                 lambda_out, lambda_in, parameter_adjoint);
+                                 lambda_out, lambda_in, parameter_adjoint,
+                                 substeps);
     } else {
       stepper.step_adjoint(active, solved, k1, time, step_size, y,
                            lambda_out, lambda_in, parameter_adjoint, substeps);
@@ -206,25 +206,39 @@ public:
 
 private:
   // Whether a step from the current time to `step_end` substeps the System's
-  // subsystem: under Cash-Karp, where the step spans a knot of its forcing, or,
-  // where the control allows, where it is past Cash-Karp's stability limit on
-  // it or follows a step whose size Cash-Karp's error on it set.
+  // subsystem: under an explicit stepper, where the step spans a knot of its
+  // forcing, or, where the control allows, where it is past the stepper's
+  // stability limit on it or follows a step whose size the stepper's error on
+  // it set.
   bool substeps_subsystem(const System& system, double step_end) const;
-  // Whether Cash-Karp's error on the subsystem set the size of the step just
-  // accepted: it exceeds both the rest's error and the coupling error of
+  // Whether the stepper's error on the subsystem set the size of the step just
+  // accepted: in the control's norm, the subsystem's part of the error exceeds
+  // the rest's, and would have been smaller as the coupling error of
   // substepping -- the one the step measured where it substepped, and otherwise
   // half the step times how far the inputs at t + h missed the line along the
-  // input slope. Compared component by component, as the gsl rule reads error.
+  // input slope. Under the gsl rule's max norm that is the stepper's error on
+  // the subsystem exceeding both the rest's and the coupling error; under the
+  // hairer rule's RMS, the sums of squares compare, so a subsystem of a few
+  // components among many sets the step only where its error is large enough
+  // to. False under the implicit stepper, which measures none of these.
   bool subsystem_error_sets_step(const System& system, const state_type& u0,
                                  const std::vector<double>& input_slope,
                                  double h, bool substepped) const;
   bool spans_subsystem_knot(const System& system, double step_end) const;
-  void refuse_substeps_unless_rkck(const subsystem_substeps* substeps) const {
-    if (substeps != nullptr && method != Method::rkck) {
-      util::stop(std::string("A step that substepped a System's subsystem is "
-                             "taken only by method='rkck', not method='") +
-                 method_name(method) + "'");
+  void refuse_substeps_under_rodas(const subsystem_substeps* substeps) const {
+    if (substeps != nullptr && method == Method::rodas) {
+      util::stop("A step that substepped a System's subsystem is taken only by "
+                 "method='rkck' or method='dopri', not method='rodas'");
     }
+  }
+  // What both explicit steppers answer alike, asked of the one the method
+  // names; Cash-Karp's where the method is neither, which no caller reaches.
+  template <class F>
+  decltype(auto) explicit_stepper(F&& f) const {
+    if (method == Method::dopri) {
+      return f(dopri_stepper);
+    }
+    return f(stepper);
   }
   void resize(size_t size_);
   void setup_dydt_in(System& system);
@@ -242,15 +256,15 @@ private:
   // the stages then load it instead of solving again, and nothing is cleared
   // because nothing is written.
   //
-  // `substeps`, Cash-Karp's only, are the step's substeps of the System's
-  // subsystem, and `inputs` the subsystem's inputs at the step's start.
+  // `substeps`, the explicit steppers' only, are the step's substeps of the
+  // System's subsystem, and `inputs` the subsystem's inputs at the step's start.
   void stepper_step(System& system, double time_, double step_size,
                     state_type& y_, state_type& yerr_,
                     const state_type& dydt_in_, state_type& dydt_out_,
                     const solved_row<System>* replay = nullptr,
                     const subsystem_substeps* substeps = nullptr,
                     const state_type& inputs = {}) {
-    refuse_substeps_unless_rkck(substeps);
+    refuse_substeps_under_rodas(substeps);
     // Each stepper's last evaluation is at the state the step ends at, at this
     // time, which is what first-same-as-last carries on with dydt_out.
     dydt_out_time = time_ + step_size;
@@ -281,7 +295,7 @@ private:
       }
     };
     if (method == Method::dopri) {
-      with_row(dopri_stepper);
+      with_row(dopri_stepper, substeps, inputs);
     } else if (method == Method::rodas) {
       if (replay != nullptr) {
         // RODAS takes no row at all, so it has nowhere to put one. Said here
@@ -417,6 +431,7 @@ void SolverInternal<System>::reset(System& system) {
   step_size_last = control.step_size_initial;
   control.reset_memory();
   stepper.subsystem_stiffness = 0.0;
+  dopri_stepper.subsystem_stiffness = 0.0;
   subsystem_error_set_step_ = false;
   time_max = std::numeric_limits<double>::infinity();
   in_step = false;
@@ -681,9 +696,10 @@ void SolverInternal<System>::step(System& system) {
       // as a replay does.
       if constexpr (HasSubsystem<System>) {
         if (substep_subsystem) {
-          substeps = stepper.choose_substeps(system, time, step_size, y, dydt_in,
-                                             u0, input_slope,
-                                             control.get_step_size_min());
+          substeps = explicit_stepper([&](const auto& s) {
+            return s.choose_substeps(system, time, step_size, y, dydt_in, u0,
+                                     input_slope, control.get_step_size_min());
+          });
         }
       }
       stepper_step(system, time, step_size, y, yerr, dydt_in, dydt_out, nullptr,
@@ -965,10 +981,15 @@ template <class System>
 bool SolverInternal<System>::substeps_subsystem(const System& system,
                                                 double step_end) const {
   if constexpr (HasSubsystem<System>) {
+    if (method == Method::rodas) {
+      return false;
+    }
     return spans_subsystem_knot(system, step_end) ||
-      (method == Method::rkck && control.substep_subsystem &&
+      (control.substep_subsystem &&
        (subsystem_error_set_step_ ||
-        (step_end - time) * stepper.subsystem_stiffness > stepper.stability_limit));
+        explicit_stepper([&](const auto& s) {
+          return (step_end - time) * s.subsystem_stiffness > s.stability_limit;
+        })));
   } else {
     return false;
   }
@@ -978,29 +999,31 @@ template <class System>
 bool SolverInternal<System>::subsystem_error_sets_step(
     const System& system, const state_type& u0,
     const std::vector<double>& input_slope, double h, bool substepped) const {
-  const auto [first, n] = system.subsystem();
-  double rest = 0.0, cash_karp = 0.0, coupling = 0.0;
-  for (size_t i = 0; i < y.size(); ++i) {
-    const double level = control.errlevel(y[i], dydt_out[i], h);
-    if (i < first || i >= first + n) {
-      rest = std::max(rest, std::abs(yerr[i]) / level);
-      continue;
-    }
-    const size_t q = i - first;
-    cash_karp = std::max(
-      cash_karp, std::abs(stepper.subsystem_cash_karp_error[q]) / level);
-    const double miss = substepped ? yerr[i] :
-      0.5 * h * (stepper.inputs_at_end_stage[q] - u0[q] - h * input_slope[q]);
-    coupling = std::max(coupling, std::abs(miss) / level);
+  if (method == Method::rodas) {
+    return false;
   }
-  return cash_karp > std::max(rest, coupling);
+  const auto [first, n] = system.subsystem();
+  // Each part of the error on its own, the other's rows zero: a zero row is
+  // nothing to a max and nothing to a sum of squares.
+  state_type rest = yerr, own(y.size(), 0.0), coupling(y.size(), 0.0);
+  explicit_stepper([&](const auto& s) {
+    for (size_t q = 0; q < n; ++q) {
+      rest[first + q] = 0.0;
+      own[first + q] = s.subsystem_own_error[q];
+      coupling[first + q] = substepped ? yerr[first + q] : 0.5 * h *
+        (s.inputs_at_end_stage[q] - u0[q] - h * input_slope[q]);
+    }
+  });
+  const double own_ratio = control.error_ratio(y.size(), h, y, own, dydt_out);
+  return own_ratio > control.error_ratio(y.size(), h, y, rest, dydt_out) &&
+    own_ratio > control.error_ratio(y.size(), h, y, coupling, dydt_out);
 }
 
 template <class System>
 bool SolverInternal<System>::spans_subsystem_knot(const System& system,
                                                   double step_end) const {
   if constexpr (HasSubsystem<System>) {
-    return method == Method::rkck &&
+    return method != Method::rodas &&
       !system.subsystem_knots(time, step_end).empty();
   } else {
     return false;

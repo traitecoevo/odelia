@@ -198,7 +198,7 @@ A System whose state grows adds `apply_insertion(time, x, out)`, the widening as
 2. `ode_interface.hpp`: the System concepts, `instruction` and `step_record`, `Sweepable`, `visit_active`.
 3. `ode_solver_internal.hpp`: `push_step` and `push_insertion`, the two places a row is written; `step_to` for the pinned path.
 4. `adjoint.hpp`: `adjoint_rows`, `active_system`, `vector_jacobian_product`, `state_and_parameter_adjoints`, the transpose of one map.
-5. `ode_step_rkck.hpp`: `Step::step_adjoint`, the transpose of one step, and the `solved` channel; `ode_step_dopri.hpp`: `DopriStep::step_adjoint`, the same on the Dormand-Prince tableau.
+5. `ode_step_rkck.hpp`: `Step::step_adjoint`, the transpose of one step, and the `solved` channel; `ode_step_dopri.hpp`: `DopriStep::step_adjoint`, the same on the Dormand-Prince tableau; `ode_substeps.hpp`: the step both take where a System names a subsystem, which the sweep transposes with its substeps as recorded.
 6. `ode_solver.hpp`: `solve_adjoint`, the loop over rows and insertions; `advance_recorded`, the replay.
 7. `implicit_node.hpp`: supplied rows and `implicit_value`, independent of the solver.
 8. `sweep.hpp`: helpers for a consumer that drives a sweep range by range itself.
