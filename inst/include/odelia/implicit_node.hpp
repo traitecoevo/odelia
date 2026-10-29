@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 #include <XAD/XAD.hpp>
+// Never ode_interface.hpp, directly or through another header: a consumer with
+// no solver includes this, and tests/standalone `make layering` refuses it.
 #include <odelia/adjoint_scalar.hpp>
 #include <odelia/ode_util.hpp>
 
