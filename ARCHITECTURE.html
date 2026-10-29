@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -82,11 +82,13 @@
 <code>ode_linalg.hpp</code>, <code>ode_jacobian.hpp</code>
 </td>
 <td>dense LU and eigenvalues; the Jacobian from a System’s hook or by forward AD</td>
+</tr><tr><td><code>ode_substeps.hpp</code></td>
+<td>
+<code>SubsystemSubsteps</code>: a step that integrates a System’s subsystem (<code>HasSubsystem</code>) in substeps of its own, on whichever explicit tableau derives from it</td>
 </tr><tr><td>
 <code>ode_step_rkck.hpp</code>, <code>ode_step_dopri.hpp</code>, <code>ode_step_rodas.hpp</code>
 </td>
-<td>the three steppers; the two explicit ones, <code>rkck</code> and <code>dopri</code>, record a run and carry <code>step_adjoint</code>
-</td>
+<td>the three steppers; the two explicit ones, <code>rkck</code> and <code>dopri</code>, record a run, carry <code>step_adjoint</code> and substep a subsystem</td>
 </tr><tr><td><code>ode_callback_system.hpp</code></td>
 <td>
 <code>CallbackSystem</code>, a System over <code>std::function</code>s</td>

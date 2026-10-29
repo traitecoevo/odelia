@@ -32,7 +32,8 @@ those above it.
 | `adjoint.hpp` | `adjoint_rows`, `active_system`, `vector_jacobian_product`, `state_and_parameter_adjoints`: the transpose of one map |
 | `implicit_node.hpp` | `record_with_derivatives`, `implicit_value`: a value on the tape carrying rows obtained elsewhere; independent of the solver |
 | `ode_linalg.hpp`, `ode_jacobian.hpp` | dense LU and eigenvalues; the Jacobian from a System’s hook or by forward AD |
-| `ode_step_rkck.hpp`, `ode_step_dopri.hpp`, `ode_step_rodas.hpp` | the three steppers; the two explicit ones, `rkck` and `dopri`, record a run and carry `step_adjoint` |
+| `ode_substeps.hpp` | `SubsystemSubsteps`: a step that integrates a System’s subsystem (`HasSubsystem`) in substeps of its own, on whichever explicit tableau derives from it |
+| `ode_step_rkck.hpp`, `ode_step_dopri.hpp`, `ode_step_rodas.hpp` | the three steppers; the two explicit ones, `rkck` and `dopri`, record a run, carry `step_adjoint` and substep a subsystem |
 | `ode_callback_system.hpp` | `CallbackSystem`, a System over `std::function`s |
 | `ode_solver_internal.hpp` → `ode_solver.hpp` | `SolverInternal` (stepping, the record), `Solver<System>` (`advance_*`, `recording()`, `solve_adjoint`, `advance_recorded`) |
 | `sweep.hpp`, `ode_steady_state.hpp` | range helpers for a consumer driving a sweep itself; Newton to a fixed point with implicit-function-theorem sensitivity |

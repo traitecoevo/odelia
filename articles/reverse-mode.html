@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -438,7 +438,9 @@ map.</li>
 <code>ode_step_rkck.hpp</code>: <code>Step::step_adjoint</code>, the
 transpose of one step, and the <code>solved</code> channel;
 <code>ode_step_dopri.hpp</code>: <code>DopriStep::step_adjoint</code>,
-the same on the Dormand-Prince tableau.</li>
+the same on the Dormand-Prince tableau; <code>ode_substeps.hpp</code>:
+the step both take where a System names a subsystem, which the sweep
+transposes with its substeps as recorded.</li>
 <li>
 <code>ode_solver.hpp</code>: <code>solve_adjoint</code>, the loop
 over rows and insertions; <code>advance_recorded</code>, the

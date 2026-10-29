@@ -357,7 +357,9 @@ hands the gradient to [`optim()`](https://rdrr.io/r/stats/optim.html).
     transpose of one map.
 5.  `ode_step_rkck.hpp`: `Step::step_adjoint`, the transpose of one
     step, and the `solved` channel; `ode_step_dopri.hpp`:
-    `DopriStep::step_adjoint`, the same on the Dormand-Prince tableau.
+    `DopriStep::step_adjoint`, the same on the Dormand-Prince tableau;
+    `ode_substeps.hpp`: the step both take where a System names a
+    subsystem, which the sweep transposes with its substeps as recorded.
 6.  `ode_solver.hpp`: `solve_adjoint`, the loop over rows and
     insertions; `advance_recorded`, the replay.
 7.  `implicit_node.hpp`: supplied rows and `implicit_value`, independent
