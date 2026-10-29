@@ -1,5 +1,27 @@
 # Changelog
 
+## odelia 0.10.3
+
+**A solver’s parameters can be read and set on the solver.** A `Solver`
+steps its own copy of the System it was built from, so
+`System$set_params()` after building a solver never reached that solver,
+and nothing said so. The Lorenz and leaf-thermal solvers gain `$pars()`
+and `$set_params(params)`, through `Solver_params_impl` and
+`Solver_set_params_impl` in `solver_interface.hpp`, which read and write
+the copy’s parameters in the order `ad_parameters()` lists them.
+`set_params` re-seeds the solver at its current state and time, as
+`set_state` does, so the rates it carries are the new parameters’ and
+the step size starts afresh; call `$reset()` as well to start again from
+the initial state. The copy is now stated at the `Solver` class, at
+`Solver_new`, and in the solver constructors’ R documentation; the
+fitting vignette integrates at the fitted values on the solver that
+fitted them instead of building a second one. A test pins both halves:
+parameters set on the System after the solver is built do not move its
+trajectory, and parameters set on the solver give the trajectory of a
+solver built at those values.
+
+A **patch** bump: additions only, and no number moves.
+
 ## odelia 0.10.2
 
 **A sum of many spline reads can be recorded as one tape statement.** A

@@ -44,10 +44,12 @@ target_vals <- as.matrix(hist[, c("x", "y", "z")])
 ## Register the calibration target
 
 We move the system parameters away from the truth (this is our starting
-guess), build a solver, and register the calibration target. The
-reference run’s `times` are the schedule every fit replays, so each
-evaluation takes the same steps and the loss is a smooth function of the
-parameters.
+guess), build a solver, and register the calibration target. A solver
+takes its own copy of the system when it is built, so the parameters it
+carries are the guess as set here; changing `lz` afterwards would not
+reach `ad_runner`, whose own `$set_params()` does. The reference run’s
+`times` are the schedule every fit replays, so each evaluation takes the
+same steps and the loss is a smooth function of the parameters.
 
 ``` r
 
@@ -132,3 +134,17 @@ rbind(true = true_pars, recovered = res$par)
 The optimiser recovers the true parameters to high precision, confirming
 that the gradients produced by AD are correct and usable for
 calibration.
+
+`$loss_and_gradient()` evaluates at the parameters it is given and
+stores nothing, so the solver still carries the initial guess. To
+integrate at the fitted values, set them on the solver and start it
+again from its initial state:
+
+``` r
+
+ad_runner$set_params(res$par)
+ad_runner$reset()
+ad_runner$advance_adaptive(c(0, 1))
+max(abs(as.matrix(ad_runner$history()[, c("x", "y", "z")]) - target_vals))
+#> [1] 4.571067e-07
+```

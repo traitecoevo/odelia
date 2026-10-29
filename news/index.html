@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,11 @@
       <small>Source: <a href="https://github.com/traitecoevo/odelia/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.10.3" id="odelia-0103">odelia 0.10.3<a class="anchor" aria-label="anchor" href="#odelia-0103"></a></h2>
+<p><strong>A solver’s parameters can be read and set on the solver.</strong> A <code>Solver</code> steps its own copy of the System it was built from, so <code>System$set_params()</code> after building a solver never reached that solver, and nothing said so. The Lorenz and leaf-thermal solvers gain <code>$pars()</code> and <code>$set_params(params)</code>, through <code>Solver_params_impl</code> and <code>Solver_set_params_impl</code> in <code>solver_interface.hpp</code>, which read and write the copy’s parameters in the order <code>ad_parameters()</code> lists them. <code>set_params</code> re-seeds the solver at its current state and time, as <code>set_state</code> does, so the rates it carries are the new parameters’ and the step size starts afresh; call <code>$reset()</code> as well to start again from the initial state. The copy is now stated at the <code>Solver</code> class, at <code>Solver_new</code>, and in the solver constructors’ R documentation; the fitting vignette integrates at the fitted values on the solver that fitted them instead of building a second one. A test pins both halves: parameters set on the System after the solver is built do not move its trajectory, and parameters set on the solver give the trajectory of a solver built at those values.</p>
+<p>A <strong>patch</strong> bump: additions only, and no number moves.</p>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.10.2" id="odelia-0102">odelia 0.10.2<a class="anchor" aria-label="anchor" href="#odelia-0102"></a></h2>
 <p><strong>A sum of many spline reads can be recorded as one tape statement.</strong> A model that integrates a function of a field over quadrature points reads the field at every point, and each read at an active scalar records statements that every sweep walks again. Three additions let such a model compute the sum in double and supply its partials once:</p>

@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -107,10 +107,14 @@ data we will later try to recover.</p>
 <h2 id="register-the-calibration-target">Register the calibration target<a class="anchor" aria-label="anchor" href="#register-the-calibration-target"></a>
 </h2>
 <p>We move the system parameters away from the truth (this is our
-starting guess), build a solver, and register the calibration target.
-The reference run’s <code>times</code> are the schedule every fit
-replays, so each evaluation takes the same steps and the loss is a
-smooth function of the parameters.</p>
+starting guess), build a solver, and register the calibration target. A
+solver takes its own copy of the system when it is built, so the
+parameters it carries are the guess as set here; changing
+<code>lz</code> afterwards would not reach <code>ad_runner</code>, whose
+own <code>$set_params()</code> does. The reference run’s
+<code>times</code> are the schedule every fit replays, so each
+evaluation takes the same steps and the loss is a smooth function of the
+parameters.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">initial_guess</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>sigma <span class="op">=</span> <span class="fl">12.0</span>, R <span class="op">=</span> <span class="fl">30.0</span>, b <span class="op">=</span> <span class="fl">3.0</span><span class="op">)</span></span>
 <span><span class="va">lz</span><span class="op">$</span><span class="fu">set_params</span><span class="op">(</span><span class="va">initial_guess</span><span class="op">)</span></span>
@@ -184,6 +188,16 @@ have to re-run the solver to obtain the gradient separately.</p>
 <p>The optimiser recovers the true parameters to high precision,
 confirming that the gradients produced by AD are correct and usable for
 calibration.</p>
+<p><code>$loss_and_gradient()</code> evaluates at the parameters it is
+given and stores nothing, so the solver still carries the initial guess.
+To integrate at the fitted values, set them on the solver and start it
+again from its initial state:</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">ad_runner</span><span class="op">$</span><span class="fu">set_params</span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">par</span><span class="op">)</span></span>
+<span><span class="va">ad_runner</span><span class="op">$</span><span class="fu">reset</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">ad_runner</span><span class="op">$</span><span class="fu">advance_adaptive</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">ad_runner</span><span class="op">$</span><span class="fu">history</span><span class="op">(</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"x"</span>, <span class="st">"y"</span>, <span class="st">"z"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span> <span class="op">-</span> <span class="va">target_vals</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 4.571067e-07</span></span></code></pre></div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

@@ -14,6 +14,10 @@ R6 wrapper for the Lorenz ODE solver.
 
 - [`Lorenz_Solver$new()`](#method-Lorenz_Solver-initialize)
 
+- [`Lorenz_Solver$pars()`](#method-Lorenz_Solver-pars)
+
+- [`Lorenz_Solver$set_params()`](#method-Lorenz_Solver-set_params)
+
 - [`Lorenz_Solver$time()`](#method-Lorenz_Solver-time)
 
 - [`Lorenz_Solver$state()`](#method-Lorenz_Solver-state)
@@ -50,7 +54,11 @@ R6 wrapper for the Lorenz ODE solver.
 
 ### `Lorenz_Solver$new()`
 
-Initialize a solver for a Lorenz system.
+Initialize a solver for a Lorenz system. The solver takes its own copy
+of the system as it is at this moment and steps that copy:
+`set_params()` or `set_state()` on the `LorenzSystem` afterwards do not
+reach the solver. Use the solver's own `$set_params()` and
+`$set_state()`.
 
 #### Usage
 
@@ -71,6 +79,35 @@ Initialize a solver for a Lorenz system.
   Integration method: `"rkck"` (default, explicit Cash-Karp RK 4(5)),
   `"dopri"` (explicit Dormand-Prince 5(4)) or `"rodas"` (implicit
   RODAS4(3) Rosenbrock, for stiff systems).
+
+------------------------------------------------------------------------
+
+### `Lorenz_Solver$pars()`
+
+Parameters of the system this solver steps.
+
+#### Usage
+
+    Lorenz_Solver$pars()
+
+------------------------------------------------------------------------
+
+### `Lorenz_Solver$set_params()`
+
+Set the parameters this solver steps with, and re-seed it at its current
+state and time as `$set_state()` would. Call `$reset()` as well to start
+again from the initial state.
+
+#### Usage
+
+    Lorenz_Solver$set_params(params)
+
+#### Arguments
+
+- `params`:
+
+  Numeric vector of system parameters, one entry per parameter in the
+  system's order (for Lorenz: sigma, R, b).
 
 ------------------------------------------------------------------------
 
