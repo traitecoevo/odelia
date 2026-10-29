@@ -28,9 +28,9 @@ WARN    ?= -Wall -Wextra -Wno-unused-parameter
 INCLUDES = -I../../inst/include
 HEADERS  = $(wildcard ../../inst/include/odelia/*.hpp)
 
-.PHONY: all build selfcontained clean
+.PHONY: all build selfcontained layering clean
 
-all: build selfcontained
+all: build selfcontained layering
 	./r_free
 
 build: r_free
@@ -47,6 +47,16 @@ selfcontained:
 	    || { echo "not self-contained: $$b"; exit 1; }; \
 	  echo "  self-contained: $$b"; \
 	done
+
+# implicit_node.hpp serves a consumer that records partials on a tape and takes
+# no solver (phylloptim), so an edit to the System contract must not reach it.
+# Compiling on its own does not show that -- it would with the contract included
+# too -- so this checks the contract's include guard is still unset after it.
+layering:
+	@printf '#include <odelia/implicit_node.hpp>\n#ifdef ODELIA_ODE_INTERFACE_HPP_\n#error implicit_node.hpp reaches ode_interface.hpp\n#endif\n' \
+	  | $(CXX) $(CXXSTD) $(INCLUDES) -fsyntax-only -x c++ - \
+	  || { echo "implicit_node.hpp includes the System contract"; exit 1; }
+	@echo "  implicit_node.hpp: no System contract"
 
 r_free: r_free.o Tape.o
 	$(CXX) $(CXXSTD) -o $@ $^

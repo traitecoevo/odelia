@@ -1,3 +1,9 @@
+## odelia 0.10.5
+
+**The reverse-mode scalar has a header of its own, and `implicit_node.hpp` no longer includes the System contract.** `adjoint_scalar<T>`, `adjoint_tape<T>`, `visit_active` and `count_active_slots` move from `ode_interface.hpp` to `adjoint_scalar.hpp`, beside `tangent.hpp`. `implicit_node.hpp` includes that header in place of `ode_interface.hpp`, so a consumer that records partials on a tape and takes no solver, as phylloptim does, now includes nothing an edit to the solver's interface touches. `ode_interface.hpp` includes `adjoint_scalar.hpp`, so every name is still reached where it was. A file that reached `ode_interface.hpp`'s other names through `implicit_node.hpp` alone must now include it itself.
+
+A **patch** bump: no name changes, and no number moves.
+
 ## odelia 0.10.4
 
 **`implicit_value` holds and restores its inputs' adjoints without a tape call per slot.** The form that sweeps its residual locally reads each input's adjoint, zeroes it, and puts it back afterwards. It did that through `Tape::derivative(slot)`, an out-of-line call with a range check, four times per slot, and kept the slots and held values in two vectors allocated on every call. It now fetches the tape's adjoint array once on each side of the sweep, keeps up to 64 slots on the stack, and pushes its partials as one run. A residual that calls `implicit_value` itself gets its own buffers. On plant's TF24 drought stand, 40 years and 108 introductions at `ode_tol` 1e-3, the reverse sweep's CPU fell from 6.25 s to 6.03 s, median of six interleaved runs, with every gradient entry bit-identical (traitecoevo/odelia#81).
