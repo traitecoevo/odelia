@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,19 @@
       <small>Source: <a href="https://github.com/traitecoevo/odelia/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.10.2" id="odelia-0102">odelia 0.10.2<a class="anchor" aria-label="anchor" href="#odelia-0102"></a></h2>
+<p><strong>A sum of many spline reads can be recorded as one tape statement.</strong> A model that integrates a function of a field over quadrature points reads the field at every point, and each read at an active scalar records statements that every sweep walks again. Three additions let such a model compute the sum in double and supply its partials once:</p>
+<ul><li>
+<code>hermite_spline&lt;S&gt;::read_linear(u)</code> returns a cubic read as the knot data it is linear in: the read’s value and slope, the four knot values and slopes it depends on (<code>input</code>, pointers into the spline), and the weight on each. The value and slope equal <code>eval(u)</code> and <code>slope(u)</code> bit for bit, beyond either end too, in a build without floating-point contraction; with it, the end line can differ from an active spline’s <code>eval</code> by an ulp.</li>
+<li>
+<code>value_and_partials(f, x...)</code> evaluates <code>f</code> once at a forward-mode scalar carrying one direction per argument, and returns the value and every partial, so a small integrand written once over its scalar needs no hand-written derivative.</li>
+<li>
+<code>supply_derivatives</code> also takes its partials as two parallel arrays, input pointers and derivatives. A caller that supplies a hundred partials a call can fill storage it reuses, which a span of <code>input_and_derivative</code>, holding references, cannot be.</li>
+</ul><p><code>supply_derivatives</code> now pushes partials to the tape from a stack buffer in batches of 64, rather than one call per partial. The tape receives the same operations in the same order; on plant’s FF16 gradient, one call per partial cost 4% more instructions.</p>
+<p>plant uses these to record each crown integral as one statement (traitecoevo/plant#677, traitecoevo/plant#692). New tests in <code>test-spline-ad.R</code> hold <code>read_linear</code>’s value and slope to <code>eval</code>’s bit for bit inside the knots, on a knot and past each end, built with <code>-ffp-contract=off</code>, and its weights to the tape’s gradient to 1e-14; check <code>value_and_partials</code> against a function’s exact partials; and, in <code>test-implicit-value.R</code>, supply 150 partials through the parallel form, with zeros and a passive input among them, and refuse them all when one past the first batch is not finite.</p>
+<p>A <strong>patch</strong> bump: additions only, and no number moves.</p>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.10.1" id="odelia-0101">odelia 0.10.1<a class="anchor" aria-label="anchor" href="#odelia-0101"></a></h2>
 <p><strong>A System can scale each component’s tolerance.</strong> A System that declares <code>tolerance_scales(time, scales)</code> (<code>ScalesTolerances</code>) fills <code>scales</code> with one positive, finite multiplier per component for an adaptive step starting at <code>time</code>, and the step multiplies each component’s error level by it, so a scale above 1 loosens that component. The scales are read once at the step’s start and held across its retries. <code>OdeControl::error_ratio()</code> and <code>adjust_step_size()</code> take them as an optional span, empty scaling nothing, so they apply under both step-size rules and in the test of whether the stepper’s error on a subsystem set the step: a loosened subsystem is not substepped for an error the step no longer reads. The scales decide which steps are taken and nothing else: a pinned run, a replay and the sweep take the steps as recorded. A scale that is not positive and finite, or a vector that is not one per component, is refused.</p>

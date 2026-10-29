@@ -1,5 +1,46 @@
 # Changelog
 
+## odelia 0.10.2
+
+**A sum of many spline reads can be recorded as one tape statement.** A
+model that integrates a function of a field over quadrature points reads
+the field at every point, and each read at an active scalar records
+statements that every sweep walks again. Three additions let such a
+model compute the sum in double and supply its partials once:
+
+- `hermite_spline<S>::read_linear(u)` returns a cubic read as the knot
+  data it is linear in: the read’s value and slope, the four knot values
+  and slopes it depends on (`input`, pointers into the spline), and the
+  weight on each. The value and slope equal `eval(u)` and `slope(u)` bit
+  for bit, beyond either end too, in a build without floating-point
+  contraction; with it, the end line can differ from an active spline’s
+  `eval` by an ulp.
+- `value_and_partials(f, x...)` evaluates `f` once at a forward-mode
+  scalar carrying one direction per argument, and returns the value and
+  every partial, so a small integrand written once over its scalar needs
+  no hand-written derivative.
+- `supply_derivatives` also takes its partials as two parallel arrays,
+  input pointers and derivatives. A caller that supplies a hundred
+  partials a call can fill storage it reuses, which a span of
+  `input_and_derivative`, holding references, cannot be.
+
+`supply_derivatives` now pushes partials to the tape from a stack buffer
+in batches of 64, rather than one call per partial. The tape receives
+the same operations in the same order; on plant’s FF16 gradient, one
+call per partial cost 4% more instructions.
+
+plant uses these to record each crown integral as one statement
+(traitecoevo/plant#677, traitecoevo/plant#692). New tests in
+`test-spline-ad.R` hold `read_linear`’s value and slope to `eval`’s bit
+for bit inside the knots, on a knot and past each end, built with
+`-ffp-contract=off`, and its weights to the tape’s gradient to 1e-14;
+check `value_and_partials` against a function’s exact partials; and, in
+`test-implicit-value.R`, supply 150 partials through the parallel form,
+with zeros and a passive input among them, and refuse them all when one
+past the first batch is not finite.
+
+A **patch** bump: additions only, and no number moves.
+
 ## odelia 0.10.1
 
 **A System can scale each component’s tolerance.** A System that
