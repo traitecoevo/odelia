@@ -75,10 +75,10 @@ System contract is the concepts in
   `inst/include/odelia/` bar `solver_interface.hpp` and
   `rcpp_interface_helpers.hpp` compiles with no R installed —
   `util::stop` throws, it does not call `Rcpp::stop`. Consumers depend
-  on this (`leaf` runs its C++ tests without R). Keep Rcpp in `src/` and
-  the two interface headers, and remember that these headers no longer
-  get `<cassert>`, `<string>` and friends for free via R — include what
-  you use. See ARCHITECTURE.md.
+  on this (`phylloptim` runs its C++ tests without R). Keep Rcpp in
+  `src/` and the two interface headers. Without R on the include path,
+  these headers don’t get `<cassert>`, `<string>` and friends for free,
+  so include what you use. See ARCHITECTURE.md.
 
 ## Code & comment style
 
@@ -126,6 +126,23 @@ compiler-checked contract drifts. The two members a widening System adds
 way, and state an invariant once, at its owning definition, referring to
 it by name elsewhere. Don’t hand-edit generated files
 (`R/RcppExports.R`, `src/RcppExports.cpp`, `NAMESPACE`, `man/`).
+
+## Writing in this guide
+
+This file is read in full at the start of every agent session, as
+current instructions, by a reader who was not in your session and cannot
+tell which parts are out of date. When you change it:
+
+- Write what is true now, in the present tense. If something here turns
+  out to be wrong, replace it; the story of how you found out belongs in
+  the PR.
+- Give each rule its reason, in plain case. A reason persuades where
+  capitals and warning signs do not.
+- Point to where a value lives (`DESCRIPTION`, a header, a Makefile
+  target) rather than copying the value, and leave out anything a fresh
+  clone cannot resolve, such as local paths or notes from one session.
+- Write in complete sentences that say what happens and what it causes,
+  using names that already exist in the code.
 
 ## Plant family
 

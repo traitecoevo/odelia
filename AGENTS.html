@@ -76,7 +76,7 @@
 <ul><li>It compiles C++ from source — a working toolchain is required, and a header change can break dependents at <strong>compile time</strong>, not just runtime.</li>
 <li>The header core is a cross-boundary artifact: changing a solver signature ripples to anything that <code>LinkingTo</code> it (notably the next-gen <code>plant</code>). Treat such changes as <code>cross-package</code> / <code>breaking</code>.</li>
 <li>
-<strong>The header core must stay free of R.</strong> Everything in <code>inst/include/odelia/</code> bar <code>solver_interface.hpp</code> and <code>rcpp_interface_helpers.hpp</code> compiles with no R installed — <code>util::stop</code> throws, it does not call <code>Rcpp::stop</code>. Consumers depend on this (<code>leaf</code> runs its C++ tests without R). Keep Rcpp in <code>src/</code> and the two interface headers, and remember that these headers no longer get <code>&lt;cassert&gt;</code>, <code>&lt;string&gt;</code> and friends for free via R — include what you use. See ARCHITECTURE.md.</li>
+<strong>The header core must stay free of R.</strong> Everything in <code>inst/include/odelia/</code> bar <code>solver_interface.hpp</code> and <code>rcpp_interface_helpers.hpp</code> compiles with no R installed — <code>util::stop</code> throws, it does not call <code>Rcpp::stop</code>. Consumers depend on this (<code>phylloptim</code> runs its C++ tests without R). Keep Rcpp in <code>src/</code> and the two interface headers. Without R on the include path, these headers don’t get <code>&lt;cassert&gt;</code>, <code>&lt;string&gt;</code> and friends for free, so include what you use. See ARCHITECTURE.md.</li>
 </ul></div>
 <div class="section level2">
 <h2 id="code--comment-style">Code &amp; comment style<a class="anchor" aria-label="anchor" href="#code--comment-style"></a></h2>
@@ -94,6 +94,14 @@
 <strong>Generic machinery is background.</strong> In a concrete System (Lorenz, leaf, canopy) the members required by the AD contract should read as ordinary code, not as the point of the file — the physics is the point. Give an example a real applied domain, not an abstract stand-in.</li>
 </ul><p>The contract a System implements is stated as concepts in <code>inst/include/odelia/ode_interface.hpp</code> – <code>HasOdeTime</code>, <code>Rebindable</code>, <code>SolvesForValues</code>, <code>ChecksState</code> for solving, and <code>Sweepable</code> for a reverse sweep, which <code>Solver::solve_adjoint</code> asserts – so a System that does not satisfy one fails to compile naming the requirement it missed. Read those rather than any prose account: a prose copy of a compiler-checked contract drifts. The two members a widening System adds (<code>apply_insertion</code>) and a System solving inside a stage adds (<code>solved_values</code>) are documented beside the concepts. Every header in <code>inst/include/odelia/</code> meets the comment standard above; keep it that way, and state an invariant once, at its owning definition, referring to it by name elsewhere. Don’t hand-edit generated files (<code>R/RcppExports.R</code>, <code>src/RcppExports.cpp</code>, <code>NAMESPACE</code>, <code>man/</code>).</p>
 </div>
+<div class="section level2">
+<h2 id="writing-in-this-guide">Writing in this guide<a class="anchor" aria-label="anchor" href="#writing-in-this-guide"></a></h2>
+<p>This file is read in full at the start of every agent session, as current instructions, by a reader who was not in your session and cannot tell which parts are out of date. When you change it:</p>
+<ul><li>Write what is true now, in the present tense. If something here turns out to be wrong, replace it; the story of how you found out belongs in the PR.</li>
+<li>Give each rule its reason, in plain case. A reason persuades where capitals and warning signs do not.</li>
+<li>Point to where a value lives (<code>DESCRIPTION</code>, a header, a Makefile target) rather than copying the value, and leave out anything a fresh clone cannot resolve, such as local paths or notes from one session.</li>
+<li>Write in complete sentences that say what happens and what it causes, using names that already exist in the code.</li>
+</ul></div>
 <div class="section level2">
 <h2 id="plant-family">Plant family<a class="anchor" aria-label="anchor" href="#plant-family"></a></h2>
 <p><code>odelia</code> is part of the <strong>plant family</strong> in the <a href="https://github.com/traitecoevo" class="external-link"><code>traitecoevo</code></a> org — a hub-and-spoke set of packages built around the <a href="https://github.com/traitecoevo/plant" class="external-link"><code>plant</code></a> size- and trait-structured forest model.</p>
