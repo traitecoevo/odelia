@@ -414,6 +414,13 @@ typename Tape<T, N>::derivative_type& Tape<T, N>::derivative(slot_type s)
 }
 
 template <class T, std::size_t N>
+typename Tape<T, N>::derivative_type* Tape<T, N>::getDerivativesData()
+{
+    initDerivatives();
+    return derivatives_.data();
+}
+
+template <class T, std::size_t N>
 const typename Tape<T, N>::derivative_type& Tape<T, N>::derivative(slot_type s) const
 {
 #ifndef NDEBUG

@@ -189,6 +189,10 @@ class Tape
     derivative_type getDerivative(slot_type s) const { return derivative(s); }
     void setDerivative(slot_type s, const derivative_type& d) { derivative(s) = d; }
     void setDerivative(slot_type s, derivative_type&& d) { derivative(s) = std::move(d); }
+    // odelia local patch: every slot's adjoint as one array indexed by slot, for a
+    // caller reading or writing many slots at once. Unchecked, and valid only until
+    // the tape is next used: a registration, a sweep or a new recording can move it.
+    derivative_type* getDerivativesData();
 
     // status
     void printStatus() const;

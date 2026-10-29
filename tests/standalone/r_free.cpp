@@ -978,6 +978,85 @@ void test_implicit_value_leaves_the_callers_adjoint_alone() {
         "the rows add the theorem's derivative and nothing of the held adjoint");
 }
 
+// The same, for more inputs than are held on the stack, and at the counts either
+// side of that boundary. The residual is linear with unit slope, so every partial
+// and every held adjoint is exact and the checks are equalities.
+void test_implicit_value_holds_any_count_of_inputs() {
+  using A = odelia::ode::adjoint_scalar<double>;
+  using Tape = odelia::ode::adjoint_tape<double>;
+  bool kept = true, rows = true, one_statement = true;
+  for (std::size_t n : {63u, 64u, 65u, 150u}) {
+    Tape tape;
+    std::vector<A> x(n);
+    std::vector<double> c(n), held(n);
+    double root = 0.0;
+    for (std::size_t k = 0; k < n; ++k) {
+      x[k] = 1.0 + 0.25 * k;
+      c[k] = static_cast<double>(k % 7) - 3.0;
+      held[k] = 0.5 + k;
+      root += c[k] * xad::value(x[k]);
+      tape.registerInput(x[k]);
+    }
+    tape.newRecording();
+    for (std::size_t k = 0; k < n; ++k) {
+      xad::derivative(x[k]) = held[k];
+    }
+    auto residual = [&](const A& p) -> A {
+      A sum = 0.0;
+      for (std::size_t k = 0; k < n; ++k) {
+        sum += c[k] * x[k];
+      }
+      return p - sum;
+    };
+    const std::size_t s0 = tape.getNumStatements();
+    A p_star = odelia::implicit_value<A>(root, 1.0, residual, x);
+    one_statement = one_statement && tape.getNumStatements() - s0 == 1;
+    for (std::size_t k = 0; k < n; ++k) {
+      kept = kept && xad::derivative(x[k]) == held[k];
+    }
+    tape.registerOutput(p_star);
+    xad::derivative(p_star) = 1.0;
+    tape.computeAdjoints();
+    for (std::size_t k = 0; k < n; ++k) {
+      rows = rows && xad::derivative(x[k]) == held[k] + c[k];
+    }
+  }
+  check(kept, "63 to 150 inputs: each input's adjoint is as the caller left it");
+  check(rows, "and each row is the theorem's on top of it");
+  check(one_statement, "in one statement");
+}
+
+// A residual that calls implicit_value itself: the outer call has zeroed the
+// inputs' adjoints when the inner one holds them, and each must put back its
+// own. p solves p^2 = q, and q solves q = x y, so dp/dx = y/(2p), dp/dy = x/(2p).
+void test_implicit_value_nests() {
+  using A = odelia::ode::adjoint_scalar<double>;
+  using Tape = odelia::ode::adjoint_tape<double>;
+  const double x0 = 2.0, y0 = 8.0, held = 9.0;
+  const double root = 4.0, dFdp = 2.0 * root;
+  Tape tape;
+  A x = x0, y = y0;
+  tape.registerInput(x);
+  tape.registerInput(y);
+  tape.newRecording();
+  xad::derivative(x) = held;
+  xad::derivative(y) = held;
+  auto inner = [&](const A& q) -> A { return q - x * y; };
+  auto outer = [&](const A& p) -> A {
+    const A q = odelia::implicit_value<A>(x0 * y0, 1.0, inner, x, y);
+    return p * p - q;
+  };
+  A p_star = odelia::implicit_value<A>(root, dFdp, outer, x, y);
+  check(xad::derivative(x) == held && xad::derivative(y) == held,
+        "nested: the inputs' adjoints are as the caller left them");
+  tape.registerOutput(p_star);
+  xad::derivative(p_star) = 1.0;
+  tape.computeAdjoints();
+  check(xad::derivative(x) == held + y0 / dFdp &&
+            xad::derivative(y) == held + x0 / dFdp,
+        "nested: the rows are the theorem's through both solves");
+}
+
 // --- A run whose state widens -------------------------------------------------
 //
 // Cells of y' = r y (1 - y), one more inserted mid-run with a size set by r, so
@@ -2430,6 +2509,8 @@ int main() {
   for_each_explicit_stepper(test_subdivided_pinned_row_is_refused);
   test_sweep_refuses_one_batch_for_both();
   test_implicit_value_leaves_the_callers_adjoint_alone();
+  test_implicit_value_holds_any_count_of_inputs();
+  test_implicit_value_nests();
   for_each_explicit_stepper(test_sweep_across_an_insertion);
   for_each_explicit_stepper(test_sweep_from_an_empty_start);
   for_each_explicit_stepper(test_sweep_across_empty_steps);
