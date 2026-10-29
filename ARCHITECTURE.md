@@ -28,7 +28,7 @@ those above it.
 | `with_slope.hpp` | `with_slope<T>`, a value paired with its slope; no includes |
 | `spline.hpp` → `interpolator.hpp` → `drivers.hpp` | cubic Hermite backend, `hermite_interpolator`, `Drivers` (time-varying forcing) |
 | `ode_control.hpp` | `OdeControl`: tolerances, step bounds, the `gsl` / `hairer` controller |
-| `ode_interface.hpp` | the System concepts (`HasOdeTime`, `Rebindable`, `SolvesForValues`, `ChecksState`, `Sweepable`), `adjoint_scalar<T>`, `schedule_row`, `step_record`, `visit_active`, `be_at_step`, `apply_insertion` |
+| `ode_interface.hpp` | the System concepts (`HasOdeTime`, `Rebindable`, `SolvesForValues`, `ChecksState`, `Sweepable`, `HasSubsystem`, `ScalesTolerances`), `adjoint_scalar<T>`, `schedule_row`, `step_record`, `visit_active`, `be_at_step`, `apply_insertion` |
 | `adjoint.hpp` | `adjoint_batch`, `adjoint_system`, `vector_jacobian_product`, `state_and_parameter_adjoints`: the transpose of one map |
 | `implicit_node.hpp` | `supply_derivatives`, `implicit_value`: a value on the tape carrying rows obtained elsewhere; independent of the solver |
 | `ode_linalg.hpp`, `ode_jacobian.hpp` | dense LU and eigenvalues; the Jacobian from a System’s hook or by forward AD |
