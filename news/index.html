@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.4</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,12 @@
       <small>Source: <a href="https://github.com/traitecoevo/odelia/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.10.4" id="odelia-0104">odelia 0.10.4<a class="anchor" aria-label="anchor" href="#odelia-0104"></a></h2>
+<p><strong><code>implicit_value</code> holds and restores its inputs’ adjoints without a tape call per slot.</strong> The form that sweeps its residual locally reads each input’s adjoint, zeroes it, and puts it back afterwards. It did that through <code>Tape::derivative(slot)</code>, an out-of-line call with a range check, four times per slot, and kept the slots and held values in two vectors allocated on every call. It now fetches the tape’s adjoint array once on each side of the sweep, keeps up to 64 slots on the stack, and pushes its partials as one run. A residual that calls <code>implicit_value</code> itself gets its own buffers. On plant’s TF24 drought stand, 40 years and 108 introductions at <code>ode_tol</code> 1e-3, the reverse sweep’s CPU fell from 6.25 s to 6.03 s, median of six interleaved runs, with every gradient entry bit-identical (traitecoevo/odelia#81).</p>
+<p>The adjoint array comes from <code>Tape::getDerivativesData()</code>, a local patch to the vendored XAD (<code>tools/patches/0002-xad-derivatives-data.patch</code>), compiled into odelia’s library like the rest of the tape runtime. A consumer built against these headers needs odelia 0.10.4’s library at run time. The three-argument <code>implicit_value</code> also no longer allocates a vector for its one correction. New standalone tests hold any count of inputs, either side of the stack buffer’s size, and a residual nesting a second <code>implicit_value</code>, to exact equality.</p>
+<p>A <strong>patch</strong> bump: the tape receives the same operations in the same order, and no number moves.</p>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.10.3" id="odelia-0103">odelia 0.10.3<a class="anchor" aria-label="anchor" href="#odelia-0103"></a></h2>
 <p><strong>A solver’s parameters can be read and set on the solver.</strong> A <code>Solver</code> steps its own copy of the System it was built from, so <code>System$set_params()</code> after building a solver never reached that solver, and nothing said so. The Lorenz and leaf-thermal solvers gain <code>$pars()</code> and <code>$set_params(params)</code>, through <code>Solver_params_impl</code> and <code>Solver_set_params_impl</code> in <code>solver_interface.hpp</code>, which read and write the copy’s parameters in the order <code>ad_parameters()</code> lists them. <code>set_params</code> re-seeds the solver at its current state and time, as <code>set_state</code> does, so the rates it carries are the new parameters’ and the step size starts afresh; call <code>$reset()</code> as well to start again from the initial state. The copy is now stated at the <code>Solver</code> class, at <code>Solver_new</code>, and in the solver constructors’ R documentation; the fitting vignette integrates at the fitted values on the solver that fitted them instead of building a second one. A test pins both halves: parameters set on the System after the solver is built do not move its trajectory, and parameters set on the solver give the trajectory of a solver built at those values.</p>

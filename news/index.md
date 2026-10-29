@@ -1,5 +1,32 @@
 # Changelog
 
+## odelia 0.10.4
+
+**`implicit_value` holds and restores its inputs’ adjoints without a
+tape call per slot.** The form that sweeps its residual locally reads
+each input’s adjoint, zeroes it, and puts it back afterwards. It did
+that through `Tape::derivative(slot)`, an out-of-line call with a range
+check, four times per slot, and kept the slots and held values in two
+vectors allocated on every call. It now fetches the tape’s adjoint array
+once on each side of the sweep, keeps up to 64 slots on the stack, and
+pushes its partials as one run. A residual that calls `implicit_value`
+itself gets its own buffers. On plant’s TF24 drought stand, 40 years and
+108 introductions at `ode_tol` 1e-3, the reverse sweep’s CPU fell from
+6.25 s to 6.03 s, median of six interleaved runs, with every gradient
+entry bit-identical (traitecoevo/odelia#81).
+
+The adjoint array comes from `Tape::getDerivativesData()`, a local patch
+to the vendored XAD (`tools/patches/0002-xad-derivatives-data.patch`),
+compiled into odelia’s library like the rest of the tape runtime. A
+consumer built against these headers needs odelia 0.10.4’s library at
+run time. The three-argument `implicit_value` also no longer allocates a
+vector for its one correction. New standalone tests hold any count of
+inputs, either side of the stack buffer’s size, and a residual nesting a
+second `implicit_value`, to exact equality.
+
+A **patch** bump: the tape receives the same operations in the same
+order, and no number moves.
+
 ## odelia 0.10.3
 
 **A solver’s parameters can be read and set on the solver.** A `Solver`
