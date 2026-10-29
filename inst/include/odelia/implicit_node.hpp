@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 #include <XAD/XAD.hpp>
-#include <odelia/ode_interface.hpp>
+#include <odelia/adjoint_scalar.hpp>
 #include <odelia/ode_util.hpp>
 
 namespace odelia {
