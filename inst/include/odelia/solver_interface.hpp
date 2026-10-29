@@ -56,6 +56,32 @@ inline void Solver_set_state_impl(SEXP solver_xp, Rcpp::NumericVector y, double 
   get_solver<SystemType>(solver_xp)->set_state(yy, time);
 }
 
+// The parameters of the System this solver steps. A Solver copies the System it
+// is built from and steps the copy, so parameters set on the original afterwards
+// do not reach it; these read and write the copy's, in the order ad_parameters()
+// lists them, which is the order set_params() reads and a gradient comes in.
+template<typename SystemType>
+inline Rcpp::NumericVector Solver_params_impl(SEXP solver_xp) {
+  SystemType& sys = get_solver<SystemType>(solver_xp)->get_system_ref();
+  std::vector<double> out;
+  for (double* p : sys.ad_parameters()) out.push_back(*p);
+  return Rcpp::wrap(out);
+}
+
+// Re-seeds the solver at its current state and time, as set_state does, so the
+// rates it carries are the new parameters' and the step size starts afresh.
+template<typename SystemType>
+inline void Solver_set_params_impl(SEXP solver_xp, Rcpp::NumericVector params) {
+  auto solver = get_solver<SystemType>(solver_xp);
+  SystemType& sys = solver->get_system_ref();
+  if (static_cast<std::size_t>(params.size()) != sys.ad_parameters().size()) {
+    Rcpp::stop("'params' needs one entry per parameter");
+  }
+  std::vector<double> pv(params.begin(), params.end());
+  sys.set_params(pv.begin());
+  solver->set_state(solver->state(), solver->time());
+}
+
 template<typename SystemType>
 inline void Solver_advance_adaptive_impl(SEXP solver_xp, Rcpp::NumericVector times) {
   std::vector<double> ts(times.begin(), times.end());

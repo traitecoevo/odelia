@@ -18,7 +18,9 @@ namespace ode {
 
 // Solver<System> owns a System and a SolverInternal and drives them: forward
 // over a set of times (advance_adaptive, advance_fixed, advance_schedule, replay),
-// and backward over what a forward run recorded (sweep_adjoint).
+// and backward over what a forward run recorded (sweep_adjoint). The System is
+// a copy of the one the Solver was built from, which is left as it was; the
+// copy is the one that steps, and get_system_ref() is how a caller reaches it.
 //
 // A gradient of a run, in full:
 //

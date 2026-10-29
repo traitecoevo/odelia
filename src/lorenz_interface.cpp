@@ -90,10 +90,12 @@ Rcpp::NumericVector System_rates(SEXP system_xp) {
 //-------------------------------------------------------------------------
 // Solver interface (Lorenz-specific creation, generic operations)
 
-// Solver creation - Lorenz-specific (must know LorenzSystem type). R only ever
-// holds the double solver; gradients build the active replay internally. The
-// method chooses how this solver steps, and `$loss_and_gradient()` replays under
-// it (see Solver_loss_and_gradient_impl for rodas).
+// Solver creation - Lorenz-specific (must know LorenzSystem type). The solver
+// steps its own copy of the System, taken here: what is set on the System
+// afterwards does not reach it (Solver_set_params does). R only ever holds the
+// double solver; gradients build the active replay internally. The method
+// chooses how this solver steps, and `$loss_and_gradient()` replays under it
+// (see Solver_loss_and_gradient_impl for rodas).
 // [[Rcpp::export]]
 SEXP Solver_new(SEXP system_xp, SEXP control_xp, std::string method = "rkck") {
   Rcpp::XPtr<SystemType> sys(system_xp);
@@ -128,6 +130,16 @@ Rcpp::NumericVector Solver_times(SEXP solver_xp) {
 // [[Rcpp::export]]
 void Solver_set_state(SEXP solver_xp, Rcpp::NumericVector y, double time) {
   odelia::solver::Solver_set_state_impl<SystemType>(solver_xp, y, time);
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericVector Solver_params(SEXP solver_xp) {
+  return odelia::solver::Solver_params_impl<SystemType>(solver_xp);
+}
+
+// [[Rcpp::export]]
+void Solver_set_params(SEXP solver_xp, Rcpp::NumericVector params) {
+  odelia::solver::Solver_set_params_impl<SystemType>(solver_xp, params);
 }
 
 // [[Rcpp::export]]

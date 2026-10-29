@@ -169,6 +169,28 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
+// Solver_params
+Rcpp::NumericVector Solver_params(SEXP solver_xp);
+RcppExport SEXP _odelia_Solver_params(SEXP solver_xpSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
+    rcpp_result_gen = Rcpp::wrap(Solver_params(solver_xp));
+    return rcpp_result_gen;
+END_RCPP
+}
+// Solver_set_params
+void Solver_set_params(SEXP solver_xp, Rcpp::NumericVector params);
+RcppExport SEXP _odelia_Solver_set_params(SEXP solver_xpSEXP, SEXP paramsSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type params(paramsSEXP);
+    Solver_set_params(solver_xp, params);
+    return R_NilValue;
+END_RCPP
+}
 // Solver_advance_adaptive
 void Solver_advance_adaptive(SEXP solver_xp, Rcpp::NumericVector times);
 RcppExport SEXP _odelia_Solver_advance_adaptive(SEXP solver_xpSEXP, SEXP timesSEXP) {
@@ -769,6 +791,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_odelia_Solver_state", (DL_FUNC) &_odelia_Solver_state, 1},
     {"_odelia_Solver_times", (DL_FUNC) &_odelia_Solver_times, 1},
     {"_odelia_Solver_set_state", (DL_FUNC) &_odelia_Solver_set_state, 3},
+    {"_odelia_Solver_params", (DL_FUNC) &_odelia_Solver_params, 1},
+    {"_odelia_Solver_set_params", (DL_FUNC) &_odelia_Solver_set_params, 2},
     {"_odelia_Solver_advance_adaptive", (DL_FUNC) &_odelia_Solver_advance_adaptive, 2},
     {"_odelia_Solver_advance_fixed", (DL_FUNC) &_odelia_Solver_advance_fixed, 2},
     {"_odelia_Solver_advance_euler", (DL_FUNC) &_odelia_Solver_advance_euler, 2},

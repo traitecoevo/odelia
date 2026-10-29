@@ -186,6 +186,16 @@ void LeafSolver_set_state(SEXP solver_xp, Rcpp::NumericVector y, double time) {
 }
 
 // [[Rcpp::export]]
+Rcpp::NumericVector LeafSolver_params(SEXP solver_xp) {
+  return odelia::solver::Solver_params_impl<SystemType>(solver_xp);
+}
+
+// [[Rcpp::export]]
+void LeafSolver_set_params(SEXP solver_xp, Rcpp::NumericVector params) {
+  odelia::solver::Solver_set_params_impl<SystemType>(solver_xp, params);
+}
+
+// [[Rcpp::export]]
 void LeafSolver_advance_adaptive(SEXP solver_xp, Rcpp::NumericVector times) {
   odelia::solver::Solver_advance_adaptive_impl<SystemType>(solver_xp, times);
 }

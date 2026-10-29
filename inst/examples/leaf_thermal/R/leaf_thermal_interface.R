@@ -38,6 +38,15 @@ LeafThermalSolver <- R6::R6Class(
       LeafSolver_reset(self$ptr)
       invisible(self)
     },
+    # The solver steps its own copy of the system, taken when it was built;
+    # these read and set that copy's parameters.
+    pars = function() {
+      LeafSolver_params(self$ptr)
+    },
+    set_params = function(params) {
+      LeafSolver_set_params(self$ptr, params)
+      invisible(self)
+    },
     collect = function(value) {
     if (missing(value)) {
       LeafSolver_get_collect(self$ptr)
