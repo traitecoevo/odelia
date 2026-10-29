@@ -283,7 +283,7 @@ yields `dy*/dp = -(dF/dp) / (dF/dy)`.
 
 `tangent_scalar<T>` (`tangent.hpp`) carries a directional derivative
 forward and touches no tape. It is what the implicit stepper’s Jacobian
-is taken with. `adjoint_scalar<T>` (`ode_interface.hpp`) is the adjoint
+is taken with. `adjoint_scalar<T>` (`adjoint_scalar.hpp`) is the adjoint
 scalar a sweep rebinds a System to.
 
 Nesting a tangent above an adjoint is a compile error. At an active
@@ -347,10 +347,11 @@ hands the gradient to [`optim()`](https://rdrr.io/r/stats/optim.html).
 
 ## Reading order through the headers
 
-1.  `tangent.hpp` and `with_slope.hpp`: the two scalars and the pair.
-    130 lines, everything uses them.
+1.  `tangent.hpp`, `adjoint_scalar.hpp` and `with_slope.hpp`: the two
+    scalars, the walk over the active values a class holds
+    (`visit_active`), and the pair. Everything uses them.
 2.  `ode_interface.hpp`: the System concepts, `schedule_row` and
-    `step_record`, `Sweepable`, `visit_active`.
+    `step_record`, `Sweepable`.
 3.  `ode_solver_internal.hpp`: `push_step` and `push_insertion`, the two
     places a row is written; `step_to` for the pinned path.
 4.  `adjoint.hpp`: `adjoint_batch`, `adjoint_system`,

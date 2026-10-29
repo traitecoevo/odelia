@@ -1,5 +1,21 @@
 # Changelog
 
+## odelia 0.10.5
+
+**The reverse-mode scalar has a header of its own, and
+`implicit_node.hpp` no longer includes the System contract.**
+`adjoint_scalar<T>`, `adjoint_tape<T>`, `visit_active` and
+`count_active_slots` move from `ode_interface.hpp` to
+`adjoint_scalar.hpp`, beside `tangent.hpp`. `implicit_node.hpp` includes
+that header in place of `ode_interface.hpp`, so a consumer that records
+partials on a tape and takes no solver, as phylloptim does, now includes
+nothing an edit to the solver’s interface touches. `ode_interface.hpp`
+includes `adjoint_scalar.hpp`, so every name is still reached where it
+was. A file that reached `ode_interface.hpp`’s other names through
+`implicit_node.hpp` alone must now include it itself.
+
+A **patch** bump: no name changes, and no number moves.
+
 ## odelia 0.10.4
 
 **`implicit_value` holds and restores its inputs’ adjoints without a

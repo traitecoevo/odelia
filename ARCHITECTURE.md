@@ -25,12 +25,13 @@ those above it.
 |----|----|
 | `ode_util.hpp` | `util::stop` / `util::warning` (R-free), `to_passive`, `DomainError` |
 | `tangent.hpp` | `tangent_scalar<T>`, the forward-mode scalar; refuses a tangent above an adjoint |
+| `adjoint_scalar.hpp` | `adjoint_scalar<T>` and `adjoint_tape<T>`, the reverse-mode scalar and its tape; `visit_active` and `count_active_slots`, the walk over the active values a class holds |
 | `with_slope.hpp` | `with_slope<T>`, a value paired with its slope; no includes |
 | `spline.hpp` → `interpolator.hpp` → `drivers.hpp` | cubic Hermite backend, `hermite_interpolator`, `Drivers` (time-varying forcing) |
 | `ode_control.hpp` | `OdeControl`: tolerances, step bounds, the `gsl` / `hairer` controller |
-| `ode_interface.hpp` | the System concepts (`HasOdeTime`, `Rebindable`, `SolvesForValues`, `ChecksState`, `Sweepable`, `HasSubsystem`, `ScalesTolerances`), `adjoint_scalar<T>`, `schedule_row`, `step_record`, `visit_active`, `be_at_step`, `apply_insertion` |
+| `ode_interface.hpp` | the System concepts (`HasOdeTime`, `Rebindable`, `SolvesForValues`, `ChecksState`, `Sweepable`, `HasSubsystem`, `ScalesTolerances`), `schedule_row`, `step_record`, `be_at_step`, `apply_insertion` |
 | `adjoint.hpp` | `adjoint_batch`, `adjoint_system`, `vector_jacobian_product`, `state_and_parameter_adjoints`: the transpose of one map |
-| `implicit_node.hpp` | `supply_derivatives`, `implicit_value`: a value on the tape carrying rows obtained elsewhere; independent of the solver |
+| `implicit_node.hpp` | `supply_derivatives`, `implicit_value`: a value on the tape carrying rows obtained elsewhere; includes no solver header |
 | `ode_linalg.hpp`, `ode_jacobian.hpp` | dense LU and eigenvalues; the Jacobian from a System’s hook or by forward AD |
 | `ode_substeps.hpp` | `SubsystemSubsteps`: a step that integrates a System’s subsystem (`HasSubsystem`) in substeps of its own, on whichever explicit tableau derives from it |
 | `ode_step_rkck.hpp`, `ode_step_dopri.hpp`, `ode_step_rodas.hpp` | the three steppers; the two explicit ones, `rkck` and `dopri`, record a run, carry `step_adjoint` and substep a subsystem |

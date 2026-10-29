@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.4</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.5</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -59,6 +59,9 @@
 </tr><tr><td><code>tangent.hpp</code></td>
 <td>
 <code>tangent_scalar&lt;T&gt;</code>, the forward-mode scalar; refuses a tangent above an adjoint</td>
+</tr><tr><td><code>adjoint_scalar.hpp</code></td>
+<td>
+<code>adjoint_scalar&lt;T&gt;</code> and <code>adjoint_tape&lt;T&gt;</code>, the reverse-mode scalar and its tape; <code>visit_active</code> and <code>count_active_slots</code>, the walk over the active values a class holds</td>
 </tr><tr><td><code>with_slope.hpp</code></td>
 <td>
 <code>with_slope&lt;T&gt;</code>, a value paired with its slope; no includes</td>
@@ -70,14 +73,14 @@
 <td>
 <code>OdeControl</code>: tolerances, step bounds, the <code>gsl</code> / <code>hairer</code> controller</td>
 </tr><tr><td><code>ode_interface.hpp</code></td>
-<td>the System concepts (<code>HasOdeTime</code>, <code>Rebindable</code>, <code>SolvesForValues</code>, <code>ChecksState</code>, <code>Sweepable</code>, <code>HasSubsystem</code>, <code>ScalesTolerances</code>), <code>adjoint_scalar&lt;T&gt;</code>, <code>schedule_row</code>, <code>step_record</code>, <code>visit_active</code>, <code>be_at_step</code>, <code>apply_insertion</code>
+<td>the System concepts (<code>HasOdeTime</code>, <code>Rebindable</code>, <code>SolvesForValues</code>, <code>ChecksState</code>, <code>Sweepable</code>, <code>HasSubsystem</code>, <code>ScalesTolerances</code>), <code>schedule_row</code>, <code>step_record</code>, <code>be_at_step</code>, <code>apply_insertion</code>
 </td>
 </tr><tr><td><code>adjoint.hpp</code></td>
 <td>
 <code>adjoint_batch</code>, <code>adjoint_system</code>, <code>vector_jacobian_product</code>, <code>state_and_parameter_adjoints</code>: the transpose of one map</td>
 </tr><tr><td><code>implicit_node.hpp</code></td>
 <td>
-<code>supply_derivatives</code>, <code>implicit_value</code>: a value on the tape carrying rows obtained elsewhere; independent of the solver</td>
+<code>supply_derivatives</code>, <code>implicit_value</code>: a value on the tape carrying rows obtained elsewhere; includes no solver header</td>
 </tr><tr><td>
 <code>ode_linalg.hpp</code>, <code>ode_jacobian.hpp</code>
 </td>

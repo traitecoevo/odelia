@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.4</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.5</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -68,7 +68,7 @@
 <li>
 <code>make test</code> — install with tests and run the full suite against the installed package (the AD and DLL-lifecycle tests need that). <code>make test-local</code> — the fast <code>load_all</code> loop, which skips those. <code>make check</code> — <code>R CMD check</code>.</li>
 <li>
-<code>make test-cpp</code> — build and run the core as plain C++ with no R on the include path (<code>tests/standalone/</code>), and compile every core header on its own; fast, and the guard that keeps the headers R-free.</li>
+<code>make test-cpp</code> — build and run the core as plain C++ with no R on the include path (<code>tests/standalone/</code>), and compile every core header on its own; fast, and the guard that keeps the headers R-free. Its <code>layering</code> target also fails if <code>implicit_node.hpp</code> reaches <code>ode_interface.hpp</code>, which a consumer with no solver must not be handed.</li>
 <li>Everything is C++20. Anything compiled against the headers outside <code>src/</code> (a <code>sourceCpp</code> snippet, a consumer) needs <code>-DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE</code> to match <code>src/Makevars</code>; the tests take them from <code>odelia_cppflags()</code> in <code>tests/testthat/helper-load-odelia.R</code>.</li>
 </ul></div>
 <div class="section level2">

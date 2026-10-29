@@ -56,7 +56,10 @@ System contract is the concepts in
   `make check` — `R CMD check`.
 - `make test-cpp` — build and run the core as plain C++ with no R on the
   include path (`tests/standalone/`), and compile every core header on
-  its own; fast, and the guard that keeps the headers R-free.
+  its own; fast, and the guard that keeps the headers R-free. Its
+  `layering` target also fails if `implicit_node.hpp` reaches
+  `ode_interface.hpp`, which a consumer with no solver must not be
+  handed.
 - Everything is C++20. Anything compiled against the headers outside
   `src/` (a `sourceCpp` snippet, a consumer) needs
   `-DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE` to match

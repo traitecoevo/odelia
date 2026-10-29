@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.4</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.5</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -341,8 +341,8 @@ slopes in the parameters and yields
 <p><code>tangent_scalar&lt;T&gt;</code> (<code>tangent.hpp</code>)
 carries a directional derivative forward and touches no tape. It is what
 the implicit stepper’s Jacobian is taken with.
-<code>adjoint_scalar&lt;T&gt;</code> (<code>ode_interface.hpp</code>) is
-the adjoint scalar a sweep rebinds a System to.</p>
+<code>adjoint_scalar&lt;T&gt;</code> (<code>adjoint_scalar.hpp</code>)
+is the adjoint scalar a sweep rebinds a System to.</p>
 <p>Nesting a tangent above an adjoint is a compile error. At an active
 inner scalar every operand copy inside an expression template becomes a
 recorded statement, and because expression templates nest, the growth is
@@ -422,12 +422,14 @@ row each is refused. The optimiser is the caller’s;
 </h2>
 <ol style="list-style-type: decimal">
 <li>
-<code>tangent.hpp</code> and <code>with_slope.hpp</code>: the two
-scalars and the pair. 130 lines, everything uses them.</li>
+<code>tangent.hpp</code>, <code>adjoint_scalar.hpp</code> and
+<code>with_slope.hpp</code>: the two scalars, the walk over the active
+values a class holds (<code>visit_active</code>), and the pair.
+Everything uses them.</li>
 <li>
 <code>ode_interface.hpp</code>: the System concepts,
 <code>schedule_row</code> and <code>step_record</code>,
-<code>Sweepable</code>, <code>visit_active</code>.</li>
+<code>Sweepable</code>.</li>
 <li>
 <code>ode_solver_internal.hpp</code>: <code>push_step</code> and
 <code>push_insertion</code>, the two places a row is written;

@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.4</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.5</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,11 @@
       <small>Source: <a href="https://github.com/traitecoevo/odelia/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.10.5" id="odelia-0105">odelia 0.10.5<a class="anchor" aria-label="anchor" href="#odelia-0105"></a></h2>
+<p><strong>The reverse-mode scalar has a header of its own, and <code>implicit_node.hpp</code> no longer includes the System contract.</strong> <code>adjoint_scalar&lt;T&gt;</code>, <code>adjoint_tape&lt;T&gt;</code>, <code>visit_active</code> and <code>count_active_slots</code> move from <code>ode_interface.hpp</code> to <code>adjoint_scalar.hpp</code>, beside <code>tangent.hpp</code>. <code>implicit_node.hpp</code> includes that header in place of <code>ode_interface.hpp</code>, so a consumer that records partials on a tape and takes no solver, as phylloptim does, now includes nothing an edit to the solver’s interface touches. <code>ode_interface.hpp</code> includes <code>adjoint_scalar.hpp</code>, so every name is still reached where it was. A file that reached <code>ode_interface.hpp</code>’s other names through <code>implicit_node.hpp</code> alone must now include it itself.</p>
+<p>A <strong>patch</strong> bump: no name changes, and no number moves.</p>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.10.4" id="odelia-0104">odelia 0.10.4<a class="anchor" aria-label="anchor" href="#odelia-0104"></a></h2>
 <p><strong><code>implicit_value</code> holds and restores its inputs’ adjoints without a tape call per slot.</strong> The form that sweeps its residual locally reads each input’s adjoint, zeroes it, and puts it back afterwards. It did that through <code>Tape::derivative(slot)</code>, an out-of-line call with a range check, four times per slot, and kept the slots and held values in two vectors allocated on every call. It now fetches the tape’s adjoint array once on each side of the sweep, keeps up to 64 slots on the stack, and pushes its partials as one run. A residual that calls <code>implicit_value</code> itself gets its own buffers. On plant’s TF24 drought stand, 40 years and 108 introductions at <code>ode_tol</code> 1e-3, the reverse sweep’s CPU fell from 6.25 s to 6.03 s, median of six interleaved runs, with every gradient entry bit-identical (traitecoevo/odelia#81).</p>
