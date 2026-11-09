@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -450,9 +451,15 @@ public:
   //
   // Wherever the state changed width inside those rows the sweep stops, narrows
   // the System across it and transposes the map that widened it, so the rows it
-  // carries arrive by the same route a step's do. Where nothing widened this is one
-  // rebind and one sweep -- which is what a System of fixed width gets, and what
-  // every segment this splits into gets.
+  // carries arrive by the same route a step's do. A System that declares
+  // assign_from serves the whole sweep as one active System: rebound once, and
+  // re-seated at each width after that (adjoint_system::reseat). Any other is
+  // rebound at each width, as a fresh active System.
+  //
+  // An output adjoint that is a multiple of an earlier one is carried down as
+  // that one and rebuilt at the end (adjoint_multiples), so it costs no sweep of
+  // its own. Its state and parameter adjoints then agree with a sweep of its own
+  // to rounding; every other output's are what they would be swept alone.
   //
   // `extra_stops` names further rows to stop at. The adjoint carried across such a
   // stop is the same one either way, so a caller can ask for a split and compare: a
@@ -468,17 +475,81 @@ public:
                             size_t k_first, size_t k_last,
                             const std::vector<size_t>& extra_stops = {})
   {
+    if (&lambda == &parameter_adjoint) {
+      util::stop("sweep_adjoint: the state adjoints are replaced and the "
+                 "parameter adjoints accumulated, so they cannot be the same "
+                 "batch");
+    }
+    const ode::adjoint_multiples multiples = ode::adjoint_multiples::of(lambda);
+    if (!multiples.any()) {
+      return sweep_rows(lambda, parameter_adjoint, k_first, k_last, extra_stops);
+    }
+    // Asked here, before the batch is narrowed: the recordings below see only
+    // the kept rows, and the rebuild writes every row.
+    if (parameter_adjoint.size() < lambda.size()) {
+      util::stop("sweep_adjoint: one row of parameter adjoints per output, to "
+                 "accumulate into");
+    }
+    // The kept rows' parameter adjoints start where the caller's do and are
+    // written back whole, so they accumulate in the order a sweep of the whole
+    // batch would; a multiple takes c times what its row added.
+    ode::adjoint_batch carried = lambda.select(multiples.kept);
+    const ode::adjoint_batch before = parameter_adjoint.select(multiples.kept);
+    ode::adjoint_batch carried_parameters = before;
+    const std::size_t swept = sweep_rows(carried, carried_parameters, k_first,
+                                         k_last, extra_stops);
+    lambda.assign(lambda.size(), carried.width());
+    for (std::size_t m = 0; m < lambda.size(); ++m) {
+      const std::size_t b = multiples.from[m];
+      const double c = multiples.factor[m];
+      const std::span<double> state = lambda[m], parameters = parameter_adjoint[m];
+      if (multiples.kept[b] == m) {
+        std::copy(carried[b].begin(), carried[b].end(), state.begin());
+        std::copy(carried_parameters[b].begin(), carried_parameters[b].end(),
+                  parameters.begin());
+        continue;
+      }
+      for (std::size_t i = 0; i < state.size(); ++i) {
+        state[i] = c * carried[b][i];
+      }
+      for (std::size_t p = 0; p < parameters.size(); ++p) {
+        parameters[p] += c * (carried_parameters[b][p] - before[b][p]);
+      }
+    }
+    return swept;
+  }
+
+  // The whole recording.
+  std::size_t sweep_adjoint(ode::adjoint_batch& lambda,
+                            ode::adjoint_batch& parameter_adjoint,
+                            const std::vector<size_t>& extra_stops = {})
+  {
+    return sweep_adjoint(lambda, parameter_adjoint, 0, recording().size() - 1,
+                         extra_stops);
+  }
+
+  // Rate evaluations the sweeps since the last clear have recorded;
+  // Step::recorded_rates says what the number means and what it catches.
+  std::size_t recorded_rates() const { return solver.recorded_rates(); }
+  void clear_recorded_rates() { solver.clear_recorded_rates(); }
+
+  // Should we record history at every step?
+  // TODO: should this be part of ode_solver?
+std::vector<System> history;
+
+private:
+  // sweep_adjoint, every output adjoint carried down.
+  std::size_t sweep_rows(ode::adjoint_batch& lambda,
+                         ode::adjoint_batch& parameter_adjoint,
+                         size_t k_first, size_t k_last,
+                         const std::vector<size_t>& extra_stops)
+  {
     using scalar = ode::adjoint_scalar<double>;
     static_assert(ode::Sweepable<System>,
                   "this System cannot be swept: it needs rebind<U>(), "
                   "ad_parameters(), for_each_active(f) and "
                   "set_recorded_state(y, time); see Sweepable in "
                   "ode_interface.hpp");
-    if (&lambda == &parameter_adjoint) {
-      util::stop("sweep_adjoint: the state adjoints are replaced and the "
-                 "parameter adjoints accumulated, so they cannot be the same "
-                 "batch");
-    }
     const std::span<const ode::step_record<System>> rec = recording();
     if (rec.size() < 2) {
       util::stop("sweep_adjoint: no recorded steps to sweep; run the adaptive "
@@ -531,8 +602,29 @@ public:
     ode::adjoint_tape<double> tape(false);
     ode::tape_scope<ode::adjoint_tape<double>> running{tape};
 
+    // The active System every recording below is taken on. A System that
+    // declares assign_from is built at the first and re-seated at each after
+    // it, so a sweep pays one System construction however many widths it
+    // passes through; any other is built afresh at each. Declared after the
+    // tape's scope, so it releases its slots with the tape still active.
+    std::optional<ode::adjoint_system<System>> active;
+    const auto seat = [&]() -> ode::adjoint_system<System>& {
+      if (active) {
+        if constexpr (ode::AssignsFrom<
+                          typename ode::adjoint_system<System>::system_type,
+                          System>) {
+          active->reseat(system);
+          return *active;
+        } else {
+          active.reset();
+        }
+      }
+      active.emplace(system, tape);
+      return *active;
+    };
+
     // One segment per width, highest first: the System is put at the segment's
-    // top, so whoever narrows it is whoever rebinds on it and no sweep inherits a
+    // top and the active System seated on it there, so no sweep inherits a
     // width another call left behind.
     //
     // A stop is either an insertion the run recorded or a cut a caller asked for, and
@@ -549,7 +641,7 @@ public:
       // cohort: a step with no state has no output, so it carries no adjoint and
       // adds nothing to any parameter's.
       if (lo < hi && lambda.width() > 0) {
-        sweep_segment(tape, rec, lambda, parameter_adjoint, lo, hi);
+        sweep_segment(seat(), rec, lambda, parameter_adjoint, lo, hi);
         ++swept;
       }
     };
@@ -579,9 +671,8 @@ public:
       // The map that widened `at`, transposed at the width below it -- which is
       // the width the segment below runs at, and the width the row below holds.
       //
-      // Its active System is its own and dies with it, because applying the map is
-      // what widens the System: what this records on cannot be swept at the width
-      // it started from.
+      // Applying the map widens the active System it is recorded on, so the
+      // segment below re-seats it at its own width before recording anything.
       ode::be_at_step(system, rec, at - 1);
       const double when = rec[at].time;
       // A System that declares no map passes its state through, which is only a
@@ -608,7 +699,7 @@ public:
                         std::vector<scalar>& y) -> void {
         ode::apply_insertion(sys, when, x, y);
       };
-      ode::adjoint_system<System> widened{system, tape};
+      ode::adjoint_system<System>& widened = seat();
       ode::adjoint_batch narrowed;
       ode::state_and_parameter_adjoints(widened, rec[at - 1].state, lambda, insert,
                                        narrowed, parameter_adjoint);
@@ -619,33 +710,13 @@ public:
     return swept;
   }
 
-  // The whole recording.
-  std::size_t sweep_adjoint(ode::adjoint_batch& lambda,
-                            ode::adjoint_batch& parameter_adjoint,
-                            const std::vector<size_t>& extra_stops = {})
-  {
-    return sweep_adjoint(lambda, parameter_adjoint, 0, recording().size() - 1,
-                         extra_stops);
-  }
-
-  // Rate evaluations the sweeps since the last clear have recorded;
-  // Step::recorded_rates says what the number means and what it catches.
-  std::size_t recorded_rates() const { return solver.recorded_rates(); }
-  void clear_recorded_rates() { solver.clear_recorded_rates(); }
-
-  // Should we record history at every step?
-  // TODO: should this be part of ode_solver?
-std::vector<System> history;
-
-private:
-  // One segment, at the width the caller left the System on: it is rebound here, so
-  // one copy serves every step in this segment, each recording releases its slots
-  // before taking the next, and no active System arrives from a call that widened
-  // it.
+  // One segment, on the active System the caller seated at this segment's width:
+  // every step in it is recorded on that one System, each recording releasing its
+  // slots before taking the next.
   //
   // Every state visited has to be that width, so a segment an insertion crossed is
   // refused by the length check inside the loop rather than swept at one width.
-  void sweep_segment(ode::adjoint_tape<double>& tape,
+  void sweep_segment(ode::adjoint_system<System>& active,
                      std::span<const ode::step_record<System>> rec,
                      ode::adjoint_batch& lambda,
                      ode::adjoint_batch& parameter_adjoint,
@@ -654,7 +725,6 @@ private:
     if (lambda.empty()) {
       util::stop("sweep_adjoint: needs at least one output adjoint");
     }
-    ode::adjoint_system<System> active{system, tape};
     // Asked of the System the recordings are taken on, which is the width every
     // state below has to be loaded at. Named, because a bare length mismatch
     // here is read as the caller's and says nothing about the seam it is really

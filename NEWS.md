@@ -1,3 +1,19 @@
+## odelia 0.11.0
+
+**A sweep holds one active System across every width it passes through.** `Solver::sweep_adjoint` rebound the System afresh for each segment and again for each insertion, so a System that widens at most steps paid its own construction twice a step. It now rebinds once and re-seats the same active System at each width (`adjoint_system::reseat`), where the System lets it. A System that declares `assign_from(passive)` (`AssignsFrom`) is written in place; one that does not gets a fresh active System at each width, as before. `assign_from` must leave the System equal to a rebind in every member a recording reads. A new standalone test sweeps a widening System across two insertions with and without the hook and finds every adjoint bit-identical.
+
+**An output adjoint that is a multiple of an earlier one costs no sweep.** A sweep is linear in the adjoints it starts from, so `sweep_adjoint` now carries such a row down as the earlier one and rebuilds it at the end (`adjoint_multiples`, at 1e-14 of the row's largest entry). Every other row is what it would be swept alone, bit for bit; a rebuilt row agrees with its own sweep to rounding. All-zero rows are swept as given.
+
+**A spline's span coefficients are double whatever the knot data's scalar is.** A read is linear in the four knot values and slopes around it, so at an active scalar it is now taken in double and the knot data's partials attached in one expression: one statement a read, inside the knots or past either end, and none a build. The value is the passive spline's bit for bit. `set_data` takes its vectors by value, so a caller done with them moves them in rather than recording a copy of each. `for_each_active` walks only the knot data. A quintic spline at an active scalar is refused at compile time, since its curvatures are not kept.
+
+**The tape stores an operation in 12 bytes.** `XAD_REDUCED_MEMORY` is set in the vendored `Config.hpp`, and `OperationsContainer` writes a statement's usual one to four operations without a `memmove` call (`tools/patches/0003-xad-reduced-memory-copy-into.patch`). The setting fixes the tape's layout, so a consumer must be built against these headers and linked against this release's library.
+
+Together, with plant's own changes to use them, these take a gradient of plant's FF16 stand over every trait column (lifetime 60, birth-date coordinate) from 0.211 to 0.142 s for one metric and from 0.374 to 0.233 s for five, and of its TF24 stand at lifetime 6 from 1.65 to 1.54 s and 2.31 to 2.01 s. The runs are bit-identical, and the gradients agree with 0.10.5's to 1e-13 relative (traitecoevo/plant#677).
+
+New tests: the two standalone sweeps above, and in `test-spline-ad.R` a build that records nothing, a slope read differentiated against central differences, and `read_linear`'s weights equal to an active read's partials exactly.
+
+A **minor** bump: consumers re-pin, and gradients taken through a spline at an active scalar, or as a multiple of another output, move at rounding. No value moves.
+
 ## odelia 0.10.5
 
 **The reverse-mode scalar has a header of its own, and `implicit_node.hpp` no longer includes the System contract.** `adjoint_scalar<T>`, `adjoint_tape<T>`, `visit_active` and `count_active_slots` move from `ode_interface.hpp` to `adjoint_scalar.hpp`, beside `tangent.hpp`. `implicit_node.hpp` includes that header in place of `ode_interface.hpp`, so a consumer that records partials on a tape and takes no solver, as phylloptim does, now includes nothing an edit to the solver's interface touches. `ode_interface.hpp` includes `adjoint_scalar.hpp`, so every name is still reached where it was. A file that reached `ode_interface.hpp`'s other names through `implicit_node.hpp` alone must now include it itself.

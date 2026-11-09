@@ -3,9 +3,11 @@
 #define ODELIA_ADJOINT_HPP_
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <memory>
 #include <span>
+#include <type_traits>
 #include <utility>
 #include <vector>
 #include <XAD/XAD.hpp>
@@ -131,6 +133,77 @@ private:
   std::vector<double> store_;
 };
 
+// Which adjoints of a batch are multiples of an earlier one. A sweep is linear
+// in the adjoints it starts from, so an adjoint that is c times an earlier one
+// has c times that one's adjoints at every row, for the state and the parameters
+// alike: it can be carried down as the earlier one and rebuilt where the sweep
+// ends, for a sweep fewer.
+//
+// A row is taken as a multiple where it differs from c times the earlier row by
+// no more than `tolerance` of its own largest entry, c read off the earlier row's
+// largest entry. An all-zero row is never a multiple and is never what another
+// is a multiple of: it is swept as given, as every other zero row is.
+struct adjoint_multiples {
+  static constexpr double tolerance = 1e-14;
+
+  // The rows to sweep, in batch order.
+  std::vector<std::size_t> kept;
+  // For every row of the batch, the position in `kept` of the row it is a
+  // multiple of, and the multiple: itself and 1 for a kept row.
+  std::vector<std::size_t> from;
+  std::vector<double> factor;
+
+  bool any() const { return kept.size() < from.size(); }
+
+  static adjoint_multiples of(const adjoint_batch& rows) {
+    adjoint_multiples ret;
+    ret.from.resize(rows.size());
+    ret.factor.resize(rows.size(), 1.0);
+    for (std::size_t m = 0; m < rows.size(); ++m) {
+      const std::span<const double> row = rows[m];
+      const double row_size = largest(row).second;
+      bool found = false;
+      for (std::size_t b = 0; b < ret.kept.size() && row_size > 0.0; ++b) {
+        const std::span<const double> base = rows[ret.kept[b]];
+        const std::size_t j = largest(base).first;
+        if (base[j] == 0.0) {
+          continue;
+        }
+        const double c = row[j] / base[j];
+        double worst = 0.0;
+        for (std::size_t i = 0; i < row.size(); ++i) {
+          worst = std::max(worst, std::fabs(row[i] - c * base[i]));
+        }
+        if (worst <= tolerance * row_size) {
+          ret.from[m] = b;
+          ret.factor[m] = c;
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        ret.from[m] = ret.kept.size();
+        ret.kept.push_back(m);
+      }
+    }
+    return ret;
+  }
+
+private:
+  // The position and size of a row's largest entry.
+  static std::pair<std::size_t, double> largest(std::span<const double> row) {
+    std::size_t at = 0;
+    double size = 0.0;
+    for (std::size_t i = 0; i < row.size(); ++i) {
+      if (std::fabs(row[i]) > size) {
+        size = std::fabs(row[i]);
+        at = i;
+      }
+    }
+    return {at, size};
+  }
+};
+
 // The tape running for the duration, on every exit and exceptions included.
 //
 // Activated here only if nothing else holds it, and deactivated only where
@@ -180,7 +253,9 @@ void release_slot(S& x) {
 // System with another System's parameter addresses.
 //
 // Held across the recordings a walk takes on it, where a copy per recording costs
-// every allocation the System owns.
+// every allocation the System owns -- and across the widths a walk passes
+// through, by `reseat`, where a copy per width costs that and the System's own
+// construction at every insertion.
 //
 // ⚠️ WHAT MAKES THAT LEGAL IS `release`, AND NOTHING ELSE. Writing a member does
 // not refresh the slot it carries: assignment keeps the slot the target already
@@ -259,6 +334,19 @@ struct adjoint_system {
           "not. A recording that reads one of those reads a slot the next clear "
           "issues to something else.");
     }
+  }
+
+  // Brought to where `passive` stands, at whatever width it has, by the
+  // System's own assign_from (see AssignsFrom). Every slot is released first,
+  // as before a recording, and the parameter addresses are read again after,
+  // since a write that adds or removes members can move them. A System with no
+  // assign_from is not re-seated: its holder builds a fresh one.
+  void reseat(const System& passive)
+    requires AssignsFrom<system_type, System>
+  {
+    release();
+    system.assign_from(passive);
+    parameters = system.ad_parameters();
   }
 
   system_type system;

@@ -35,6 +35,7 @@ compile_spline_ad_interface <- function() {
       #include <odelia/spline.hpp>
       #include <odelia/interpolator.hpp>
       #include <odelia/tangent.hpp>
+      #include <odelia/adjoint_scalar.hpp>
 
       // Reverse-mode gradient of the spline value at q w.r.t. each knot value.
       // [[Rcpp::export]]
@@ -180,6 +181,75 @@ compile_spline_ad_interface <- function() {
             Rcpp::_["grad_y"] = gy, Rcpp::_["grad_m"] = gm);
       }
 
+      // A build with active knot data: the statements set_data records, with the
+      // knot vectors moved in or copied, and the values the walk reaches.
+      // [[Rcpp::export]]
+      Rcpp::List spline_build_cost(std::vector<double> x, std::vector<double> y,
+                                   std::vector<double> m, bool moved) {
+        using ad = xad::adj<double>;
+        using ad_t = ad::active_type;
+        ad::tape_type tape;
+        std::vector<ad_t> ya(y.begin(), y.end()), ma(m.begin(), m.end());
+        for (auto& v : ya) tape.registerInput(v);
+        for (auto& v : ma) tape.registerInput(v);
+        tape.newRecording();
+        odelia::interpolator::hermite_spline<ad_t> s;
+        s.set_nodes(x);
+        const double before = tape.getNumStatements();
+        if (moved) {
+          s.set_data(std::move(ya), std::move(ma));
+        } else {
+          s.set_data(ya, ma);
+        }
+        const double statements = tape.getNumStatements() - before;
+        return Rcpp::List::create(
+            Rcpp::_["statements"] = statements,
+            Rcpp::_["active"] = static_cast<double>(
+                odelia::ode::count_active_slots<ad_t>(s)));
+      }
+
+      // The slope at q, read at an active scalar: its value beside the slope of
+      // the passive spline, its gradient in each knot value and slope, and the statements
+      // the read put on the tape.
+      // [[Rcpp::export]]
+      Rcpp::List spline_slope_grad(std::vector<double> x, std::vector<double> y,
+                                   std::vector<double> m, double q) {
+        using ad = xad::adj<double>;
+        using ad_t = ad::active_type;
+        ad::tape_type tape;
+        std::vector<ad_t> ya(y.begin(), y.end()), ma(m.begin(), m.end());
+        for (auto& v : ya) tape.registerInput(v);
+        for (auto& v : ma) tape.registerInput(v);
+        tape.newRecording();
+        odelia::interpolator::hermite_spline<ad_t> s;
+        s.init(x, ya, ma);
+        odelia::interpolator::hermite_spline<double> p;
+        p.init(x, y, m);
+        const double before = tape.getNumStatements();
+        ad_t val = s.slope(q);
+        const double statements = tape.getNumStatements() - before;
+        tape.registerOutput(val);
+        xad::derivative(val) = 1.0;
+        tape.computeAdjoints();
+        Rcpp::NumericVector gy(y.size()), gm(m.size());
+        for (std::size_t i = 0; i < y.size(); ++i) {
+          gy[i] = xad::derivative(ya[i]);
+          gm[i] = xad::derivative(ma[i]);
+        }
+        return Rcpp::List::create(
+            Rcpp::_["slope"] = xad::value(val), Rcpp::_["passive"] = p.slope(q),
+            Rcpp::_["grad_y"] = gy, Rcpp::_["grad_m"] = gm,
+            Rcpp::_["statements"] = statements);
+      }
+
+      // [[Rcpp::export]]
+      double spline_slope_double(std::vector<double> x, std::vector<double> y,
+                                 std::vector<double> m, double q) {
+        odelia::interpolator::hermite_spline<double> s;
+        s.init(x, y, m);
+        return s.slope(q);
+      }
+
       // a b / (a + b) and its two partials, from value_and_partials.
       // [[Rcpp::export]]
       Rcpp::NumericVector tangent_value_and_partials(double a, double b) {
@@ -271,12 +341,13 @@ testthat::test_that("hermite_spline<ad> read at an active position", {
   for (q in c(3.3, 0.37, 2.5, 0, 9, -0.5, 9.75)) {
     r <- spline_active_query(x, y, q, w, composed = FALSE)
     r0 <- spline_active_query(x, y, q, w, composed = TRUE)
-    # The value and the position derivative are the composed read's bit for bit;
-    # the knot adjoints agree to rounding.
+    # The value and the position derivative are the composed read's bit for bit,
+    # and the value is the passive spline's; the knot adjoints agree to rounding,
+    # since the composed read reaches them through its value and its slope.
     expect_identical(r$value, r0$value)
     expect_identical(r$d_query, r0$d_query)
     expect_equal(r$d_knots, r0$d_knots, tolerance = 1e-10)
-    expect_equal(r$value, spline_value_double(x, y, q), tolerance = 1e-14)
+    expect_identical(r$value, spline_value_double(x, y, q))
 
     h <- 1e-6
     g_fd <- vapply(seq_along(y), function(i) {
@@ -286,10 +357,52 @@ testthat::test_that("hermite_spline<ad> read at an active position", {
     expect_equal(r$d_knots, w * g_fd, tolerance = 1e-6)
   }
 
-  # Inside the knots the read is one expression, so one statement, where the
-  # composed read takes several.
-  expect_equal(spline_active_query(x, y, 3.3, w, composed = FALSE)$statements, 1)
+  # The read is one expression, so one statement, inside the knots and past
+  # either end, where the composed read takes several.
+  for (q in c(3.3, -0.5, 9.75)) {
+    expect_equal(spline_active_query(x, y, q, w, composed = FALSE)$statements, 1)
+  }
   expect_gt(spline_active_query(x, y, 3.3, w, composed = TRUE)$statements, 1)
+})
+
+testthat::test_that("a build records nothing but the knot data it is handed", {
+  testthat::skip_if(is_pkgload_dll(), "Skipping sourceCpp build in load_all session.")
+  compile_spline_ad_interface()
+
+  x <- c(0.0, 1.0, 2.5, 4.0, 6.0, 9.0)
+  y <- sin(0.4 * x) + 0.1 * x
+  m <- 0.4 * cos(0.4 * x) + 0.1
+  # The span coefficients are double, so a build moved into place records
+  # nothing, and one copied in records one statement per value and slope.
+  moved <- spline_build_cost(x, y, m, moved = TRUE)
+  copied <- spline_build_cost(x, y, m, moved = FALSE)
+  expect_equal(moved$statements, 0)
+  expect_equal(copied$statements, 2 * length(x))
+  # The walk reaches the knot data and nothing else.
+  expect_equal(moved$active, 2 * length(x))
+})
+
+testthat::test_that("an active slope read is the passive slope, differentiated", {
+  testthat::skip_if(is_pkgload_dll(), "Skipping sourceCpp build in load_all session.")
+  compile_spline_ad_interface()
+
+  x <- c(0.0, 1.0, 2.5, 4.0, 6.0, 9.0)
+  y <- sin(0.4 * x) + 0.1 * x
+  m <- 0.4 * cos(0.4 * x) + 0.1
+  h <- 1e-6
+  for (q in c(3.3, 0.2, 4.0, -0.5, 9.7)) {
+    r <- spline_slope_grad(x, y, m, q)
+    expect_identical(r$slope, r$passive, label = paste("slope at", q))
+    expect_equal(r$statements, 1)
+    fd <- function(f, v) vapply(seq_along(v), function(i) {
+      vp <- v; vm <- v; vp[i] <- vp[i] + h; vm[i] <- vm[i] - h
+      (f(vp) - f(vm)) / (2 * h)
+    }, numeric(1))
+    expect_equal(r$grad_y, fd(function(v) spline_slope_double(x, v, m, q), y),
+                 tolerance = 1e-6, label = paste("d slope / d y at", q))
+    expect_equal(r$grad_m, fd(function(v) spline_slope_double(x, y, v, q), m),
+                 tolerance = 1e-6, label = paste("d slope / d m at", q))
+  }
 })
 
 testthat::test_that("read_linear is eval's read, and its weights are the read's gradient", {
@@ -304,11 +417,10 @@ testthat::test_that("read_linear is eval's read, and its weights are the read's 
     r <- spline_read_linear(x, y, m, q)
     expect_identical(r$value, r$eval, label = paste("value at", q))
     expect_identical(r$slope, r$eval_slope, label = paste("slope at", q))
-    # The weights are the Hermite basis; the tape reaches the knots through the
-    # span coefficients, which associate differently. Absolute, because a weight
-    # near zero (3e-5 at 8.99) has no relative precision to compare.
-    expect_lt(max(abs(r$weight_y - r$grad_y)), 1e-14, label = paste("y weights at", q))
-    expect_lt(max(abs(r$weight_m - r$grad_m)), 1e-14, label = paste("m weights at", q))
+    # The weights are the Hermite basis, and an active read records exactly
+    # those as its partials.
+    expect_identical(r$weight_y, r$grad_y, label = paste("y weights at", q))
+    expect_identical(r$weight_m, r$grad_m, label = paste("m weights at", q))
   }
 })
 

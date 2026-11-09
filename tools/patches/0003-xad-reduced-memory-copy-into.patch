@@ -1,0 +1,76 @@
+diff --git a/inst/include/XAD/Config.hpp b/inst/include/XAD/Config.hpp
+index 1d36159..191073d 100644
+--- a/inst/include/XAD/Config.hpp
++++ b/inst/include/XAD/Config.hpp
+@@ -47,7 +47,12 @@
+ // #define XAD_NO_THREADLOCAL
+ 
+ // Reduce memory usage in the tape, at a slight performance cost
+-// #define XAD_REDUCED_MEMORY
++// odelia local patch: on, so every package reading these headers stores a
++// recorded operation the same way -- its multiplier and its slot in two arrays,
++// 12 bytes, where the paired layout pads each to 16. A sweep is bound by streaming
++// that array, so it is faster this way as well as smaller. Part of the layout
++// odelia's compiled tape and every consumer must agree on; see ARCHITECTURE.md.
++#define XAD_REDUCED_MEMORY
+ 
+ // Enable JIT compilation support (record-once, compile-once, evaluate-many)
+ // #define XAD_ENABLE_JIT
+diff --git a/inst/include/XAD/OperationsContainer.hpp b/inst/include/XAD/OperationsContainer.hpp
+index 95c7f6c..7b6dc90 100644
+--- a/inst/include/XAD/OperationsContainer.hpp
++++ b/inst/include/XAD/OperationsContainer.hpp
+@@ -145,10 +145,7 @@ class OperationsContainer
+     XAD_FORCE_INLINE void append_n(MulIt muls, SlotIt slots, size_type n)
+     {
+         auto items = (std::min)(ChunkSize - idx_, n);
+-        std::uninitialized_copy_n(detail::make_checked(muls, items), items,
+-                                  detail::make_checked(mul_chunk(chunk_), ChunkSize) + idx_);
+-        std::uninitialized_copy_n(detail::make_checked(slots, items), items,
+-                                  detail::make_checked(slot_chunk(chunk_), ChunkSize) + idx_);
++        copy_into(idx_, muls, slots, items);
+         idx_ += items;
+ 
+         while (XAD_VERY_UNLIKELY(idx_ == ChunkSize))
+@@ -161,14 +158,37 @@ class OperationsContainer
+             slots += items;
+ 
+             items = (std::min)(ChunkSize, n);
+-            std::uninitialized_copy_n(detail::make_checked(muls, items), items,
+-                                      detail::make_checked(mul_chunk(chunk_), ChunkSize));
+-            std::uninitialized_copy_n(detail::make_checked(slots, items), items,
+-                                      detail::make_checked(slot_chunk(chunk_), ChunkSize));
++            copy_into(0, muls, slots, items);
+             idx_ += items;
+         }
+     }
+ 
++    // odelia local patch: a statement's operations written into the current chunk
++    // at `at`. A statement has one to four operations far more often than not,
++    // and those are written out; std::uninitialized_copy_n compiled to a memmove
++    // call per statement, which cost more than the copy.
++    template <class MulIt, class SlotIt>
++    XAD_FORCE_INLINE void copy_into(size_type at, MulIt muls, SlotIt slots,
++                                    size_type items)
++    {
++        T* dm = mul_chunk(chunk_) + at;
++        S* ds = slot_chunk(chunk_) + at;
++        switch (items)
++        {
++            case 4: ::new (dm + 3) T(muls[3]); ds[3] = slots[3]; [[fallthrough]];
++            case 3: ::new (dm + 2) T(muls[2]); ds[2] = slots[2]; [[fallthrough]];
++            case 2: ::new (dm + 1) T(muls[1]); ds[1] = slots[1]; [[fallthrough]];
++            case 1: ::new (dm + 0) T(muls[0]); ds[0] = slots[0]; [[fallthrough]];
++            case 0: break;
++            default:
++                for (size_type i = 0; i < items; ++i)
++                {
++                    ::new (dm + i) T(muls[i]);
++                    ds[i] = slots[i];
++                }
++        }
++    }
++
+     XAD_FORCE_INLINE std::pair<mul_type, slot_type> operator[](size_type n) const
+     {
+         auto chunk = n / ChunkSize;
