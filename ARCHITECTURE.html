@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.5</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.11.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -182,6 +182,8 @@ PKG_LIBS = "$(ODELIA_LIBDIR)$(R_ARCH)/odelia.dll"</code></pre>
 <h2 id="do-not-change-without-coordinating-downstream">Do NOT change without coordinating downstream<a class="anchor" aria-label="anchor" href="#do-not-change-without-coordinating-downstream"></a></h2>
 <ul><li>The <code>extern template</code> / <code>Tape.cpp</code> split, or making <code>Tape</code> header-only — see the single-<code>active_tape_</code> invariant above.</li>
 <li>The set of explicit <code>Tape</code> instantiations in <code>src/Tape.cpp</code> (consumers rely on the exact instantiated types).</li>
+<li>
+<code>XAD_REDUCED_MEMORY</code> in <code>inst/include/XAD/Config.hpp</code>. It sets how the tape stores a recorded operation, so odelia’s compiled <code>Tape</code> and every consumer must be built with the same setting; it lives in the header rather than a <code>-D</code> flag so that a consumer cannot leave it out.</li>
 <li>The global-visibility load in <code>R/zzz.R</code> (<code>odelia_load_dll(local = FALSE)</code>) — needed for macOS/Linux.</li>
 <li>The set of symbols <strong>exported</strong> from <code>odelia.dll</code> on Windows — do not add a restrictive <code>.def</code> file or <code>-Wl,--exclude-all-symbols</code>, or Windows consumers can no longer link the <code>Tape</code> runtime.</li>
 <li>Reaching for R from anywhere in the core headers (see the section above). Consumers build against them without R.</li>

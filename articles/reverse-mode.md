@@ -221,10 +221,15 @@ Two things follow. The map runs on the adjoint scalar with the
 parameters active, so a newborn’s initial conditions contribute
 parameter derivatives: the steps are not the only source of them. And
 the recording of the map is taken on a System at the wide width and
-cannot be swept at the narrow one, so the sweep rebinds the System once
-per segment. A segment is a run of rows at one width; a System of fixed
-width has one, and a System that widens opens a new one at each
-insertion. `sweep_adjoint` returns how many it swept.
+cannot be swept at the narrow one, so the sweep brings its active System
+back to the narrow width at the start of each segment. A segment is a
+run of rows at one width; a System of fixed width has one, and a System
+that widens opens a new one at each insertion. `sweep_adjoint` returns
+how many it swept. Where the System declares `assign_from(passive)`, the
+active System is built once per sweep, by `rebind()`, and written in
+place at every segment after the first; where it does not, each segment
+rebinds afresh. A System whose construction is costly, and which widens
+often, declares it.
 
 A caller can also ask for cuts at rows of its own choosing, with
 `extra_stops`, for a partial sweep. A cut is a row the sweep resumes at;
@@ -324,9 +329,11 @@ A System a sweep walks adds four members, stated as the concept
   width the recorded time implies.
 
 A System whose state grows adds `apply_insertion(time, x, out)`, the
-widening as a map, and a System that solves for values inside a stage
-declares `solved_values` (`SolvesForValues`). The shipped Lorenz example
-marks which of its members belong to which tier; the smallest complete
+widening as a map, and may add `assign_from(passive)` (`AssignsFrom`),
+which must leave it equal to `passive.rebind<U>()` in every member a
+recording reads. A System that solves for values inside a stage declares
+`solved_values` (`SolvesForValues`). The shipped Lorenz example marks
+which of its members belong to which tier; the smallest complete
 sweepable System in the tree is `Grow` in `tests/standalone/r_free.cpp`.
 
 ## From R: what `$loss_and_gradient()` does
