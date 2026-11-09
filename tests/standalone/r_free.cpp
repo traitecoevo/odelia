@@ -40,6 +40,7 @@
 #include <cstdio>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace {
@@ -1119,9 +1120,34 @@ struct Cells {
   }
 };
 
+// Cells that can be brought in place to where another stands: what a rebind
+// would give, written into the System already held. Counts its calls, so a test
+// can see the sweep took that route.
+int cells_assigned = 0;
+template <typename T = double>
+struct AssignedCells : Cells<T> {
+  explicit AssignedCells(T r_ = T(1.0), std::vector<double> y0 = {0.5})
+      : Cells<T>(r_, std::move(y0)) {}
+  explicit AssignedCells(Cells<T> c) : Cells<T>(std::move(c)) {}
+  template <class S> AssignedCells<S> rebind() const {
+    return AssignedCells<S>(Cells<T>::template rebind<S>());
+  }
+  template <class U> void assign_from(const AssignedCells<U>& from) {
+    ++cells_assigned;
+    this->r = T(xad::value(from.r));
+    this->y_init = from.y_init;
+    this->y.resize(from.y.size());
+    this->dydt.resize(from.y.size());
+    for (size_t i = 0; i < from.y.size(); ++i) this->y[i] = T(xad::value(from.y[i]));
+    this->time = from.time;
+    this->compute_rates();
+  }
+};
+
 // Widen the solver's System at its current time and record the row.
-void insert_cell(odelia::ode::Solver<Cells<double>>& s) {
-  Cells<double>& sys = s.get_system_ref();
+template <class System>
+void insert_cell(odelia::ode::Solver<System>& s) {
+  System& sys = s.get_system_ref();
   std::vector<double> before(sys.ode_size());
   sys.ode_state(before.begin());
   std::vector<double> widened;
@@ -1215,6 +1241,95 @@ void test_sweep_across_an_insertion(odelia::ode::Method m) {
            rec2[k].state.size() == rec[k].state.size();
   }
   check(same, "with the insertion where the run had it");
+}
+
+// One active System re-seated at each width, through assign_from, sweeps
+// exactly as a System rebound afresh at each width does: across two insertions,
+// so the re-seat both narrows and the insertion widens it again.
+void test_reseat_sweeps_as_a_rebind_does(odelia::ode::Method m) {
+  const auto run = [&](auto c) {
+    using System = decltype(c);
+    odelia::ode::Solver<System> s(c, odelia::ode::OdeControl(), m);
+    s.set_keep_states(true);
+    s.reset();
+    s.advance_adaptive(std::vector<double>{0.0, 0.3});
+    insert_cell(s);
+    s.advance_adaptive(std::vector<double>{0.3, 0.6});
+    insert_cell(s);
+    s.advance_adaptive(std::vector<double>{0.6, 1.0});
+    odelia::ode::adjoint_batch lambda =
+        odelia::ode::adjoint_batch::one({1.0, 0.5, 0.25});
+    odelia::ode::adjoint_batch dp(1, 1);
+    const size_t segments = s.sweep_adjoint(lambda, dp);
+    return std::make_tuple(segments, lambda.to_vectors(), dp.to_vectors());
+  };
+  cells_assigned = 0;
+  const auto rebound = run(Cells<double>(2.0, {0.5}));
+  const auto assigned = run(AssignedCells<double>(2.0, {0.5}));
+  check(std::get<0>(rebound) == 3 && std::get<0>(assigned) == 3,
+        "three segments, one each side of two insertions");
+  check(cells_assigned == 4,
+        "and the System with assign_from was re-seated through it");
+  check(std::get<1>(rebound) == std::get<1>(assigned) &&
+            std::get<2>(rebound) == std::get<2>(assigned),
+        "its state and parameter adjoints are a rebound System's, bit for bit");
+}
+
+// Output adjoints that are multiples of an earlier one are carried as that one
+// and rebuilt: each row agrees with a sweep of that row alone, bit for bit where
+// it was carried and to rounding where it was rebuilt, and the parameter
+// adjoints accumulate onto what the caller held.
+void test_multiples_are_swept_once(odelia::ode::Method m) {
+  Cells<double> c(2.0, {0.5});
+  odelia::ode::Solver<Cells<double>> s(c, odelia::ode::OdeControl(), m);
+  s.set_keep_states(true);
+  s.reset();
+  s.advance_adaptive(std::vector<double>{0.0, 0.5});
+  insert_cell(s);
+  s.advance_adaptive(std::vector<double>{0.5, 1.0});
+
+  const std::vector<std::vector<double>> rows{
+      {1.0, 1.0}, {2.0, 2.0}, {0.0, 1.0}, {-3.0, -3.0}, {0.0, 0.0}, {0.0, 0.7}};
+  const odelia::ode::adjoint_batch lambda0 = [&] {
+    odelia::ode::adjoint_batch b(rows.size(), 2);
+    for (size_t i = 0; i < rows.size(); ++i)
+      std::copy(rows[i].begin(), rows[i].end(), b[i].begin());
+    return b;
+  }();
+  const odelia::ode::adjoint_multiples multiples =
+      odelia::ode::adjoint_multiples::of(lambda0);
+  check(multiples.kept == std::vector<size_t>{0, 2, 4},
+        "the multiples are found, and a zero row is swept as given");
+
+  odelia::ode::adjoint_batch lambda = lambda0;
+  odelia::ode::adjoint_batch dp(rows.size(), 1);
+  for (size_t i = 0; i < rows.size(); ++i) dp[i][0] = 0.25 * (i + 1);
+  s.sweep_adjoint(lambda, dp);
+
+  bool carried_exact = true, rebuilt_close = true;
+  for (size_t i = 0; i < rows.size(); ++i) {
+    odelia::ode::adjoint_batch alone = odelia::ode::adjoint_batch::one(rows[i]);
+    odelia::ode::adjoint_batch dp_alone(1, 1);
+    dp_alone[0][0] = 0.25 * (i + 1);
+    s.sweep_adjoint(alone, dp_alone);
+    const bool kept = multiples.kept[multiples.from[i]] == i;
+    for (size_t j = 0; j < alone.width(); ++j) {
+      if (kept) {
+        carried_exact = carried_exact && lambda[i][j] == alone[0][j];
+      } else {
+        rebuilt_close = rebuilt_close &&
+            std::fabs(lambda[i][j] - alone[0][j]) <= 1e-13 * std::fabs(alone[0][j]);
+      }
+    }
+    if (kept) {
+      carried_exact = carried_exact && dp[i][0] == dp_alone[0][0];
+    } else {
+      rebuilt_close = rebuilt_close &&
+          std::fabs(dp[i][0] - dp_alone[0][0]) <= 1e-13 * std::fabs(dp_alone[0][0]);
+    }
+  }
+  check(carried_exact, "a carried row is its own sweep's, bit for bit");
+  check(rebuilt_close, "and a rebuilt multiple agrees with its own sweep to rounding");
 }
 
 // A run that starts with NO state: the first insertion is a map from the
@@ -2512,6 +2627,8 @@ int main() {
   test_implicit_value_holds_any_count_of_inputs();
   test_implicit_value_nests();
   for_each_explicit_stepper(test_sweep_across_an_insertion);
+  for_each_explicit_stepper(test_reseat_sweeps_as_a_rebind_does);
+  for_each_explicit_stepper(test_multiples_are_swept_once);
   for_each_explicit_stepper(test_sweep_from_an_empty_start);
   for_each_explicit_stepper(test_sweep_across_empty_steps);
   for_each_explicit_stepper(test_each_evaluation_is_handed_its_slot);

@@ -9,6 +9,7 @@
 #include <type_traits>
 #include <limits>
 #include <array>
+#include <utility>
 #include <vector>
 #include <odelia/ode_util.hpp>
 
@@ -43,14 +44,8 @@ namespace interpolator {
 // is one polynomial written here for both. A cubic converges as h^4 and a quintic
 // as h^6, so a source with a closed form for the second derivative reaches a given
 // error on far fewer knots -- and a quantity that is not twice differentiable
-// simply has no third channel to supply.
-//
-// ⚠️ IT IS NOT A SETTING TO BE COLLAPSED, and the reason is the tape rather than the
-// clock. Reading every span as a quintic costs read time, which is arguable --
-// but a cubic's top two coefficients would then be ACTIVE zeros holding
-// tape slots, so each read would record two operations whose adjoints are
-// structurally zero. That doubles nothing and adds half again to the sparsest,
-// hottest recorded read in the model.
+// simply has no third channel to supply. Reading every span as a quintic would
+// cost read time on the read a model makes most, so the two stay separate.
 //
 // Each span reads only its own two knots, so moving one knot changes the
 // interpolant only in the two spans that touch it.
@@ -59,6 +54,13 @@ namespace interpolator {
 // halves of a build are separate: set_nodes lays out the spans from the positions,
 // and set_data fills the coefficients. A caller whose positions are fixed for a run
 // calls set_nodes once and set_data per stage.
+//
+// THE SPAN COEFFICIENTS ARE DOUBLE WHATEVER S IS. A read is linear in the four
+// knot values and slopes around it (read_linear), so at a scalar that carries a
+// derivative it is taken in double and the knot data's partials are attached to
+// it in one expression (on_knots): one statement a read, and none a build. Held
+// at S, the coefficients would be a build's worth of statements that no read
+// needs, since every read reaches the knots through them anyway.
 //
 // eval takes either a double position or an active one; at an active position the
 // value is read at its passive part and the query's own derivative is carried on
@@ -70,6 +72,10 @@ class hermite_spline {
                 "a span is determined by a value and a slope at each end, or by "
                 "those plus a curvature; there is no other knot data any source "
                 "in this library supplies exactly.");
+
+  // Whether the knot data carries a derivative, which decides whether a read
+  // goes through on_knots.
+  static constexpr bool active = !std::is_arithmetic_v<S>;
 
 public:
   // Knot positions, strictly ascending; at least two are needed (one span).
@@ -102,17 +108,20 @@ public:
     initialised = false;
   }
 
-  // Values and dy/dx at the nodes already set, one entry each per node.
-  void set_data(const std::vector<S>& y_, const std::vector<S>& dydx_) {
+  // Values and dy/dx at the nodes already set, one entry each per node. Taken by
+  // value, so a caller done with its vectors moves them in: at an active scalar a
+  // copy is a statement per entry.
+  void set_data(std::vector<S> y_, std::vector<S> dydx_) {
     static_assert(Order == 3,
                   "a quintic span has a curvature coefficient, so it needs the "
                   "second derivative at every knot; leaving it out would make the "
                   "read quintic in storage and cubic in fact.");
-    begin_data(y_, dydx_);
+    using util::to_passive;
+    begin_data(std::move(y_), std::move(dydx_));
     for (std::size_t k = 0; k < spans.size(); ++k) {
       const double h = x[k + 1] - x[k];
-      const S a = y[k], b = y[k + 1];
-      const S sa = m[k] * h, sb = m[k + 1] * h;
+      const double a = to_passive(y[k]), b = to_passive(y[k + 1]);
+      const double sa = to_passive(m[k]) * h, sb = to_passive(m[k + 1]) * h;
       Span& s = spans[k];
       s.y0 = a;
       s.c[0] = sa;
@@ -124,12 +133,16 @@ public:
 
   // As above, with d2y/dx2 as well: the unique quintic through both knots' value,
   // slope and curvature.
-  void set_data(const std::vector<S>& y_, const std::vector<S>& dydx_,
+  void set_data(std::vector<S> y_, std::vector<S> dydx_,
                 const std::vector<S>& d2ydx2_) {
     static_assert(Order == 5,
                   "a cubic span is determined by the value and the slope, so a "
                   "curvature has nowhere to go and would be silently dropped.");
-    begin_data(y_, dydx_);
+    static_assert(!active,
+                  "a quintic read is linear in each knot's curvature too, and "
+                  "the curvatures are not kept, so at an active scalar their "
+                  "derivative would be dropped. Only the cubic reads actively.");
+    begin_data(std::move(y_), std::move(dydx_));
     util::check_length(d2ydx2_.size(), x.size());
     // The curvatures are read into the spans and not kept. values() and slopes()
     // are held because a caller hands them on and a slope recovered from a span is
@@ -137,13 +150,13 @@ public:
     // on every cubic interpolant in the library.
     for (std::size_t j = 0; j < spans.size(); ++j) {
       const double h = x[j + 1] - x[j];
-      const S a = y[j], b = y[j + 1];
-      const S a1 = m[j] * h, b1 = m[j + 1] * h;
-      const S a2 = 0.5 * d2ydx2_[j] * h * h, b2 = d2ydx2_[j + 1] * h * h;
+      const double a = y[j], b = y[j + 1];
+      const double a1 = m[j] * h, b1 = m[j + 1] * h;
+      const double a2 = 0.5 * d2ydx2_[j] * h * h, b2 = d2ydx2_[j + 1] * h * h;
       // What the two ends leave for the top three powers to match.
-      const S d = b - a - a1 - a2;
-      const S e = b1 - a1 - 2.0 * a2;
-      const S f = b2 - 2.0 * a2;
+      const double d = b - a - a1 - a2;
+      const double e = b1 - a1 - 2.0 * a2;
+      const double f = b2 - 2.0 * a2;
       Span& s = spans[j];
       s.y0 = a;
       s.c[0] = a1;
@@ -202,26 +215,17 @@ public:
   template <typename U>
   S eval(const U& u) const {
     check_initialised();
-    const double up = util::to_passive(u);
     if constexpr (std::is_same_v<U, double>) {
-      return value_at(up);
+      return value_at(u);
     } else {
       static_assert(std::is_constructible_v<S, U>,
                     "hermite_spline: reading at an active position needs the "
                     "knot values on the same scalar, so the derivative of the query "
                     "has somewhere to go -- an active position with S = double would "
                     "silently drop it.");
-      if constexpr (Order == 3) {
-        if (up > x.front() && up < x.back()) {
-          return spans[span_of(up)].value_at_query(u, up);
-        }
-      }
-      // One span load for both halves. The with_query_derivative needs the slope too, and taking
-      // them separately resolves the same position twice on the read this class
-      // exists for.
-      S value, dydu;
-      value_and_slope(up, value, dydu);
-      return with_query_derivative(value, dydu, u, up);
+      const double up = util::to_passive(u);
+      const linear_read r = linear_at(up);
+      return on_knots(r.value + r.slope * (u - up), r.input, r.weight);
     }
   }
 
@@ -232,10 +236,8 @@ public:
   // weight[i] * *input[i], where the inputs are the value and slope at the two
   // knots around u, and slope is d(value)/du. Inside the knots the weights are
   // the Hermite basis; beyond either end the read is the end line eval extends.
-  // value and slope equal eval's and slope()'s bit for bit where the build does
-  // not contract floating point: fused into one rounding, the end line's
-  // y + m * dx can differ by an ulp from an active spline's eval, whose tape
-  // arithmetic is not fused. A caller summing many
+  // value and slope are eval's and slope()'s, bit for bit: at an active scalar
+  // those are this read with the partials attached. A caller summing many
   // reads can supply weight[i] times its own derivative as the partial on
   // *input[i], and record the sum as one statement rather than a statement a read.
   struct linear_read {
@@ -244,26 +246,8 @@ public:
     std::array<double, 4> weight;
   };
   [[gnu::always_inline]] linear_read read_linear(double u) const {
-    static_assert(Order == 3, "read_linear spells the cubic only.");
-    using util::to_passive;
     check_initialised();
-    if (u <= x.front() || u >= x.back()) {
-      const std::size_t k = u <= x.front() ? 0 : x.size() - 1;
-      const double dx = u - x[k];
-      return {to_passive(y[k]) + to_passive(m[k]) * dx, to_passive(m[k]),
-              {&y[k], &m[k], &y[k], &m[k]}, {1.0, dx, 0.0, 0.0}};
-    }
-    const std::size_t k = span_of(u);
-    const Span& s = spans[k];
-    const double t = s.local(u);
-    const double c0 = to_passive(s.c[0]), c1 = to_passive(s.c[1]),
-                 c2 = to_passive(s.c[2]);
-    const double h = x[k + 1] - x[k], t2 = t * t, t3 = t2 * t;
-    return {to_passive(s.y0) + t * (c0 + t * (c1 + t * c2)),
-            (c0 + t * (2.0 * c1 + t * (3.0 * c2))) * s.inv_h,
-            {&y[k], &m[k], &y[k + 1], &m[k + 1]},
-            {1.0 - 3.0 * t2 + 2.0 * t3, h * (t - 2.0 * t2 + t3),
-             3.0 * t2 - 2.0 * t3, h * (t3 - t2)}};
+    return linear_at(u);
   }
 
 protected:
@@ -304,7 +288,11 @@ public:
                   "not the slope. eval() is the reader that takes one.");
     check_initialised();
     const double up = u;
-    if (up <= x.front()) {
+    if constexpr (active) {
+      const linear_read r = linear_at(up);
+      value = on_knots(r.value, r.input, r.weight);
+      dydu = on_knots(r.slope, r.input, slope_weights(up));
+    } else if (up <= x.front()) {
       value = y.front() + m.front() * (up - x.front());
       dydu = m.front();
     } else if (up >= x.back()) {
@@ -322,76 +310,116 @@ private:
   // One span's whole polynomial, contiguous: a query touches a single cache line
   // rather than one per coefficient array. The cubic and its derivative are written
   // here, beside the coefficients they read, so the readers share one spelling of
-  // each instead of restating it. value_at_query is the one restatement, and a
-  // test holds it to the other two.
+  // each instead of restating it. linear_at is the one restatement, and a test
+  // holds it to these two.
   struct Span {
     double x0 = 0.0, inv_h = 0.0;
-    S y0{};
-    S c[Order]{};  // the coefficient of t^(i+1), t the span-local coordinate
+    double y0 = 0.0;
+    double c[Order]{};  // the coefficient of t^(i+1), t the span-local coordinate
     double local(double u) const { return (u - x0) * inv_h; }
     // Horner over the coefficients the order has, once for both orders. Order is a
-    // constant so both loops unroll, and the factors stay double: at an active
-    // scalar a converted int would register a variable and record an operation
-    // per term.
-    S value(double t) const {
-      S r = c[Order - 1];
+    // constant so both loops unroll.
+    double value(double t) const {
+      double r = c[Order - 1];
       for (int i = Order - 2; i >= 0; --i) r = c[i] + t * r;
       return y0 + t * r;
     }
-    S slope(double t) const {
-      S r = static_cast<double>(Order) * c[Order - 1];
+    double slope(double t) const {
+      double r = static_cast<double>(Order) * c[Order - 1];
       for (int i = Order - 2; i >= 1; --i)
         r = static_cast<double>(i + 1) * c[i] + t * r;
       // c[0]'s factor is one, and writing it as one is a multiply the compiler
       // keeps on every read.
       return (c[0] + t * r) * inv_h;
     }
-    // A cubic's value at an active position u, whose passive part up lies in this
-    // span, and the query's derivative carried through the slope, as ONE
-    // expression: at an active scalar every named intermediate is a tape
-    // statement, and a model that integrates over a field reads at every
-    // quadrature point. value and slope above, term for term, so the value and
-    // d(value)/du are theirs bit for bit. A knot coefficient's partial is the same
-    // product associated from the root rather than through the Horner chain, so
-    // an adjoint reaching the knots agrees with theirs to rounding, not bit for bit.
-    template <typename U>
-    S value_at_query(const U& u, double up) const {
-      static_assert(Order == 3, "value_at_query spells the cubic only.");
-      const double t = local(up);
-      return S(y0 + t * (c[0] + t * (c[1] + t * c[2])) +
-               (c[0] + t * (2.0 * c[1] + t * (3.0 * c[2]))) * inv_h * (u - up));
-    }
   };
 
+  // read_linear without the initialisation check.
+  [[gnu::always_inline]] linear_read linear_at(double u) const {
+    static_assert(Order == 3, "a read as its knot data spells the cubic only.");
+    using util::to_passive;
+    if (u <= x.front() || u >= x.back()) {
+      const std::size_t k = u <= x.front() ? 0 : x.size() - 1;
+      const double dx = u - x[k];
+      return {to_passive(y[k]) + to_passive(m[k]) * dx, to_passive(m[k]),
+              {&y[k], &m[k], &y[k], &m[k]}, {1.0, dx, 0.0, 0.0}};
+    }
+    const std::size_t k = span_of(u);
+    const Span& s = spans[k];
+    const double t = s.local(u);
+    const double h = x[k + 1] - x[k], t2 = t * t, t3 = t2 * t;
+    return {s.y0 + t * (s.c[0] + t * (s.c[1] + t * s.c[2])),
+            (s.c[0] + t * (2.0 * s.c[1] + t * (3.0 * s.c[2]))) * s.inv_h,
+            {&y[k], &m[k], &y[k + 1], &m[k + 1]},
+            {1.0 - 3.0 * t2 + 2.0 * t3, h * (t - 2.0 * t2 + t3),
+             3.0 * t2 - 2.0 * t3, h * (t3 - t2)}};
+  }
+
+  // The weights of linear_at's inputs in its slope: the derivatives in u of the
+  // weights it returns.
+  std::array<double, 4> slope_weights(double u) const {
+    if (u <= x.front() || u >= x.back()) {
+      return {0.0, 1.0, 0.0, 0.0};
+    }
+    const Span& s = spans[span_of(u)];
+    const double t = s.local(u);
+    return {6.0 * t * (t - 1.0) * s.inv_h, 1.0 - t * (4.0 - 3.0 * t),
+            6.0 * t * (1.0 - t) * s.inv_h, t * (3.0 * t - 2.0)};
+  }
+
+  // `head` with the knot data's partials attached: each input's weight times the
+  // input less its own value, which is zero in value, so the number is head's bit
+  // for bit and the derivative in each input is its weight. One expression, so
+  // one statement, carrying whatever head carries as well (an active query's
+  // derivative). An end read names one knot twice, and gets the two terms it has.
+  //
+  // Declared rather than deduced: a deduced return would hand back an XAD
+  // expression referencing temporaries that die here.
+  template <typename Head>
+  static S on_knots(const Head& head, const std::array<const S*, 4>& in,
+                    const std::array<double, 4>& w) {
+    using util::to_passive;
+    if (in[2] == in[0]) {
+      return S(head + w[0] * (*in[0] - to_passive(*in[0])) +
+               w[1] * (*in[1] - to_passive(*in[1])));
+    }
+    return S(head + w[0] * (*in[0] - to_passive(*in[0])) +
+             w[1] * (*in[1] - to_passive(*in[1])) +
+             w[2] * (*in[2] - to_passive(*in[2])) +
+             w[3] * (*in[3] - to_passive(*in[3])));
+  }
+
   // The two length checks and the two vectors every order stores.
-  void begin_data(const std::vector<S>& y_, const std::vector<S>& dydx_) {
+  void begin_data(std::vector<S>&& y_, std::vector<S>&& dydx_) {
     if (spans.empty()) util::stop("hermite_spline: no knots set");
     util::check_length(y_.size(), x.size());
     util::check_length(dydx_.size(), x.size());
-    y = y_;
-    m = dydx_;
-  }
-
-  // The query's derivative, materialised while its operands are alive. A deduced
-  // return type here would hand back an XAD expression template referencing the
-  // temporaries of this return statement, which die on return.
-  template <typename U>
-  static S with_query_derivative(const S& value, const S& dydu, const U& u, double up) {
-    return value + dydu * (u - up);
+    y = std::move(y_);
+    m = std::move(dydx_);
   }
 
   S value_at(double u) const {
-    if (u <= x.front()) return y.front() + m.front() * (u - x.front());
-    if (u >= x.back())  return y.back()  + m.back()  * (u - x.back());
-    const Span& s = spans[span_of(u)];
-    return s.value(s.local(u));
+    if constexpr (active) {
+      const linear_read r = linear_at(u);
+      return on_knots(r.value, r.input, r.weight);
+    } else {
+      if (u <= x.front()) return y.front() + m.front() * (u - x.front());
+      if (u >= x.back())  return y.back()  + m.back()  * (u - x.back());
+      const Span& s = spans[span_of(u)];
+      return s.value(s.local(u));
+    }
   }
 
   S slope_at(double u) const {
-    if (u <= x.front()) return m.front();
-    if (u >= x.back())  return m.back();
-    const Span& s = spans[span_of(u)];
-    return s.slope(s.local(u));
+    if constexpr (active) {
+      const linear_read r = linear_at(u);
+      return on_knots(r.slope, r.input, slope_weights(u));
+    } else {
+      if (u <= x.front()) return m.front();
+      if (u >= x.back())  return m.back();
+      const Span& s = spans[span_of(u)];
+      return s.slope(s.local(u));
+    }
   }
 
   std::size_t span_of(double u) const {
@@ -430,9 +458,9 @@ private:
   std::vector<Span> spans;
 
 public:
-  // Every value here that carries the working scalar. The knot positions are not
-  // among them: they stay double, which is what keeps the grid out of the
-  // derivative.
+  // Every value here that carries the working scalar: the knot data. The knot
+  // positions and the span coefficients are double, which keeps the grid out of
+  // the derivative and the coefficients off the tape.
   // Both overloads, for the reason with_slope.hpp gives: visit_active dispatches
   // on whether the call compiles, so a const object handed to a non-const walk is
   // passed over in silence rather than refused, and the rewinding forms in
@@ -441,19 +469,11 @@ public:
   void for_each_active(F&& f) {
     for (S& v : y) { f(v); }
     for (S& v : m) { f(v); }
-    for (Span& span : spans) {
-      f(span.y0);
-      for (S& coefficient : span.c) { f(coefficient); }
-    }
   }
   template <class F>
   void for_each_active(F&& f) const {
     for (const S& v : y) { f(v); }
     for (const S& v : m) { f(v); }
-    for (const Span& span : spans) {
-      f(span.y0);
-      for (const S& coefficient : span.c) { f(coefficient); }
-    }
   }
 
 private:

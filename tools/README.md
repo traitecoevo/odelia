@@ -30,6 +30,15 @@ patches in [`patches/`](patches/):
   `implicit_value` holds and restores every input's adjoint on each call, and
   through the per-slot call that cost about 4% of plant's TF24 gradient sweep.
   Drop this patch if upstream adds an equivalent accessor.
+- **`0003-xad-reduced-memory-copy-into.patch`** — turns on `XAD_REDUCED_MEMORY`
+  in `Config.hpp`, so a recorded operation is stored as a multiplier and a slot
+  in two arrays (12 bytes) rather than a padded pair (16), and gives
+  `OperationsContainer::append_n` a `copy_into` that writes the usual one to four
+  operations of a statement directly, where `std::uninitialized_copy_n` compiled
+  to a `memmove` call per statement. The define is part of the layout odelia's
+  compiled tape and every consumer share (see ARCHITECTURE.md). Keep the define
+  on a re-vendor; drop the `copy_into` half if upstream stops calling
+  `memmove` for short runs.
 
 ## Re-vendoring workflow
 

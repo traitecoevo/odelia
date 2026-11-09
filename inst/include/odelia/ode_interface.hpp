@@ -268,6 +268,21 @@ struct step_record : schedule_row {
 // adjoint carries a term through that time which nothing here computes. A System
 // walked by the sweep asserts its insertions are scheduled, not triggered.
 
+// A System on one scalar that can be brought to where another System stands, in
+// place: `a.assign_from(b)` leaves `a` equal to `b.template rebind<U>()` in every
+// member a recording reads, at whatever width `b` has. Optional: a sweep that
+// passes through several widths holds one active System across all of them and
+// re-seats it at each (adjoint_system::reseat), which this makes a write where it
+// would otherwise be a rebind -- for a System whose construction is costly, the
+// difference between one construction per sweep and one per insertion.
+//
+// ⚠️ EQUAL TO A REBIND, AND NOTHING LESS. A member a rebind sets and assign_from
+// leaves alone keeps its value from the width before, and a recording that reads
+// it is finite and wrong. Nothing compares the two at run time; a test that
+// sweeps the same System with and without the hook is what holds it.
+template <typename A, typename S>
+concept AssignsFrom = requires(A& a, const S& s) { a.assign_from(s); };
+
 // What a System needs beyond solving for a reverse sweep to walk it: a copy of
 // itself on the adjoint scalar, the parameters the sweep accumulates adjoints
 // for, every member carrying the scalar (so the tape's slots can be handed back

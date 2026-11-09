@@ -47,7 +47,12 @@
 // #define XAD_NO_THREADLOCAL
 
 // Reduce memory usage in the tape, at a slight performance cost
-// #define XAD_REDUCED_MEMORY
+// odelia local patch: on, so every package reading these headers stores a
+// recorded operation the same way -- its multiplier and its slot in two arrays,
+// 12 bytes, where the paired layout pads each to 16. A sweep is bound by streaming
+// that array, so it is faster this way as well as smaller. Part of the layout
+// odelia's compiled tape and every consumer must agree on; see ARCHITECTURE.md.
+#define XAD_REDUCED_MEMORY
 
 // Enable JIT compilation support (record-once, compile-once, evaluate-many)
 // #define XAD_ENABLE_JIT

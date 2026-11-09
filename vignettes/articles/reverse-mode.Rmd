@@ -138,7 +138,7 @@ Going forward the vector only grows, so going backward the sweep only narrows. T
   lambda = std::move(narrowed);
 ```
 
-Two things follow. The map runs on the adjoint scalar with the parameters active, so a newborn's initial conditions contribute parameter derivatives: the steps are not the only source of them. And the recording of the map is taken on a System at the wide width and cannot be swept at the narrow one, so the sweep rebinds the System once per segment. A segment is a run of rows at one width; a System of fixed width has one, and a System that widens opens a new one at each insertion. `sweep_adjoint` returns how many it swept.
+Two things follow. The map runs on the adjoint scalar with the parameters active, so a newborn's initial conditions contribute parameter derivatives: the steps are not the only source of them. And the recording of the map is taken on a System at the wide width and cannot be swept at the narrow one, so the sweep brings its active System back to the narrow width at the start of each segment. A segment is a run of rows at one width; a System of fixed width has one, and a System that widens opens a new one at each insertion. `sweep_adjoint` returns how many it swept. The active System is built once per sweep, by `rebind()`, and re-seated at every segment after the first: written in place by the System's `assign_from(passive)` where it declares one, and rebound afresh where it does not. A System whose construction is costly, and which widens often, declares it.
 
 A caller can also ask for cuts at rows of its own choosing, with `extra_stops`, for a partial sweep. A cut is a row the sweep resumes at; an insertion is a row it carries the adjoint across, so it resumes one row below, on the state the map ran on. A row that is both is treated as the insertion.
 
@@ -186,7 +186,7 @@ A System a sweep walks adds four members, stated as the concept `Sweepable` ther
 - `for_each_active(f)`: every member carrying the scalar. The sweep hands their tape slots back before it clears the tape; a member left out contributes nothing to the gradient, with every number finite.
 - `set_recorded_state(y, time)`: stand on a recorded state, taking the width the recorded time implies.
 
-A System whose state grows adds `apply_insertion(time, x, out)`, the widening as a map, and a System that solves for values inside a stage declares `solved_values` (`SolvesForValues`). The shipped Lorenz example marks which of its members belong to which tier; the smallest complete sweepable System in the tree is `Grow` in `tests/standalone/r_free.cpp`.
+A System whose state grows adds `apply_insertion(time, x, out)`, the widening as a map, and may add `assign_from(passive)` (`AssignsFrom`), which must leave it equal to `passive.rebind<U>()` in every member a recording reads. A System that solves for values inside a stage declares `solved_values` (`SolvesForValues`). The shipped Lorenz example marks which of its members belong to which tier; the smallest complete sweepable System in the tree is `Grow` in `tests/standalone/r_free.cpp`.
 
 ## From R: what `$loss_and_gradient()` does
 

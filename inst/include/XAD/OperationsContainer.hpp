@@ -145,10 +145,7 @@ class OperationsContainer
     XAD_FORCE_INLINE void append_n(MulIt muls, SlotIt slots, size_type n)
     {
         auto items = (std::min)(ChunkSize - idx_, n);
-        std::uninitialized_copy_n(detail::make_checked(muls, items), items,
-                                  detail::make_checked(mul_chunk(chunk_), ChunkSize) + idx_);
-        std::uninitialized_copy_n(detail::make_checked(slots, items), items,
-                                  detail::make_checked(slot_chunk(chunk_), ChunkSize) + idx_);
+        copy_into(idx_, muls, slots, items);
         idx_ += items;
 
         while (XAD_VERY_UNLIKELY(idx_ == ChunkSize))
@@ -161,11 +158,34 @@ class OperationsContainer
             slots += items;
 
             items = (std::min)(ChunkSize, n);
-            std::uninitialized_copy_n(detail::make_checked(muls, items), items,
-                                      detail::make_checked(mul_chunk(chunk_), ChunkSize));
-            std::uninitialized_copy_n(detail::make_checked(slots, items), items,
-                                      detail::make_checked(slot_chunk(chunk_), ChunkSize));
+            copy_into(0, muls, slots, items);
             idx_ += items;
+        }
+    }
+
+    // odelia local patch: a statement's operations written into the current chunk
+    // at `at`. A statement has one to four operations far more often than not,
+    // and those are written out; std::uninitialized_copy_n compiled to a memmove
+    // call per statement, which cost more than the copy.
+    template <class MulIt, class SlotIt>
+    XAD_FORCE_INLINE void copy_into(size_type at, MulIt muls, SlotIt slots,
+                                    size_type items)
+    {
+        T* dm = mul_chunk(chunk_) + at;
+        S* ds = slot_chunk(chunk_) + at;
+        switch (items)
+        {
+            case 4: ::new (dm + 3) T(muls[3]); ds[3] = slots[3]; [[fallthrough]];
+            case 3: ::new (dm + 2) T(muls[2]); ds[2] = slots[2]; [[fallthrough]];
+            case 2: ::new (dm + 1) T(muls[1]); ds[1] = slots[1]; [[fallthrough]];
+            case 1: ::new (dm + 0) T(muls[0]); ds[0] = slots[0]; [[fallthrough]];
+            case 0: break;
+            default:
+                for (size_type i = 0; i < items; ++i)
+                {
+                    ::new (dm + i) T(muls[i]);
+                    ds[i] = slots[i];
+                }
         }
     }
 

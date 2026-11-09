@@ -214,6 +214,10 @@ instantiates `Solver` needs the tape runtime from somewhere.
   the single-`active_tape_` invariant above.
 - The set of explicit `Tape` instantiations in `src/Tape.cpp` (consumers rely on
   the exact instantiated types).
+- `XAD_REDUCED_MEMORY` in `inst/include/XAD/Config.hpp`. It sets how the tape
+  stores a recorded operation, so odelia's compiled `Tape` and every consumer
+  must be built with the same setting; it lives in the header rather than a
+  `-D` flag so that a consumer cannot leave it out.
 - The global-visibility load in `R/zzz.R` (`odelia_load_dll(local = FALSE)`) —
   needed for macOS/Linux.
 - The set of symbols **exported** from `odelia.dll` on Windows — do not add a
