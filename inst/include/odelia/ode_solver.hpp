@@ -451,9 +451,10 @@ public:
   //
   // Wherever the state changed width inside those rows the sweep stops, narrows
   // the System across it and transposes the map that widened it, so the rows it
-  // carries arrive by the same route a step's do. One active System serves the
-  // whole sweep: rebound once, and re-seated at each width after that
-  // (adjoint_system::reseat).
+  // carries arrive by the same route a step's do. A System that declares
+  // assign_from serves the whole sweep as one active System: rebound once, and
+  // re-seated at each width after that (adjoint_system::reseat). Any other is
+  // rebound at each width, as a fresh active System.
   //
   // An output adjoint that is a multiple of an earlier one is carried down as
   // that one and rebuilt at the end (adjoint_multiples), so it costs no sweep of
@@ -482,6 +483,12 @@ public:
     const ode::adjoint_multiples multiples = ode::adjoint_multiples::of(lambda);
     if (!multiples.any()) {
       return sweep_rows(lambda, parameter_adjoint, k_first, k_last, extra_stops);
+    }
+    // Asked here, before the batch is narrowed: the recordings below see only
+    // the kept rows, and the rebuild writes every row.
+    if (parameter_adjoint.size() < lambda.size()) {
+      util::stop("sweep_adjoint: one row of parameter adjoints per output, to "
+                 "accumulate into");
     }
     // The kept rows' parameter adjoints start where the caller's do and are
     // written back whole, so they accumulate in the order a sweep of the whole
@@ -595,17 +602,24 @@ private:
     ode::adjoint_tape<double> tape(false);
     ode::tape_scope<ode::adjoint_tape<double>> running{tape};
 
-    // The active System every recording below is taken on, built at the first
-    // and re-seated at each after it, so a sweep pays one System construction
-    // however many widths it passes through. Declared after the tape's scope,
-    // so it releases its slots with the tape still active.
+    // The active System every recording below is taken on. A System that
+    // declares assign_from is built at the first and re-seated at each after
+    // it, so a sweep pays one System construction however many widths it
+    // passes through; any other is built afresh at each. Declared after the
+    // tape's scope, so it releases its slots with the tape still active.
     std::optional<ode::adjoint_system<System>> active;
     const auto seat = [&]() -> ode::adjoint_system<System>& {
       if (active) {
-        active->reseat(system);
-      } else {
-        active.emplace(system, tape);
+        if constexpr (ode::AssignsFrom<
+                          typename ode::adjoint_system<System>::system_type,
+                          System>) {
+          active->reseat(system);
+          return *active;
+        } else {
+          active.reset();
+        }
       }
+      active.emplace(system, tape);
       return *active;
     };
 

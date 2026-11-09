@@ -270,7 +270,8 @@ struct step_record : schedule_row {
 
 // A System on one scalar that can be brought to where another System stands, in
 // place: `a.assign_from(b)` leaves `a` equal to `b.template rebind<U>()` in every
-// member a recording reads, at whatever width `b` has. Optional: a sweep that
+// member a recording reads, at whatever width `b` has. `b` is the System `a` was
+// rebound from, at another state, which is the only pairing a sweep makes. Optional: a sweep that
 // passes through several widths holds one active System across all of them and
 // re-seats it at each (adjoint_system::reseat), which this makes a write where it
 // would otherwise be a rebind -- for a System whose construction is costly, the

@@ -1330,6 +1330,19 @@ void test_multiples_are_swept_once(odelia::ode::Method m) {
   }
   check(carried_exact, "a carried row is its own sweep's, bit for bit");
   check(rebuilt_close, "and a rebuilt multiple agrees with its own sweep to rounding");
+
+  // The rebuild writes every row's parameter adjoints, so a batch with fewer
+  // rows than the output adjoints is refused before anything is swept, as an
+  // unfolded batch is.
+  odelia::ode::adjoint_batch folded = lambda0;
+  odelia::ode::adjoint_batch short_dp(multiples.kept.size(), 1);
+  bool refused = false;
+  try {
+    s.sweep_adjoint(folded, short_dp);
+  } catch (const std::exception&) {
+    refused = true;
+  }
+  check(refused, "a parameter batch shorter than the output adjoints is refused");
 }
 
 // A run that starts with NO state: the first insertion is a map from the

@@ -336,22 +336,16 @@ struct adjoint_system {
     }
   }
 
-  // Brought to where `passive` stands, at whatever width it has: written in
-  // place by the System's own assign_from where it declares one (see
-  // AssignsFrom), and rebound afresh where it does not. Every slot is released
-  // first, as before a recording, and the parameter addresses are read again
-  // after, since a write that adds or removes members can move them.
-  void reseat(const System& passive) {
+  // Brought to where `passive` stands, at whatever width it has, by the
+  // System's own assign_from (see AssignsFrom). Every slot is released first,
+  // as before a recording, and the parameter addresses are read again after,
+  // since a write that adds or removes members can move them. A System with no
+  // assign_from is not re-seated: its holder builds a fresh one.
+  void reseat(const System& passive)
+    requires AssignsFrom<system_type, System>
+  {
     release();
-    if constexpr (AssignsFrom<system_type, System>) {
-      system.assign_from(passive);
-    } else {
-      static_assert(std::is_move_assignable_v<system_type>,
-                    "adjoint_system::reseat: a System with no assign_from is "
-                    "rebound afresh and moved into place, so it must be move "
-                    "assignable");
-      system = passive.template rebind<scalar>();
-    }
+    system.assign_from(passive);
     parameters = system.ad_parameters();
   }
 
