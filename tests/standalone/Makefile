@@ -32,8 +32,9 @@ HEADERS  = $(wildcard ../../inst/include/odelia/*.hpp)
 
 all: build selfcontained layering
 	./r_free
+	./stage_times
 
-build: r_free
+build: r_free stage_times
 
 # Every core header must also compile on its own -- no leaning on whichever
 # sibling header happened to be included first to have pulled in <vector> or
@@ -64,9 +65,18 @@ r_free: r_free.o Tape.o
 r_free.o: r_free.cpp $(HEADERS)
 	$(CXX) $(CXXSTD) $(OPT) $(WARN) $(INCLUDES) -c -o $@ $<
 
+# Optimised, and under the compiler's own contraction default: a fused
+# multiply-add the optimiser chooses in one copy of a stage time and not in
+# another is what this checks the steppers leave it no room for.
+stage_times: stage_times.o Tape.o
+	$(CXX) $(CXXSTD) -o $@ $^
+
+stage_times.o: stage_times.cpp $(HEADERS)
+	$(CXX) $(CXXSTD) -O2 $(WARN) $(INCLUDES) -c -o $@ $<
+
 # Vendored third-party code: build it quietly, we do not police its warnings.
 Tape.o: ../../src/Tape.cpp
 	$(CXX) $(CXXSTD) $(OPT) -w $(INCLUDES) -c -o $@ $<
 
 clean:
-	rm -f r_free r_free.o Tape.o
+	rm -f r_free r_free.o stage_times stage_times.o Tape.o
