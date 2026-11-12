@@ -134,7 +134,7 @@ private:
       for (std::size_t q = 0; q < line.size(); ++q) {
         line[q] = from[q] + (to[q] - from[q]) * u;
       }
-      sys.subsystem_rates(time + u * h, s, line, out);
+      sys.subsystem_rates(util::time_in_step(time, u, h), s, line, out);
     };
   }
   // The stages' fractions of the step, ascending: where a predictor's substeps
@@ -401,7 +401,8 @@ void SubsystemSubsteps<Stepper, System>::take_substep(
   std::vector<S> stage(own.size());
   for (int i = 1; i < 6; ++i) {
     self().stage_state(i, own, r, substep, stage);
-    rates(from + Stepper::stage_fraction(i) * (to - from), stage, r[i]);
+    rates(util::time_in_step(from, Stepper::stage_fraction(i), to - from),
+          stage, r[i]);
   }
   self().step_end(own, r, substep, out);
 }

@@ -21,6 +21,7 @@ Meta
 # standalone C++ core check (tests/standalone)
 tests/standalone/*.o
 tests/standalone/r_free
+tests/standalone/stage_times
 tests/standalone/probe_*
 !tests/standalone/probe_*.cpp
 

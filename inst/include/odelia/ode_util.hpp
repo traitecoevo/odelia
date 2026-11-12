@@ -27,6 +27,16 @@ inline bool is_finite(double x) {
   return std::isfinite(x);
 }
 
+// The time `fraction` of the way through a step of `h` from `time`. A step and
+// the sweep that reverses it must hand a System the same stage time to the bit,
+// and a compiler free to fuse `time + fraction * h` into one rounding may fuse
+// one copy of it and not another. The product is rounded on its own, through a
+// volatile no compiler can fuse across, so every copy rounds twice.
+inline double time_in_step(double time, double fraction, double h) {
+  const volatile double offset = fraction * h;
+  return time + offset;
+}
+
 // The value of an active scalar with every derivative layer removed, down to the
 // plain double. xad::value() peels one layer; this recurses until it bottoms out
 // at double. `value` is found by argument-dependent lookup at the point of use,

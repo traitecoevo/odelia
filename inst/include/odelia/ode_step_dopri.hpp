@@ -35,6 +35,7 @@
 #include <odelia/adjoint.hpp>
 #include <odelia/ode_interface.hpp>
 #include <odelia/ode_substeps.hpp>
+#include <odelia/ode_util.hpp>
 
 namespace odelia {
 namespace ode {
@@ -265,7 +266,7 @@ private:
   }
 
   double stage_time(int i, double time, double h) const {
-    return time + stage_fraction(i) * h;
+    return util::time_in_step(time, stage_fraction(i), h);
   }
 
   // The tableau as SubsystemSubsteps reads it: stage 5 is at t + h, a step
