@@ -1,4 +1,5 @@
-# Build and run the R-free core check as plain C++ (#43).
+# Build and run the R-free core check as plain C++ (#43), and the check that
+# every copy of a stage time rounds it the same way (stage_times.cpp).
 #
 #   make          build and run
 #   make build    build only

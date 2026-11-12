@@ -401,7 +401,8 @@ void SubsystemSubsteps<Stepper, System>::take_substep(
   std::vector<S> stage(own.size());
   for (int i = 1; i < 6; ++i) {
     self().stage_state(i, own, r, substep, stage);
-    rates(from + Stepper::stage_fraction(i) * (to - from), stage, r[i]);
+    rates(util::time_in_step(from, Stepper::stage_fraction(i), to - from),
+          stage, r[i]);
   }
   self().step_end(own, r, substep, out);
 }
