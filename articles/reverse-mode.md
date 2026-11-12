@@ -98,7 +98,7 @@ rbind(sweep = r$d_params, difference = fd, relative = abs(r$d_params - fd) / abs
 #>                    [,1]          [,2]          [,3]
 #> sweep      5.454032e-02 -8.951258e-01 -5.021772e+00
 #> difference 5.454037e-02 -8.951257e-01 -5.021773e+00
-#> relative   8.291362e-07  7.669012e-08  2.905570e-07
+#> relative   8.340217e-07  7.629323e-08  2.907339e-07
 ```
 
 The cost of `sweep_adjoint` is one more pass over the trajectory, which

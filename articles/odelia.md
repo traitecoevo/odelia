@@ -250,7 +250,7 @@ stiff_dopri <- ode_solve(vdp, c(2, 0), times, parms = 1e-4, method = "dopri", au
 rbind(rodas = ode_counts(stiff_rodas), dopri = ode_counts(stiff_dopri))
 #>       n_rhs n_jac n_steps n_rejections
 #> rodas  6353   782     782           16
-#> dopri 71623     0   11904           33
+#> dopri 71623     0   11903           34
 ```
 
 Underneath

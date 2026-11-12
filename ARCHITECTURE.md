@@ -207,14 +207,19 @@ consumers use the solver, and what lets consumers that *are* Rcpp
 packages — `leaf`, for one — run their C++ test suites without an R
 session (traitecoevo/leaf_cpp#11, odelia \#43).
 
-`tests/standalone/` holds the guard: a translation unit that includes
-the whole core and integrates the Lorenz system (compiled, and through a
-callback), built by `make test-cpp` with `-I inst/include` and nothing
-else. CI runs it on a runner with no R. It fails loudly if an R header
-creeps back in, and — the subtler case — if a header comes to rely on a
-standard-library facility it never includes and was quietly getting from
-R’s headers. `spline.hpp` was using `assert` without `<cassert>` on
-exactly that basis.
+`tests/standalone/` holds the guard: `r_free.cpp`, a translation unit
+that includes the whole core and integrates the Lorenz system (compiled,
+and through a callback), built by `make test-cpp` with `-I inst/include`
+and nothing else. CI runs it on a runner with no R. It fails loudly if
+an R header creeps back in, and — the subtler case — if a header comes
+to rely on a standard-library facility it never includes and was quietly
+getting from R’s headers. `spline.hpp` was using `assert` without
+`<cassert>` on exactly that basis.
+
+Beside it, `stage_times.cpp` is built at `-O2` under the compiler’s own
+contraction default, and fails if a step, a replay and a sweep do not
+hand a System the same stage times, each rounded as `util::time_in_step`
+rounds it.
 
 Note that the standalone build compiles `src/Tape.cpp` alongside the
 test. That is the single-`Tape`-object rule above, not an R dependency:
