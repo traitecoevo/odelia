@@ -27,6 +27,21 @@ inline bool is_finite(double x) {
   return std::isfinite(x);
 }
 
+// The time `fraction` of the way through a step of `h` from `time`. A step and
+// the sweep that reverses it must hand a System the same stage time to the bit,
+// and a compiler free to fuse `time + fraction * h` may fuse one copy of it and
+// not another. So the rounding is fixed here: fused where the target has a fast
+// fused multiply-add, which is what such a compiler does where nothing else
+// shares the product, and the plain sum where it has none, which no compiler
+// can fuse.
+inline double time_in_step(double time, double fraction, double h) {
+#ifdef __FP_FAST_FMA
+  return std::fma(fraction, h, time);
+#else
+  return time + fraction * h;
+#endif
+}
+
 // The value of an active scalar with every derivative layer removed, down to the
 // plain double. xad::value() peels one layer; this recurses until it bottoms out
 // at double. `value` is found by argument-dependent lookup at the point of use,

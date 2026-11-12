@@ -11,6 +11,7 @@
 #include <odelia/adjoint.hpp>
 #include <odelia/ode_interface.hpp>
 #include <odelia/ode_substeps.hpp>
+#include <odelia/ode_util.hpp>
 
 namespace odelia {
 namespace ode {
@@ -258,7 +259,7 @@ const double* Step<System>::stage_row(int i) const {
 
 template <class System>
 double Step<System>::stage_time(int i, double time, double h) const {
-  return i == 0 ? time : time + ah[i - 1] * h;
+  return i == 0 ? time : util::time_in_step(time, ah[i - 1], h);
 }
 
 template <class System>

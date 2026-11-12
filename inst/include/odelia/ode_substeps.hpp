@@ -134,7 +134,7 @@ private:
       for (std::size_t q = 0; q < line.size(); ++q) {
         line[q] = from[q] + (to[q] - from[q]) * u;
       }
-      sys.subsystem_rates(time + u * h, s, line, out);
+      sys.subsystem_rates(util::time_in_step(time, u, h), s, line, out);
     };
   }
   // The stages' fractions of the step, ascending: where a predictor's substeps
