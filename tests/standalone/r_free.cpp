@@ -31,6 +31,7 @@
 #include <odelia/ode_solver.hpp>
 #include <odelia/sweep.hpp>
 #include <odelia/implicit_node.hpp>
+#include <odelia/root_find.hpp>
 #include <odelia/tangent.hpp>
 #include <odelia/ode_steady_state.hpp>
 #include <odelia/ode_callback_system.hpp>
