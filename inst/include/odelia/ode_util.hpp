@@ -106,6 +106,21 @@ struct AdjointOverflowError : std::runtime_error {
   throw AdjointOverflowError(msg);
 }
 
+// Ends handed to a bracketed root-finder that do not bracket a root: out of
+// order, or with f of one sign at both. The caller chose the ends, so this is
+// the caller's error, and a std::domain_error, as Boost's TOMS748 raises it.
+// Not DomainError: a stepper would read that as a state to shrink away from.
+struct BracketError : std::domain_error {
+  explicit BracketError(const std::string &msg) : std::domain_error(msg) {}
+};
+
+// A bracketed root-finder that spent its iterations with its bracket still
+// wider than the tolerance. Its own type so a caller can make it whatever a
+// failed search means to it, such as a rejected operating point.
+struct RootFindError : std::runtime_error {
+  explicit RootFindError(const std::string &msg) : std::runtime_error(msg) {}
+};
+
 // Not an R warning: nothing in the solver core may assume an R session exists.
 // Callers that need one should raise it from their own R-facing code. Uses
 // fprintf rather than std::cerr to keep <iostream>, and its per-translation-unit

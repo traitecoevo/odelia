@@ -1,5 +1,6 @@
-# Build and run the R-free core check as plain C++ (#43), and the check that
-# every copy of a stage time rounds it the same way (stage_times.cpp).
+# Build and run the R-free core check as plain C++ (#43), the check that
+# every copy of a stage time rounds it the same way (stage_times.cpp), and the
+# bracketed root-finders' tests (root_find.cpp).
 #
 #   make          build and run
 #   make build    build only
@@ -34,8 +35,9 @@ HEADERS  = $(wildcard ../../inst/include/odelia/*.hpp)
 all: build selfcontained layering
 	./r_free
 	./stage_times
+	./root_find
 
-build: r_free stage_times
+build: r_free stage_times root_find
 
 # Every core header must also compile on its own -- no leaning on whichever
 # sibling header happened to be included first to have pulled in <vector> or
@@ -75,9 +77,14 @@ stage_times: stage_times.o Tape.o
 stage_times.o: stage_times.cpp $(HEADERS)
 	$(CXX) $(CXXSTD) -O2 $(WARN) $(INCLUDES) -c -o $@ $<
 
+# Optimised, as a consumer builds it: the test that a search allocates nothing
+# should hold of the code that runs.
+root_find: root_find.cpp $(HEADERS)
+	$(CXX) $(CXXSTD) -O2 $(WARN) $(INCLUDES) -o $@ $<
+
 # Vendored third-party code: build it quietly, we do not police its warnings.
 Tape.o: ../../src/Tape.cpp
 	$(CXX) $(CXXSTD) $(OPT) -w $(INCLUDES) -c -o $@ $<
 
 clean:
-	rm -f r_free r_free.o stage_times stage_times.o Tape.o
+	rm -f r_free r_free.o stage_times stage_times.o root_find Tape.o

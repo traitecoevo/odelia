@@ -21,7 +21,8 @@
 
 | Header | Holds |
 |---|---|
-| `ode_util.hpp` | `util::stop` / `util::warning` (R-free), `to_passive`, `DomainError` |
+| `ode_util.hpp` | `util::stop` / `util::warning` (R-free), `to_passive`, `DomainError`, and the root-finders' `BracketError` and `RootFindError` |
+| `root_find.hpp` | `root::toms748`, `root::toms748_bracket`, `root::bisect`, `root::tolerance`: bracketed root-finding on a target `double -> double`, Boost.Math's searches carried without Boost; includes only `ode_util.hpp` |
 | `tangent.hpp` | `tangent_scalar<T>`, the forward-mode scalar; refuses a tangent above an adjoint |
 | `adjoint_scalar.hpp` | `adjoint_scalar<T>` and `adjoint_tape<T>`, the reverse-mode scalar and its tape; `visit_active` and `count_active_slots`, the walk over the active values a class holds |
 | `with_slope.hpp` | `with_slope<T>`, a value paired with its slope; no includes |
