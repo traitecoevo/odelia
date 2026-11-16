@@ -1,3 +1,13 @@
+## odelia 0.11.3
+
+**odelia locates events.** `Solver::advance_until(g, time_max, tol)` steps until `g(t, y)` changes the sign it had where the call started, and stops at that time; in R, `OdeSolver$advance_until(event, time_max, tol)`. A crossing is seen at the end of a step. Its time is found by TOMS748 (`root_find.hpp`) on that step's interpolant, so the search evaluates no rates. The step is then taken back, and the solver steps from its start to the located time. The state left at the event is therefore integrated, not interpolated, under every stepper. It is the state a run asked to land on that time would hold, bit for bit, and so is every step after it: a new standalone test checks both under all three steppers and both step-size rules. The time is as accurate as the interpolant: under Dormand–Prince that is the step's own order, and under Cash–Karp and Rosenbrock cubic Hermite, one order short. In the test, `y' = y` reaches 2, …, 10 within 5e-9 of `log(level)` under `dopri` and `rodas` and 6e-7 under `rkck`, at a solver tolerance of 1e-8. A crossing that starts and ends within one step is not seen.
+
+The pieces are on `SolverInternal`: `locate()` finds the crossing in the last step and allocates nothing once the solver has interpolated; `hold_step_start()` and `retract_step()` take the last adaptive step back, restoring the control's memory, the suggested step, the derivative's carry, the subsystem's trend and the record.
+
+plant's `run(individual, sizes = )` moves to this next, in place of re-integrating from the bracket's start for every trial (traitecoevo/plant#804).
+
+A **patch** bump: additions only, and no number moves.
+
 ## odelia 0.11.2
 
 **odelia finds roots.** `root_find.hpp` holds bracketed one-dimensional root-finding on any target `double -> double`: TOMS748 (`root::toms748`, and `root::toms748_bracket` returning the final bracket) for a smooth target, and bisection (`root::bisect`) for one with no smoothness to exploit. TOMS748 takes the caller's values at the ends, which a caller that chose the bracket by evaluating them already has, or evaluates them itself. A search allocates nothing and takes its target by reference, so it can run inside a step.
