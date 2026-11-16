@@ -69,6 +69,15 @@ refuse_bracket(const char* method, const char* why, double a, double b,
       ") = " + util::format_double(fb));
 }
 
+// Ends out of order, refused before f is evaluated at either.
+[[noreturn, gnu::cold, gnu::noinline]] inline void
+refuse_order(const char* method, double a, double b) {
+  throw util::BracketError(std::string(method) +
+                           ": the ends are out of order: a = " +
+                           util::format_double(a) +
+                           ", b = " + util::format_double(b));
+}
+
 [[noreturn, gnu::cold, gnu::noinline]] inline void
 refuse_unconverged(const char* method, double a, double b,
                    const tolerance& tol, std::uintmax_t used) {
@@ -385,9 +394,7 @@ double toms748(F&& f, double a, double b, double fa, double fb,
 template <class F>
 double toms748(F&& f, double a, double b, const tolerance& tol) {
   if (a >= b) [[unlikely]] {
-    internal::refuse_bracket("toms748", "the ends are out of order", a, b,
-                             std::numeric_limits<double>::quiet_NaN(),
-                             std::numeric_limits<double>::quiet_NaN());
+    internal::refuse_order("toms748", a, b);
   }
   std::uintmax_t used = tol.max_iterations;
   std::pair<double, double> r(a, b);
