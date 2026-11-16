@@ -1,6 +1,7 @@
 # Build and run the R-free core check as plain C++ (#43), the check that
-# every copy of a stage time rounds it the same way (stage_times.cpp), and the
-# bracketed root-finders' tests (root_find.cpp).
+# every copy of a stage time rounds it the same way (stage_times.cpp), the
+# bracketed root-finders' tests (root_find.cpp), and event location's
+# (event_location.cpp).
 #
 #   make          build and run
 #   make build    build only
@@ -36,8 +37,9 @@ all: build selfcontained layering
 	./r_free
 	./stage_times
 	./root_find
+	./event_location
 
-build: r_free stage_times root_find
+build: r_free stage_times root_find event_location
 
 # Every core header must also compile on its own -- no leaning on whichever
 # sibling header happened to be included first to have pulled in <vector> or
@@ -82,9 +84,18 @@ stage_times.o: stage_times.cpp $(HEADERS)
 root_find: root_find.cpp $(HEADERS)
 	$(CXX) $(CXXSTD) -O2 $(WARN) $(INCLUDES) -o $@ $<
 
+# Optimised for the same reason: it checks that locating an event on the
+# interpolant allocates nothing.
+event_location: event_location.o Tape.o
+	$(CXX) $(CXXSTD) -o $@ $^
+
+event_location.o: event_location.cpp $(HEADERS)
+	$(CXX) $(CXXSTD) -O2 $(WARN) $(INCLUDES) -c -o $@ $<
+
 # Vendored third-party code: build it quietly, we do not police its warnings.
 Tape.o: ../../src/Tape.cpp
 	$(CXX) $(CXXSTD) $(OPT) -w $(INCLUDES) -c -o $@ $<
 
 clean:
-	rm -f r_free r_free.o stage_times stage_times.o root_find Tape.o
+	rm -f r_free r_free.o stage_times stage_times.o root_find \
+	  event_location event_location.o Tape.o

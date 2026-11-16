@@ -413,6 +413,88 @@ public:
     return out;
   }
 
+  // Step adaptively until g(t, y) reaches zero or the time reaches time_max,
+  // whichever comes first, and return the time g reached zero, or nothing
+  // where time_max came first.
+  //
+  // An event is a change in the sign g had where the call started, seen at
+  // the end of a step. It is located on that step's interpolant (locate(), no
+  // rates evaluated) to `tol` in time, the step is taken back
+  // (retract_step()), and the solver then steps to the located time as a run
+  // asked to land on it would. The state left there is therefore an
+  // integrated one, to the solver's own tolerance under every stepper, and
+  // everything after it is what that run would do from there. g = 0 at the
+  // start is an event at the start, and stepping stops there.
+  //
+  // A step whose ends share a sign is taken to cross nothing, so a g that
+  // crosses and crosses back inside one step goes unseen; step_size_max is
+  // the bound on how short-lived a crossing can be and still be found.
+  //
+  // At a located event g is zero only to the location's tolerance and the
+  // solver's, so a caller that asks again with the same g starts from a value
+  // of either sign near zero, and can be stopped again straight away. Ask for
+  // the next level instead, as a sequence of sizes does.
+  //
+  // `g` is called as g(t, y) with y a const state_type&, and must not change
+  // the System: the interpolant's states are not ones the System holds.
+  template <class G>
+  std::optional<double> advance_until(G&& g, double time_max,
+                                      const root::tolerance& tol)
+  {
+    if (!(time_max >= time()))
+    {
+      util::stop("advance_until(): time_max = " + util::format_double(time_max) +
+                 " is before the current time " + util::format_double(time()));
+    }
+    double g_prev = g(time(), solver.state_ref());
+    if (!std::isfinite(g_prev))
+    {
+      util::stop("advance_until(): g is not finite at the start, t = " +
+                 util::format_double(time()));
+    }
+    if (g_prev == 0.0)
+    {
+      return time();
+    }
+    const bool positive = g_prev > 0.0;
+    while (time() < time_max)
+    {
+      solver.hold_step_start();
+      solver.step(system, time_max);
+      const double g_end = g(time(), solver.state_ref());
+      if (!std::isfinite(g_end))
+      {
+        util::stop("advance_until(): g is not finite at t = " +
+                   util::format_double(time()));
+      }
+      if (g_end == 0.0)
+      {
+        if (collect)
+        {
+          history.push_back(system);
+        }
+        return time();
+      }
+      if ((g_end > 0.0) == positive)
+      {
+        g_prev = g_end;
+        if (collect)
+        {
+          history.push_back(system);
+        }
+        continue;
+      }
+      const double t_event = solver.locate(g, g_prev, g_end, tol);
+      solver.retract_step(system);
+      while (time() < t_event)
+      {
+        step(t_event);
+      }
+      return t_event;
+    }
+    return std::nullopt;
+  }
+
   double get_step_size() const { return solver.get_step_size(); }
   void set_step_size(double h) { solver.set_step_size(h); }
   std::size_t get_n_rejections() const { return solver.get_n_rejections(); }
