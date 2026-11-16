@@ -246,9 +246,11 @@ void test_a_search_allocates_nothing() {
     sum += root::toms748(target, 0.0, 3.0, tol);
     sum += root::bisect(target, 0.0, 3.0, tol);
   }
-  check(allocations == before && std::isfinite(sum),
-        "400 converging searches made " + std::to_string(allocations - before) +
-            " allocations");
+  // Read before the message below is built: the message allocates, and a
+  // compiler may evaluate it before the comparison beside it.
+  const std::size_t made = allocations - before;
+  check(made == 0 && std::isfinite(sum),
+        "400 converging searches made " + std::to_string(made) + " allocations");
 }
 
 }  // namespace
