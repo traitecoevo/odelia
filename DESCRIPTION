@@ -6,11 +6,7 @@ Authors@R: c(
     person("Daniel", "Falster", , "daniel.falster@unsw.edu.au", c("aut", "cre"), 
             comment = c(ORCID = "0000-0002-9814-092X")),
     person("Richard", "FitzJohn", , "", "aut"),
-    person("Andrew", "O'Reilly-Nugent", , "", "aut"),
-    person("John", "Maddock", role = c("ctb", "cph"),
-            comment = "Boost.Math's TOMS748 and bisection, in root_find.hpp (Boost Software License 1.0)"),
-    person("Matt", "Borland", role = c("ctb", "cph"),
-            comment = "Boost.Math's TOMS748 and bisection, in root_find.hpp (Boost Software License 1.0)")
+    person("Andrew", "O'Reilly-Nugent", , "", "aut")
     )
 Maintainer: Daniel Falster <daniel.falster@unsw.edu.au>
 Description: odelia provides an ODE solver in C++ header files, offering both
