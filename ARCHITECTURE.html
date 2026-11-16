@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.11.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.11.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -54,7 +54,11 @@
 <th>Holds</th>
 </tr></thead><tbody><tr><td><code>ode_util.hpp</code></td>
 <td>
-<code>util::stop</code> / <code>util::warning</code> (R-free), <code>to_passive</code>, <code>DomainError</code>
+<code>util::stop</code> / <code>util::warning</code> (R-free), <code>to_passive</code>, <code>DomainError</code>, and the root-finders’ <code>BracketError</code> and <code>RootFindError</code>
+</td>
+</tr><tr><td><code>root_find.hpp</code></td>
+<td>
+<code>root::toms748</code>, <code>root::toms748_bracket</code>, <code>root::bisect</code>, <code>root::tolerance</code>: bracketed root-finding on a target <code>double -&gt; double</code>, Boost.Math’s searches carried without Boost; includes only <code>ode_util.hpp</code>
 </td>
 </tr><tr><td><code>tangent.hpp</code></td>
 <td>
