@@ -72,6 +72,17 @@ Rcpp::NumericMatrix RSolver_advance_collect(SEXP solver_xp, Rcpp::NumericVector 
   return out;
 }
 
+// Step until event(t, y) changes the sign it had at the start, or to time_max:
+// the time it did, located to `tol` in time, or NA where time_max came first.
+// [[Rcpp::export]]
+double RSolver_advance_until(SEXP solver_xp, Rcpp::Function event,
+                             double time_max, double tol) {
+  const auto g = rinterface::wrap_event(event);
+  const std::optional<double> t =
+      get_rsolver(solver_xp)->advance_until(g, time_max, {tol, tol});
+  return t ? *t : NA_REAL;
+}
+
 // [[Rcpp::export]]
 double RSolver_time(SEXP solver_xp) {
   return get_rsolver(solver_xp)->time();

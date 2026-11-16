@@ -22,6 +22,8 @@ Meta
 tests/standalone/*.o
 tests/standalone/r_free
 tests/standalone/stage_times
+tests/standalone/root_find
+tests/standalone/event_location
 tests/standalone/probe_*
 !tests/standalone/probe_*.cpp
 

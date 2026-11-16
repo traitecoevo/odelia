@@ -125,6 +125,10 @@ check_callback <- function(f, name, nullable = FALSE) {
 #' @param h A step size.
 #' @param dense `TRUE` to read the requested times off each step's
 #'   interpolant, `FALSE` to land a step on each; see `advance_collect()`.
+#' @param event Function `event(t, y)` returning one number; see
+#'   `advance_until()`.
+#' @param tol How closely the time of an event is located: the bracket it is
+#'   found in is narrower than `tol * (1 + |t|)`.
 #' @export
 #' @examples
 #' decay <- function(t, y) -y
@@ -191,6 +195,31 @@ OdeSolver <- R6::R6Class(
     advance_collect = function(times, dense = TRUE) {
       private$guard()
       RSolver_advance_collect(private$ptr, as.numeric(times), isTRUE(dense))
+    },
+
+    #' @description Advance by adaptive steps until `event(t, y)` changes
+    #'   the sign it had when called, or to `time_max`, whichever comes
+    #'   first. Returns the time of the event, or `NA` where `time_max` came
+    #'   first; either way the solver is left there. `event` returns one
+    #'   number, and a value of zero at the start is an event at the start.
+    #'
+    #'   The crossing is seen at the end of a step and located to `tol` in
+    #'   time on that step's interpolant, at no further evaluation of `rhs`
+    #'   (see `advance_collect()` for that interpolant's order under each
+    #'   method). The solver then steps from the start of that step to the
+    #'   located time, so the state there is integrated, and everything after
+    #'   it is what a run asked to land on that time would do. A sign change
+    #'   that starts and ends inside one step is not seen. Asking again with
+    #'   the same `event` starts from a value near zero of either sign and
+    #'   can stop straight away; ask for the next level instead.
+    advance_until = function(event, time_max, tol = 1e-10) {
+      private$guard()
+      event <- check_callback(event, "event")
+      if (!is.numeric(tol) || length(tol) != 1 || !is.finite(tol) || tol <= 0) {
+        stop("tol must be a single positive number", call. = FALSE)
+      }
+      RSolver_advance_until(private$ptr, event, as.numeric(time_max),
+                            as.numeric(tol))
     },
 
     #' @description Current time.

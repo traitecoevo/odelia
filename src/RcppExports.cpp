@@ -664,6 +664,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// RSolver_advance_until
+double RSolver_advance_until(SEXP solver_xp, Rcpp::Function event, double time_max, double tol);
+RcppExport SEXP _odelia_RSolver_advance_until(SEXP solver_xpSEXP, SEXP eventSEXP, SEXP time_maxSEXP, SEXP tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type event(eventSEXP);
+    Rcpp::traits::input_parameter< double >::type time_max(time_maxSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(RSolver_advance_until(solver_xp, event, time_max, tol));
+    return rcpp_result_gen;
+END_RCPP
+}
 // RSolver_time
 double RSolver_time(SEXP solver_xp);
 RcppExport SEXP _odelia_RSolver_time(SEXP solver_xpSEXP) {
@@ -832,6 +846,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_odelia_RSolver_step", (DL_FUNC) &_odelia_RSolver_step, 2},
     {"_odelia_RSolver_advance_adaptive", (DL_FUNC) &_odelia_RSolver_advance_adaptive, 2},
     {"_odelia_RSolver_advance_collect", (DL_FUNC) &_odelia_RSolver_advance_collect, 3},
+    {"_odelia_RSolver_advance_until", (DL_FUNC) &_odelia_RSolver_advance_until, 4},
     {"_odelia_RSolver_time", (DL_FUNC) &_odelia_RSolver_time, 1},
     {"_odelia_RSolver_state", (DL_FUNC) &_odelia_RSolver_state, 1},
     {"_odelia_RSolver_rates", (DL_FUNC) &_odelia_RSolver_rates, 1},
