@@ -4,17 +4,20 @@
 
 // Bracketed one-dimensional root-finding on a target double -> double: TOMS748
 // (Alefeld, Potra and Shi 1995, ACM TOMS 21(3), 327-344) and bisection. Each
-// keeps a bracket [a, b] across which the target changes sign, so neither can
-// leave the ends it was handed. TOMS748 converges superlinearly on a smooth
-// target; bisection gains one bit per evaluation whatever the target.
+// keeps a bracket [a, b] across which the target changes sign. TOMS748
+// converges superlinearly on a smooth target; bisection gains one bit per
+// evaluation whatever the target.
 //
 // Both are Boost.Math's (`toms748_solve` in boost/math/tools/toms748_solve.hpp
 // and `bisect` in boost/math/tools/roots.hpp, Boost 1.90), carried here in
 // double so that the header core needs no Boost. The arithmetic is Boost's, in
 // Boost's order and split across the same functions, so a search evaluates the
 // target at the same points and ends on the same bracket as Boost's does;
-// tests/testthat/test-root-find.R holds the two to that. Boost's code is under
-// the Boost Software License, reproduced at the end of this file.
+// tests/testthat/test-root-find.R holds the two to that. One condition: the
+// target is called by reference, where Boost calls a fresh copy at every step,
+// so a target keeping state of its own by value searches differently. Boost's
+// code is under the Boost Software License, reproduced at the end of this
+// file.
 //
 // What is odelia's own is the refusal. A search that ends with its bracket
 // wider than the tolerance throws util::RootFindError. Boost returns that
@@ -97,7 +100,9 @@ inline int sign(double z) {
 // Evaluates f at c inside [a, b] and keeps the half that still brackets the
 // root, or sets a = c where f(c) is exactly zero. d and fd receive the end that
 // was dropped, the third-best estimate of the root. A c within a few ulps of
-// either end is moved inside first, so the bracket always shrinks.
+// either end is moved inside first. Not on a bracket of a few ulps below zero,
+// as in Boost: the first test needs a > 0, and the second can then put c past
+// b, which the bracket keeps.
 template <class F>
 void bracket(F& f, double& a, double& b, double c, double& fa, double& fb,
              double& d, double& fd) {
@@ -210,14 +215,17 @@ inline double cubic_interpolate(const double& a, const double& b,
 // Boost's toms748_solve, with the caller's end values. Returns the bracket it
 // ended on, and leaves in `max_iter` the evaluations it spent. Refuses ends that
 // do not bracket a root, but not a search that runs out: the public forms do.
+// Ends meeting the tolerance are returned before their signs are read, as in
+// Boost.
+//
+// One departure: with no evaluations to spend, Boost returns [ax, bx]
+// unchecked. Here the ends are checked first, so a cap of 0 refuses a bad
+// bracket and returns an exact zero at an end, as every other cap does.
 template <class F>
 std::pair<double, double> toms748_solve(F& f, const double& ax,
                                         const double& bx, const double& fax,
                                         const double& fbx, const tolerance& tol,
                                         std::uintmax_t& max_iter) {
-  if (max_iter == 0) {
-    return std::make_pair(ax, bx);
-  }
   std::uintmax_t count = max_iter;
   double a, b, fa, fb, c, u, fu, a0, b0, d, fd, e, fe;
   static const double mu = 0.5f;
@@ -243,6 +251,9 @@ std::pair<double, double> toms748_solve(F& f, const double& ax,
   if (sign(fa) * sign(fb) > 0) [[unlikely]] {
     refuse_bracket("toms748", "the ends do not bracket a root", ax, bx, fax,
                    fbx);
+  }
+  if (count == 0) {
+    return std::make_pair(a, b);
   }
   // Placeholders for the third and fourth estimates the first steps lack.
   fe = e = fd = 1e5F;
@@ -367,12 +378,17 @@ double toms748(F&& f, double a, double b, double fa, double fb,
 }
 
 // The same, evaluating f at both ends itself. Those two evaluations count
-// against tol.max_iterations, so a cap of 2 or less returns [a, b] unsearched,
-// and is refused unless [a, b] already meets the tolerance. Which end is
-// evaluated first is unspecified, as in Boost: a target whose value depends on
-// the order it is called in should take the form above.
+// against tol.max_iterations, so a cap of 2 or less evaluates nothing, and
+// returns the midpoint of [a, b] only where [a, b] already meets the
+// tolerance. Which end is evaluated first is unspecified, as in Boost: a target
+// whose value depends on the order it is called in should take the form above.
 template <class F>
 double toms748(F&& f, double a, double b, const tolerance& tol) {
+  if (a >= b) [[unlikely]] {
+    internal::refuse_bracket("toms748", "the ends are out of order", a, b,
+                             std::numeric_limits<double>::quiet_NaN(),
+                             std::numeric_limits<double>::quiet_NaN());
+  }
   std::uintmax_t used = tol.max_iterations;
   std::pair<double, double> r(a, b);
   if (used > 2) {

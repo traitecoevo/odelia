@@ -100,6 +100,12 @@ compile_root_find_comparison <- function() {
         if (form == "bracket") {
           ro = odelia::root::internal::toms748_solve(
               fo, a, b, alefeld(k, n, a), alefeld(k, n, b), tol, odelia_it);
+          const auto rp = odelia::root::toms748_bracket(
+              [&](double x) { return alefeld(k, n, x); }, a, b,
+              alefeld(k, n, a), alefeld(k, n, b), tol);
+          if (rp != ro) {
+            odelia_err = "toms748_bracket differs from the search";
+          }
           odelia_mid = odelia::root::toms748(
               [&](double x) { return alefeld(k, n, x); }, a, b,
               alefeld(k, n, a), alefeld(k, n, b), tol);

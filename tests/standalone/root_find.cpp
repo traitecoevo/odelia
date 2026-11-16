@@ -109,6 +109,10 @@ void test_an_exact_zero_at_an_end_is_the_root() {
   const auto at_b = root::toms748_bracket(f, -1.0, 0.3, -1.3, 0.0, tol);
   check(at_b.first == 0.3 && at_b.second == 0.3,
         "and [b, b] for f(b) = 0");
+  const auto at_a_none =
+      root::toms748_bracket(f, 0.3, 1.0, 0.0, 0.7, {1e-12, 1e-12, 0});
+  check(at_a_none.first == 0.3 && at_a_none.second == 0.3,
+        "with no evaluations to spend, as with any");
   check(root::toms748(line_target, 0.3, 1.0, tol) == 0.3,
         "toms748 evaluating the ends returns that end");
   check(root::bisect(line_target, 0.3, 1.0, tol) == 0.3 &&
@@ -137,6 +141,15 @@ void test_a_bracket_that_brackets_nothing_is_refused() {
   check(thrown([&] { root::bisect(sqrt2_target, 2.0, 1.0, tol); }) ==
             "BracketError",
         "bisect refuses ends out of order");
+  const root::tolerance none{1e-12, 1e-12, 0};
+  check(thrown([&] {
+          root::toms748_bracket(sqrt2_target, 2.0, 3.0, 2.0, 7.0, none);
+        }) == "BracketError",
+        "and with no evaluations to spend, as with any");
+  const root::tolerance two{1e-12, 1e-12, 2};
+  check(thrown([&] { root::toms748(sqrt2_target, 1.0, 1.0, two); }) ==
+            "BracketError",
+        "toms748 evaluating the ends refuses a zero-width bracket at any cap");
   bool is_domain_error = false;
   try {
     root::toms748(sqrt2_target, 2.0, 3.0, tol);
