@@ -222,8 +222,9 @@ inline double cubic_interpolate(const double& a, const double& b,
 }
 
 // Boost's toms748_solve, with the caller's end values. Returns the bracket it
-// ended on, and leaves in `max_iter` the evaluations it spent. Refuses ends that
-// do not bracket a root, but not a search that runs out: the public forms do.
+// ended on, and leaves in `max_iter` the evaluations it spent. Refuses ends
+// that do not bracket a root, but not a search that runs out: the public forms
+// do.
 // Ends meeting the tolerance are returned before their signs are read, as in
 // Boost.
 //
