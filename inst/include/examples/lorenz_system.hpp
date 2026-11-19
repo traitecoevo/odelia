@@ -18,6 +18,10 @@ public:
   // members.
   template <typename> friend class LorenzSystem;
 
+  // The rates compile at a tangent of a tangent, which a forward pass over a
+  // RODAS run takes the Jacobian at (NestsTangents in odelia/ode_jacobian.hpp).
+  static constexpr bool nests_tangents = true;
+
   LorenzSystem(T sigma_ = T(0.0), T R_ = T(0.0), T b_ = T(0.0))
     : y0_init(1.0), y1_init(1.0), y2_init(1.0),
       t0(0.0),

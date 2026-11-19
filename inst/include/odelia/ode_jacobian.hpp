@@ -90,6 +90,17 @@ struct has_ad_parameters<
     S, std::void_t<decltype(std::declval<S&>().ad_parameters())>>
     : std::true_type {};
 
+// A System whose rates compile two tangent layers deep, declared with
+//   static constexpr bool nests_tangents = true;
+// The Jacobian of a step taken at a tangent scalar -- a forward pass over a
+// RODAS run (sweep_tangent) -- is a tangent of a tangent. Declared rather than
+// detected: whether a System's rates compile at that scalar shows only when
+// they are instantiated, too late for the stepper to decline, and a System
+// stepped at a tangent scalar under the explicit steppers alone must not be
+// made to.
+template <typename S>
+concept NestsTangents = requires { requires S::nests_tangents; };
+
 // The tangent scalar a Jacobian differentiates on, formed lazily so that naming
 // it at an adjoint scalar does not instantiate tangent_over's refusal: there it
 // is the scalar itself, which Jacobian::ad_supported then rules out.
@@ -122,12 +133,13 @@ public:
   // Whether the forward-AD route is instantiable and usable for this System.
   // Requires (a) a rebind() hook, (b) a scalar that does not already carry
   // an adjoint (see value_is_adjoint), and (c) a tangent that can stand at the
-  // current scalar: one built from it, or, when the scalar is itself a tangent,
-  // one seated through its value slot (see seat()).
+  // current scalar: one built from it, or, when the scalar is itself a tangent
+  // and the System declares it NestsTangents, one seated through its value slot
+  // (see seat()).
   static constexpr bool ad_supported =
       !value_is_adjoint && Rebindable<System, tangent_type> &&
       (std::is_constructible<tangent_type, value_type>::value ||
-       CarriesDirection<value_type>);
+       (CarriesDirection<value_type> && NestsTangents<System>));
 
   // Whether a Jacobian can be had at all: the system's own hook, or the AD
   // route. Callers gate on this, so Jacobian can be class-instantiated even for

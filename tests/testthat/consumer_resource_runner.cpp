@@ -22,6 +22,7 @@ class ConsumerResource {
 public:
   using value_type = T;
   template <typename> friend class ConsumerResource;
+  static constexpr bool nests_tangents = true;
 
   explicit ConsumerResource(std::vector<double> p = {1, 0.1, 0.5, 0.2, 1, 2})
     : a(p[0]), h(p[1]), q(p[2]), m(p[3]), r(p[4]), K(p[5]) {

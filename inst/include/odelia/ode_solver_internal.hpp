@@ -312,12 +312,14 @@ private:
                            dydt_out_);
       } else {
         // RODAS is unavailable for this System: it has neither an
-        // ode_jacobian() hook nor a rebind() hook for the AD Jacobian, or its
-        // scalar carries an adjoint.
+        // ode_jacobian() hook nor a rebind() hook for the AD Jacobian, its
+        // scalar carries an adjoint, or its scalar is a tangent and it does not
+        // declare NestsTangents.
         util::stop("method='rodas' is not available for this system/scalar type "
                    "(needs an ode_jacobian() hook, or a rebind() hook at a "
-                   "scalar carrying no adjoint); use method='rkck' or "
-                   "method='dopri'.");
+                   "scalar carrying no adjoint, and at a tangent scalar "
+                   "`static constexpr bool nests_tangents = true`); use "
+                   "method='rkck' or method='dopri'.");
       }
     } else {
       with_row(stepper, substeps, inputs);

@@ -219,6 +219,8 @@ out$dy[3, , ]
 
 A System walked forward needs less than one swept in reverse. The concept `TangentSweepable` in `ode_interface.hpp`, which `sweep_tangent` asserts, asks for `rebind<U>()` to the lane scalar and `set_recorded_state(y, time)`, which is where the pass seats the directions it starts from. A direction on a parameter also needs `ad_parameters()`, and the rates must read each parameter live, as for a sweep. A System that widens is walked across its insertions as the run took them.
 
+Under RODAS the System also declares `static constexpr bool nests_tangents = true;` (`NestsTangents`), unless it supplies its own `ode_jacobian()`: the step's Jacobian is then a tangent of a tangent, and whether a System's rates compile at that scalar shows only when they are instantiated, so it is declared rather than detected. The Lorenz example declares it.
+
 Two limits:
 
 - A System that solves for values inside a stage (`SolvesForValues`) is refused at compile time. A forward pass would solve them again at the lane scalar instead of loading what the run solved for, and differentiate a function the run never computed.

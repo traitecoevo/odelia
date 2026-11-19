@@ -2835,6 +2835,22 @@ void test_tangent_refuses_a_subdivided_row() {
     refused = std::string(e.what()).find("subdivided") != std::string::npos;
   }
   check(refused, "sweep_tangent refuses a subdivided row");
+
+  // Grow does not declare nests_tangents, so RODAS has no Jacobian for it at
+  // the lane scalar, and the walk says why before it steps.
+  Grow<double> g2(1.0, 0.5);
+  odelia::ode::Solver<Grow<double>> r(g2, odelia::ode::OdeControl(),
+                                      odelia::ode::Method::rodas);
+  r.set_keep_states(true);
+  r.reset();
+  r.advance_adaptive(std::vector<double>{0.0, 1.0});
+  refused = false;
+  try {
+    r.sweep_tangent<1>(odelia::ode::tangent_directions{{0}, {}});
+  } catch (const std::runtime_error& e) {
+    refused = std::string(e.what()).find("nests_tangents") != std::string::npos;
+  }
+  check(refused, "a RODAS walk of a System that does not nest tangents is refused by name");
 }
 
 int main() {

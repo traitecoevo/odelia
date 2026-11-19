@@ -40,8 +40,9 @@ public:
   using state_type = std::vector<value_type>;
 
   // True when a Jacobian can be had: the system's own hook, or the AD route for
-  // a rebind()-able system at double or at a tangent scalar (a forward pass
-  // over the run). False at an adjoint scalar: a run under RODAS is never swept.
+  // a rebind()-able system at double, or at a tangent scalar (a forward pass
+  // over the run) where the System declares NestsTangents. False at an adjoint
+  // scalar: a run under RODAS is never swept.
   static constexpr bool supported = Jacobian<System>::supported;
 
   void resize(size_t size_) {

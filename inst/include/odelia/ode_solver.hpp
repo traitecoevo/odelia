@@ -920,6 +920,13 @@ std::vector<tangent_row> sweep_tangent(const System& start,
     util::stop("sweep_tangent: 'schedule' must hold at least the row it "
                "starts from");
   }
+  if (method == Method::rodas && !RodasStep<lane_system>::supported)
+  {
+    util::stop("sweep_tangent: under method='rodas' the System's Jacobian is a "
+               "tangent of a tangent, which it must declare it compiles "
+               "(`static constexpr bool nests_tangents = true`; see "
+               "NestsTangents) unless it has its own ode_jacobian()");
+  }
   for (const std::size_t r : rows)
   {
     if (r >= schedule.size())
