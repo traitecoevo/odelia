@@ -37,6 +37,8 @@
 #include <odelia/ode_callback_system.hpp>
 #include <examples/lorenz_system.hpp>
 
+#include <array>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <stdexcept>
@@ -2612,6 +2614,229 @@ void test_controller_memory() {
 
 } // namespace
 
+
+// ---------------------------------------------------------------------------
+// Forward mode: a recording walked again at the lane scalar (sweep_tangent).
+
+namespace {
+
+// d y_i / d (direction j) at the last row of a run, from one sweep per output
+// component: parameters first, then the initial state, as sweep_tangent lists
+// them.
+template <class System>
+std::vector<std::vector<double>> swept_jacobian(odelia::ode::Solver<System>& s,
+                                                std::size_t k_last) {
+  const std::size_t n = s.recording()[k_last].state.size();
+  std::vector<std::vector<double>> out(n);
+  for (std::size_t i = 0; i < n; ++i) {
+    std::vector<double> e(n, 0.0);
+    e[i] = 1.0;
+    odelia::ode::adjoint_batch lambda = odelia::ode::adjoint_batch::one(e);
+    odelia::ode::adjoint_batch dp(1, s.get_system_ref().ad_parameters().size());
+    s.sweep_adjoint(lambda, dp, 0, k_last);
+    out[i].assign(dp[0].begin(), dp[0].end());
+    out[i].insert(out[i].end(), lambda[0].begin(), lambda[0].end());
+  }
+  return out;
+}
+
+double relative_gap(double a, double b) {
+  return std::fabs(a - b) / std::max(1.0, std::fabs(b));
+}
+
+} // namespace
+
+// Forward and reverse differentiate the same recorded steps, so they agree to
+// rounding, at the last row and at one inside the run.
+void test_tangent_matches_the_sweep(odelia::ode::Method m) {
+  LorenzSystem<double> lorenz(10.0, 28.0, 8.0 / 3.0);
+  odelia::ode::Solver<LorenzSystem<double>> s(lorenz, odelia::ode::OdeControl(), m);
+  s.set_collect(false);
+  s.set_keep_states(true);
+  s.advance_adaptive(std::vector<double>{0.0, 0.5, 1.0});
+  const std::size_t last = s.recording().size() - 1;
+  std::size_t middle = 0;
+  while (s.recording()[middle].time != 0.5) ++middle;
+
+  const odelia::ode::tangent_directions wrt{{0, 1, 2}, {0, 1, 2}};
+  const auto d = s.sweep_tangent<4>(wrt, {middle, last});
+  check(d.size() == 2 && d[1].directions == 6 && d[1].value.size() == 3,
+        "one answer per row asked for, six directions over three components");
+  double worst = 0.0;
+  for (const std::size_t r : {std::size_t{0}, std::size_t{1}}) {
+    const auto swept = swept_jacobian(s, r == 0 ? middle : last);
+    for (std::size_t i = 0; i < 3; ++i) {
+      for (std::size_t j = 0; j < 6; ++j) {
+        worst = std::max(worst, relative_gap(d[r].at(i, j), swept[i][j]));
+      }
+    }
+  }
+  check(worst < 1e-10, "forward and reverse agree at every entry, two rows");
+  std::printf("       (largest gap %.3g)\n", worst);
+
+  double value_gap = 0.0;
+  for (std::size_t i = 0; i < 3; ++i) {
+    value_gap = std::max(value_gap, relative_gap(d[1].value[i],
+                                                 s.recording()[last].state[i]));
+  }
+  check(value_gap < 1e-12, "and the walk's values are the run's");
+}
+
+// Across an insertion the walk widens as the run did, and the newborn, whose
+// size is r / 100, carries its own derivative in r.
+void test_tangent_across_an_insertion(odelia::ode::Method m) {
+  const double r = 2.0;
+  Cells<double> c(r, {0.5});
+  odelia::ode::Solver<Cells<double>> s(c, odelia::ode::OdeControl(), m);
+  s.set_keep_states(true);
+  s.reset();
+  s.advance_adaptive(std::vector<double>{0.0, 0.5});
+  insert_cell(s);
+  s.advance_adaptive(std::vector<double>{0.5, 1.0});
+  const std::size_t last = s.recording().size() - 1;
+
+  const auto d = s.sweep_tangent<2>(odelia::ode::tangent_directions{{0}, {0}},
+                                    {0, last});
+  check(d[0].value.size() == 1 && d[1].value.size() == 2,
+        "each row at its own width");
+  check(d[0].at(0, 0) == 0.0 && d[0].at(0, 1) == 1.0,
+        "the first row's derivative is the seed itself");
+  const auto swept = swept_jacobian(s, last);
+  double worst = 0.0;
+  for (std::size_t i = 0; i < 2; ++i) {
+    for (std::size_t j = 0; j < 2; ++j) {
+      worst = std::max(worst, relative_gap(d[1].at(i, j), swept[i][j]));
+    }
+  }
+  check(worst < 1e-10, "and the forward derivative across it is the sweep's");
+  check(d[1].at(1, 0) != 0.0, "the newborn carries a derivative in r");
+}
+
+// Under RODAS there is no sweep to compare with, so the walk is refereed against
+// a central difference of the same pinned RODAS walk.
+void test_tangent_through_rodas() {
+  using odelia::ode::Method;
+  const std::array<double, 3> p{10.0, 28.0, 8.0 / 3.0};
+  LorenzSystem<double> lorenz(p[0], p[1], p[2]);
+  odelia::ode::Solver<LorenzSystem<double>> s(lorenz, odelia::ode::OdeControl(),
+                                              Method::rodas);
+  s.set_collect(false);
+  s.set_keep_states(true);
+  s.advance_adaptive(std::vector<double>{0.0, 1.0});
+  const std::vector<odelia::ode::schedule_row> schedule = s.steps_taken();
+  const std::size_t last = s.recording().size() - 1;
+  const auto d = s.sweep_tangent<4>(odelia::ode::tangent_directions{{0, 1, 2}, {0}},
+                                    {last});
+
+  const auto walk = [&](std::array<double, 3> q, double x0) {
+    LorenzSystem<double> sys(q[0], q[1], q[2]);
+    const double y0[] = {x0, 1.0, 1.0};
+    sys.set_initial_state(y0, 0.0);
+    sys.reset();
+    odelia::ode::Solver<LorenzSystem<double>> w(sys, odelia::ode::OdeControl(),
+                                                Method::rodas);
+    w.set_collect(false);
+    w.advance_schedule(schedule);
+    return w.state();
+  };
+  double worst = 0.0;
+  for (std::size_t j = 0; j < 4; ++j) {
+    std::array<double, 3> up = p, down = p;
+    double x_up = 1.0, x_down = 1.0, h;
+    if (j < 3) {
+      h = 1e-6 * std::max(1.0, std::fabs(p[j]));
+      up[j] += h;
+      down[j] -= h;
+    } else {
+      h = 1e-6;
+      x_up += h;
+      x_down -= h;
+    }
+    const auto f_up = walk(up, x_up), f_down = walk(down, x_down);
+    for (std::size_t i = 0; i < 3; ++i) {
+      const double fd = (f_up[i] - f_down[i]) / (2 * h);
+      worst = std::max(worst, relative_gap(d[0].at(i, j), fd));
+    }
+  }
+  check(worst < 1e-6, "a RODAS walk's derivative is the central difference of it");
+  std::printf("       (largest gap %.3g)\n", worst);
+}
+
+// The lanes do not mix, so how many a pass carries changes nothing.
+void test_tangent_width_changes_nothing() {
+  LorenzSystem<double> lorenz(10.0, 28.0, 8.0 / 3.0);
+  for (odelia::ode::Method m : {odelia::ode::Method::dopri, odelia::ode::Method::rodas}) {
+    odelia::ode::Solver<LorenzSystem<double>> s(lorenz, odelia::ode::OdeControl(), m);
+    s.set_collect(false);
+    s.set_keep_states(true);
+    s.advance_adaptive(std::vector<double>{0.0, 0.5});
+    const odelia::ode::tangent_directions wrt{{0, 1, 2}, {0, 1, 2}};
+    const auto one = s.sweep_tangent<1>(wrt);
+    const auto two = s.sweep_tangent<2>(wrt);
+    const auto eight = s.sweep_tangent<8>(wrt);
+    double worst = 0.0;
+    for (std::size_t k = 0; k < one.size(); ++k) {
+      for (std::size_t e = 0; e < one[k].derivative.size(); ++e) {
+        worst = std::max({worst,
+                          relative_gap(two[k].derivative[e], one[k].derivative[e]),
+                          relative_gap(eight[k].derivative[e], one[k].derivative[e])});
+      }
+    }
+    check(worst < 1e-13, std::string("one, two and eight lanes agree under ") +
+                             odelia::ode::method_name(m));
+  }
+}
+
+// A subset of the directions is the same columns of the whole, and none at all
+// is a walk for the values alone.
+void test_tangent_directions_are_columns() {
+  LorenzSystem<double> lorenz(10.0, 28.0, 8.0 / 3.0);
+  odelia::ode::Solver<LorenzSystem<double>> s(lorenz, odelia::ode::OdeControl(),
+                                              odelia::ode::Method::dopri);
+  s.set_collect(false);
+  s.set_keep_states(true);
+  s.advance_adaptive(std::vector<double>{0.0, 0.5});
+  const auto all = s.sweep_tangent<4>(odelia::ode::tangent_directions{{0, 1, 2}, {0, 1, 2}});
+  const auto some = s.sweep_tangent<4>(odelia::ode::tangent_directions{{1}, {2}});
+  const auto none = s.sweep_tangent<4>(odelia::ode::tangent_directions{});
+  bool same = true;
+  for (std::size_t k = 0; k < all.size(); ++k) {
+    for (std::size_t i = 0; i < 3; ++i) {
+      same = same && some[k].at(i, 0) == all[k].at(i, 1) &&
+             some[k].at(i, 1) == all[k].at(i, 5) &&
+             none[k].value[i] == all[k].value[i];
+    }
+  }
+  check(same, "a parameter and an initial direction are those columns of the whole");
+  check(none.back().derivative.empty() && none.back().directions == 0,
+        "and no directions is the values alone");
+
+  bool refused = false;
+  try {
+    s.sweep_tangent<4>(odelia::ode::tangent_directions{{3}, {}});
+  } catch (const std::runtime_error& e) {
+    refused = std::string(e.what()).find("ad_parameters") != std::string::npos;
+  }
+  check(refused, "a parameter past ad_parameters() is refused by name");
+}
+
+// A subdivided row is one interval crossed in several steps; walked as one step
+// of the interval it would be a different function, so it is refused.
+void test_tangent_refuses_a_subdivided_row() {
+  Grow<double> g(50.0, 0.5);
+  odelia::ode::Solver<Grow<double>> s(g, loose_control(), odelia::ode::Method::rkck);
+  s.set_keep_states(true);
+  s.reset();
+  s.advance_fixed(std::vector<double>{0.0, 0.5, 1.0});
+  bool refused = false;
+  try {
+    s.sweep_tangent<1>(odelia::ode::tangent_directions{{0}, {}});
+  } catch (const std::runtime_error& e) {
+    refused = std::string(e.what()).find("subdivided") != std::string::npos;
+  }
+  check(refused, "sweep_tangent refuses a subdivided row");
+}
+
 int main() {
   std::printf("odelia solver core, standalone (no R, no Rcpp)\n");
   test_stop_throws();
@@ -2663,6 +2888,12 @@ int main() {
   test_dopri_records();
   test_controller_switch();
   test_controller_memory();
+  for_each_explicit_stepper(test_tangent_matches_the_sweep);
+  for_each_explicit_stepper(test_tangent_across_an_insertion);
+  test_tangent_through_rodas();
+  test_tangent_width_changes_nothing();
+  test_tangent_directions_are_columns();
+  test_tangent_refuses_a_subdivided_row();
   if (failures == 0) {
     std::printf("all checks passed\n");
     return 0;

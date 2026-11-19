@@ -6,7 +6,9 @@
 #include <array>
 #include <cstddef>
 #include <tuple>
+#include <type_traits>
 #include <utility>
+#include <vector>
 
 // The forward-mode vocabulary, apart from the reverse-mode one because a
 // consumer can want this and not that: a package with no tape reaches for the
@@ -42,6 +44,28 @@ using tangent_scalar = typename tangent_over<T>::type;
 template <typename S>
 concept CarriesDirection = xad::ExprTraits<S>::isForward;
 
+// The scalar a forward pass carrying W directions at once runs on: one tangent
+// layer above double, whose derivative holds one lane per direction. The value
+// is computed once for all W.
+template <std::size_t W>
+using tangent_lanes = typename xad::fwd<double, W>::active_type;
+
+// Whether a derivative holds several lanes (an xad::Vec) or is one number.
+template <typename D>
+struct has_lanes : std::false_type {};
+template <typename T, std::size_t N>
+struct has_lanes<xad::Vec<T, N>> : std::true_type {};
+
+// Lane i of a derivative; the number itself where it holds one direction.
+template <typename D>
+auto& lane_of(D& d, std::size_t i) {
+  if constexpr (has_lanes<std::remove_const_t<D>>::value) {
+    return d[i];
+  } else {
+    return d;
+  }
+}
+
 // The direction a forward pass carries in, and the derivative it carries out.
 // Everything about them is a pass-through except which scalars they accept.
 //
@@ -49,8 +73,11 @@ concept CarriesDirection = xad::ExprTraits<S>::isForward;
 // adjoint scalar's accumulator, so on an adjoint scalar the same statement sets
 // a slot no forward pass reads, or reads one no sweep has written -- and neither
 // raises anything, because both are the accessor doing exactly what it says.
+//
+// At a scalar with several lanes this would write the one number into every
+// lane, which is never what is meant; set_direction(x, lane, d) names the lane.
 template <typename S>
-  requires CarriesDirection<S>
+  requires CarriesDirection<S> && (!has_lanes<typename S::derivative_type>::value)
 void set_direction(S& x, double direction) {
   xad::derivative(x) = direction;
 }
@@ -66,6 +93,41 @@ typename S::derivative_type derivative_along(const S& x) {
   return xad::derivative(x);
 }
 
+// The same two, one lane of a scalar carrying several directions at once.
+template <typename S>
+  requires CarriesDirection<S>
+void set_direction(S& x, std::size_t lane, double direction) {
+  lane_of(xad::derivative(x), lane) = direction;
+}
+template <typename S>
+  requires CarriesDirection<S>
+double derivative_along(const S& x, std::size_t lane) {
+  return lane_of(xad::derivative(x), lane);
+}
+
+// The inputs a forward pass over a solve carries a direction for: parameters,
+// by their place in the System's ad_parameters(), and components of the state
+// the pass starts from. Its answer lists the directions in this order,
+// parameters first.
+struct tangent_directions {
+  std::vector<std::size_t> parameters;
+  std::vector<std::size_t> initial;
+  std::size_t size() const { return parameters.size() + initial.size(); }
+};
+
+// A forward pass's answer at one row of a run: the state there, and its
+// derivative along each direction, component i along direction k at
+// derivative[i * directions + k]. Each row carries its own width, because a
+// System that widens has rows of several.
+struct tangent_row {
+  std::size_t directions = 0;
+  std::vector<double> value;
+  std::vector<double> derivative;
+  double at(std::size_t i, std::size_t k) const {
+    return derivative[i * directions + k];
+  }
+};
+
 // A function's value and its partial in each argument.
 template <std::size_t N>
 struct value_with_partials {
@@ -80,18 +142,15 @@ struct value_with_partials {
 template <class F, class... X>
 [[gnu::flatten]] value_with_partials<sizeof...(X)> value_and_partials(F&& f, X... x) {
   constexpr std::size_t N = sizeof...(X);
-  using T = typename xad::fwd<double, N>::active_type;
-  const auto lane = [](auto& d, std::size_t i) -> double& {
-    if constexpr (N == 1) { return d; } else { return d[i]; }
-  };
+  using T = tangent_lanes<N>;
   std::array<T, N> at{T(static_cast<double>(x))...};
   for (std::size_t i = 0; i < N; ++i) {
-    lane(xad::derivative(at[i]), i) = 1.0;
+    set_direction(at[i], i, 1.0);
   }
   T r = std::apply(f, std::as_const(at));
   value_with_partials<N> ret{xad::value(r), {}};
   for (std::size_t i = 0; i < N; ++i) {
-    ret.partial[i] = lane(xad::derivative(r), i);
+    ret.partial[i] = derivative_along(r, i);
   }
   return ret;
 }
