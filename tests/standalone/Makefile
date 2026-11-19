@@ -30,9 +30,9 @@ WARN    ?= -Wall -Wextra -Wno-unused-parameter
 INCLUDES = -I../../inst/include
 HEADERS  = $(wildcard ../../inst/include/odelia/*.hpp)
 
-.PHONY: all build selfcontained layering clean
+.PHONY: all build selfcontained layering refusals clean
 
-all: build selfcontained layering
+all: build selfcontained layering refusals
 	./r_free
 	./stage_times
 	./root_find
@@ -62,6 +62,16 @@ layering:
 	  || { echo "implicit_node.hpp includes the System contract"; exit 1; }
 	@echo "  implicit_node.hpp: no System contract"
 
+# sweep_tangent must refuse a System that solves for inner values at compile
+# time, naming the reason: a forward pass would solve them again instead of
+# loading the run's, finitely and wrongly.
+refusals:
+	@if $(CXX) $(CXXSTD) $(INCLUDES) -fsyntax-only tangent_refusal.cpp 2> tangent_refusal.log; then \
+	  echo "tangent_refusal.cpp compiled; sweep_tangent took a System that solves for inner values"; exit 1; fi
+	@grep -q "solves for no inner values" tangent_refusal.log \
+	  || { cat tangent_refusal.log; echo "refused, but not for solving inner values"; exit 1; }
+	@echo "  sweep_tangent refuses a System that solves for inner values"
+
 r_free: r_free.o Tape.o
 	$(CXX) $(CXXSTD) -o $@ $^
 
@@ -87,4 +97,4 @@ Tape.o: ../../src/Tape.cpp
 	$(CXX) $(CXXSTD) $(OPT) -w $(INCLUDES) -c -o $@ $<
 
 clean:
-	rm -f r_free r_free.o stage_times stage_times.o root_find Tape.o
+	rm -f r_free r_free.o stage_times stage_times.o root_find Tape.o tangent_refusal.log
