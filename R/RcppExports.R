@@ -101,8 +101,12 @@ Solver_get_history <- function(solver_xp) {
     .Call(`_odelia_Solver_get_history`, solver_xp)
 }
 
-Solver_loss_and_gradient <- function(solver_xp, schedule, target, obs_indices, initial_state = NULL, params = NULL) {
-    .Call(`_odelia_Solver_loss_and_gradient`, solver_xp, schedule, target, obs_indices, initial_state, params)
+Solver_loss_and_gradient <- function(solver_xp, schedule, target, obs_indices, initial_state = NULL, params = NULL, mode = "") {
+    .Call(`_odelia_Solver_loss_and_gradient`, solver_xp, schedule, target, obs_indices, initial_state, params, mode)
+}
+
+Solver_sensitivities <- function(solver_xp, times, parameters, initial) {
+    .Call(`_odelia_Solver_sensitivities`, solver_xp, times, parameters, initial)
 }
 
 lorenz_rhs <- function(t, state, pars) {

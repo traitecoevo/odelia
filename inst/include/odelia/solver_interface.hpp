@@ -13,6 +13,7 @@
 #include <Rcpp.h>
 #include <limits>
 #include <map>
+#include <string>
 #include <vector>
 #include <XAD/XAD.hpp>
 #include <odelia/ode_solver.hpp>
@@ -170,22 +171,36 @@ inline Rcpp::List Solver_get_history_impl(SEXP solver_xp) {
 // move with them. The loss is sum over observations i and state components j of
 // (y_j(schedule[obs_indices[i]]) - target(i, j))^2.
 //
-// The gradient is one reverse sweep over that recording, taken interval by
-// interval between observed rows: each observation's own term is added to the
-// adjoint at its row, and the sweep carries the sum down to the next one. What
-// arrives at row 0 is dL/dy0; what the sweep accumulates is dL/dtheta.
+// The gradient comes one of two ways, `mode`, over the same steps under the
+// solver's own method:
+//
+//   "reverse"  one sweep over the recording, taken interval by interval between
+//              observed rows: each observation's own term is added to the
+//              adjoint at its row, and the sweep carries the sum down to the
+//              next one. What arrives at row 0 is dL/dy0; what the sweep
+//              accumulates is dL/dtheta. Its cost does not grow with the count
+//              of inputs. RODAS cannot be swept.
+//   "forward"  the schedule walked once more at a scalar carrying a direction
+//              per input, W at a time (sweep_tangent), each observation's term
+//              taken against dy/dtheta at its row. Its cost grows with the count
+//              of inputs, and it runs under every method, RODAS included.
+//
+// An empty `mode` is "forward" under RODAS and "reverse" otherwise.
 //
 // Returns list(loss, gradient) with the gradient's entries in the order the old
 // fitting interface used: the parameters (as the System's ad_parameters() lists
 // them) if `params` was given, then the initial state if `initial_state` was.
-template<typename SystemType>
+template<typename SystemType, std::size_t W = 8>
 inline Rcpp::List Solver_loss_and_gradient_impl(
     SEXP solver_xp, Rcpp::NumericVector schedule, Rcpp::NumericMatrix target,
     Rcpp::IntegerVector obs_indices,
     Rcpp::Nullable<Rcpp::NumericVector> initial_state,
-    Rcpp::Nullable<Rcpp::NumericVector> params) {
+    Rcpp::Nullable<Rcpp::NumericVector> params, std::string mode = "") {
   if (initial_state.isNull() && params.isNull()) {
     Rcpp::stop("Must provide at least one of 'initial_state' or 'params'");
+  }
+  if (obs_indices.size() == 0) {
+    Rcpp::stop("'obs_indices' must name at least one observation");
   }
   const std::size_t n_times = schedule.size();
   if (n_times < 2) {
@@ -233,11 +248,51 @@ inline Rcpp::List Solver_loss_and_gradient_impl(
     rows[k] = {schedule[k], schedule[k] - schedule[k - 1]};
   }
 
-  // Under the solver's own stepper where that stepper can be swept, so the loss
-  // is of the integrator the caller chose. RODAS cannot, so a stiff solver's
-  // schedule is stepped under Cash-Karp.
-  const ode::Method method = solver->method() == ode::Method::rodas
-                               ? ode::Method::rkck : solver->method();
+  const ode::Method method = solver->method();
+  if (mode.empty()) {
+    mode = method == ode::Method::rodas ? "forward" : "reverse";
+  }
+  if (mode != "forward" && mode != "reverse") {
+    Rcpp::stop("'mode' must be \"forward\" or \"reverse\"");
+  }
+  if (mode == "reverse" && method == ode::Method::rodas) {
+    Rcpp::stop("method = 'rodas' cannot be swept in reverse; use mode = "
+               "\"forward\", or a solver built with 'rkck' or 'dopri'");
+  }
+  std::vector<std::size_t> observed(obs_indices.size());
+  for (int i = 0; i < obs_indices.size(); ++i) {
+    const int idx = obs_indices[i];
+    if (idx < 1 || static_cast<std::size_t>(idx) > n_times) {
+      Rcpp::stop("'obs_indices' must index into 'schedule' (1-based)");
+    }
+    observed[i] = static_cast<std::size_t>(idx - 1);
+  }
+
+  if (mode == "forward") {
+    ode::tangent_directions wrt;
+    if (params.isNotNull()) {
+      for (std::size_t q = 0; q < n_par; ++q) wrt.parameters.push_back(q);
+    }
+    if (initial_state.isNotNull()) {
+      for (std::size_t j = 0; j < n; ++j) wrt.initial.push_back(j);
+    }
+    const std::vector<ode::tangent_row> d = ode::sweep_tangent<W>(
+        sys, solver->control(), method, rows, wrt, observed);
+    double loss = 0.0;
+    std::vector<double> gradient(wrt.size(), 0.0);
+    for (std::size_t i = 0; i < observed.size(); ++i) {
+      for (std::size_t j = 0; j < n; ++j) {
+        const double diff = d[i].value[j] - target(i, j);
+        loss += diff * diff;
+        for (std::size_t k = 0; k < gradient.size(); ++k) {
+          gradient[k] += 2.0 * diff * d[i].at(j, k);
+        }
+      }
+    }
+    return Rcpp::List::create(Rcpp::Named("loss") = loss,
+                              Rcpp::Named("gradient") = Rcpp::wrap(gradient));
+  }
+
   ode::Solver<SystemType> replay(sys, solver->control(), method);
   replay.set_collect(false);
   replay.set_keep_states(true);
@@ -254,12 +309,8 @@ inline Rcpp::List Solver_loss_and_gradient_impl(
   // Each observed row's term, summed where two observations share a row.
   std::map<std::size_t, std::vector<double>> adjoints;
   double loss = 0.0;
-  for (int i = 0; i < obs_indices.size(); ++i) {
-    const int idx = obs_indices[i];
-    if (idx < 1 || static_cast<std::size_t>(idx) > n_times) {
-      Rcpp::stop("'obs_indices' must index into 'schedule' (1-based)");
-    }
-    const std::size_t row = static_cast<std::size_t>(idx - 1);
+  for (std::size_t i = 0; i < observed.size(); ++i) {
+    const std::size_t row = observed[i];
     std::vector<double>& adjoint = adjoints[row];
     adjoint.resize(n, 0.0);
     for (std::size_t j = 0; j < n; ++j) {
@@ -292,6 +343,74 @@ inline Rcpp::List Solver_loss_and_gradient_impl(
   }
   return Rcpp::List::create(Rcpp::Named("loss") = loss,
                             Rcpp::Named("gradient") = Rcpp::wrap(gradient));
+}
+
+
+// The state at each of `times` and its derivative with respect to the chosen
+// parameters (`parameters`, 0-based into ad_parameters()) and components of the
+// state at times[0] (`initial`, 0-based), by forward mode.
+//
+// The solve is the one $advance_adaptive(times) would take from where this
+// solver stands -- a copy of it is advanced, and the solver itself does not
+// move -- with a step landing on every time. Its recording is then walked again
+// carrying the directions (sweep_tangent), under the solver's own method.
+//
+// Returns list(time, y, dy): y is n_times x n, dy an n_times x n x P array, the
+// parameters' directions first, then the initial state's, each in the order
+// given.
+template<typename SystemType, std::size_t W = 8>
+inline Rcpp::List Solver_sensitivities_impl(SEXP solver_xp,
+                                            Rcpp::NumericVector times,
+                                            Rcpp::IntegerVector parameters,
+                                            Rcpp::IntegerVector initial) {
+  auto solver = get_solver<SystemType>(solver_xp);
+  const std::size_t n_t = times.size();
+  if (n_t == 0) {
+    Rcpp::stop("'times' must hold at least the current time");
+  }
+  ode::Solver<SystemType> run(*solver);
+  run.set_collect(false);
+  run.set_keep_states(true);
+  std::vector<std::size_t> rows{0};
+  for (std::size_t k = 1; k < n_t; ++k) {
+    run.advance_adaptive(std::vector<double>{times[k - 1], times[k]});
+    rows.push_back(run.recording().size() - 1);
+  }
+  if (n_t == 1 && !util::identical(times[0], run.time())) {
+    Rcpp::stop("First element in 'times' must be same as current time");
+  }
+
+  ode::tangent_directions wrt;
+  for (const int p : parameters) {
+    if (p < 0) Rcpp::stop("'parameters' must be non-negative");
+    wrt.parameters.push_back(static_cast<std::size_t>(p));
+  }
+  for (const int i : initial) {
+    if (i < 0) Rcpp::stop("'initial' must be non-negative");
+    wrt.initial.push_back(static_cast<std::size_t>(i));
+  }
+  const std::vector<ode::tangent_row> d =
+      run.template sweep_tangent<W>(wrt, rows);
+
+  const std::size_t n = d.front().value.size();
+  const std::size_t n_dir = wrt.size();
+  Rcpp::NumericMatrix y(n_t, n);
+  Rcpp::NumericVector dy(n_t * n * n_dir);
+  for (std::size_t k = 0; k < n_t; ++k) {
+    if (d[k].value.size() != n) {
+      Rcpp::stop("the state changed width between the first and last time");
+    }
+    for (std::size_t i = 0; i < n; ++i) {
+      y(k, i) = d[k].value[i];
+      for (std::size_t j = 0; j < n_dir; ++j) {
+        dy[k + n_t * (i + n * j)] = d[k].at(i, j);
+      }
+    }
+  }
+  dy.attr("dim") = Rcpp::IntegerVector::create(n_t, n, n_dir);
+  return Rcpp::List::create(Rcpp::Named("time") = times,
+                            Rcpp::Named("y") = y,
+                            Rcpp::Named("dy") = dy);
 }
 
 } // namespace solver

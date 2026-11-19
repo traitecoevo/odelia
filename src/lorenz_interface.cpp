@@ -94,8 +94,8 @@ Rcpp::NumericVector System_rates(SEXP system_xp) {
 // steps its own copy of the System, taken here: what is set on the System
 // afterwards does not reach it (Solver_set_params does). R only ever holds the
 // double solver; gradients build the active replay internally. The method
-// chooses how this solver steps, and `$loss_and_gradient()` replays under it
-// (see Solver_loss_and_gradient_impl for rodas).
+// chooses how this solver steps, and `$loss_and_gradient()` and
+// `$sensitivities()` differentiate under it.
 // [[Rcpp::export]]
 SEXP Solver_new(SEXP system_xp, SEXP control_xp, std::string method = "rkck") {
   Rcpp::XPtr<SystemType> sys(system_xp);
@@ -189,17 +189,28 @@ Rcpp::List Solver_get_history(SEXP solver_xp) {
   );
 }
 
-// Least-squares loss against observed states and its gradient by reverse mode;
-// Solver_loss_and_gradient_impl says what is replayed and in what order the
-// gradient comes.
+// Least-squares loss against observed states and its gradient, in reverse or
+// forward mode; Solver_loss_and_gradient_impl says what is stepped, which mode
+// an empty `mode` means, and in what order the gradient comes.
 // [[Rcpp::export]]
 Rcpp::List Solver_loss_and_gradient(
     SEXP solver_xp, Rcpp::NumericVector schedule, Rcpp::NumericMatrix target,
     Rcpp::IntegerVector obs_indices,
     Rcpp::Nullable<Rcpp::NumericVector> initial_state = R_NilValue,
-    Rcpp::Nullable<Rcpp::NumericVector> params = R_NilValue) {
+    Rcpp::Nullable<Rcpp::NumericVector> params = R_NilValue,
+    std::string mode = "") {
   return odelia::solver::Solver_loss_and_gradient_impl<SystemType>(
-      solver_xp, schedule, target, obs_indices, initial_state, params);
+      solver_xp, schedule, target, obs_indices, initial_state, params, mode);
+}
+
+// The state at each time and its derivative in the chosen parameters and
+// initial state, by forward mode; see Solver_sensitivities_impl.
+// [[Rcpp::export]]
+Rcpp::List Solver_sensitivities(SEXP solver_xp, Rcpp::NumericVector times,
+                                Rcpp::IntegerVector parameters,
+                                Rcpp::IntegerVector initial) {
+  return odelia::solver::Solver_sensitivities_impl<SystemType>(
+      solver_xp, times, parameters, initial);
 }
 
 //-------------------------------------------------------------------------
