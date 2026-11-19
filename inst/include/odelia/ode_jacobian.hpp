@@ -18,10 +18,11 @@
 //      to the tangent scalar FReal<value_type>. Forward mode is used
 //      (not adjoint) because: for a square N->N Jacobian both cost N sweeps, but
 //      forward mode needs no tape (no recording, no allocation, no interaction
-//      with the single thread-local active-tape pointer). It therefore composes
-//      cleanly as FReal<AReal<double>> when the solver itself is being
-//      differentiated by an outer adjoint fit -- the tangent layer never contends
-//      with the outer tape. Rebinding requires the System to expose
+//      with the single thread-local active-tape pointer). At a solver scalar
+//      that is itself a tangent -- a forward pass over the run, sweep_tangent --
+//      this is a tangent of a tangent, and J carries the pass's directions:
+//      the derivative of the step is then the step's own. A tangent is never
+//      put above an adjoint (tangent.hpp). Rebinding requires the System to expose
 //        template <class U> Self<U> rebind() const;
 //      which returns a copy of itself with the scalar type swapped to U
 //      (parameters carried over via xad::value + U(...)) -- the same double->AD
@@ -29,7 +30,10 @@
 //
 // A system declaring neither cannot use the implicit stepper: `supported` says so
 // at compile time and the stepper raises a clear error. When both exist the hook
-// wins -- whoever wrote it meant it.
+// wins -- whoever wrote it meant it. Under a forward pass the hook is called at
+// the pass's scalar: one written over the System's value_type (fd_jacobian
+// included) carries its directions, and one that drops to double loses them, so
+// the pass differentiates a step whose Jacobian ignores the inputs.
 //
 // The AD route also yields the parameter Jacobian d(dydt)/dtheta, used by the
 // implicit-function-theorem steady-state sensitivity in ode_steady_state.hpp:

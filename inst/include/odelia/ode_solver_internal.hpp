@@ -313,10 +313,11 @@ private:
       } else {
         // RODAS is unavailable for this System: it has neither an
         // ode_jacobian() hook nor a rebind() hook for the AD Jacobian, or its
-        // scalar type is itself active.
+        // scalar carries an adjoint.
         util::stop("method='rodas' is not available for this system/scalar type "
-                   "(needs an ode_jacobian() hook, or a rebind() hook with a "
-                   "non-active scalar); use method='rkck' or method='dopri'.");
+                   "(needs an ode_jacobian() hook, or a rebind() hook at a "
+                   "scalar carrying no adjoint); use method='rkck' or "
+                   "method='dopri'.");
       }
     } else {
       with_row(stepper, substeps, inputs);

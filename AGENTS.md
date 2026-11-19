@@ -5,8 +5,9 @@ files**, with an R interface via Rcpp. Three adaptive steppers (Cash–Karp RK4(
 Dormand–Prince 5(4), RODAS4(3) for stiff systems) run entirely in compiled code. ODE
 systems are templated on their scalar type, so a recorded run can be differentiated in
 **reverse mode** (one sweep gives the derivative with respect to every parameter and
-initial condition) and the implicit stepper's Jacobian is taken in forward mode, both
-through the vendored [XAD](https://github.com/auto-differentiation/xad) library. Time-varying
+initial condition) or in **forward mode** (the run's steps walked again carrying a few
+directions, under every stepper, RODAS included), and the implicit stepper's Jacobian
+is taken in forward mode, all through the vendored [XAD](https://github.com/auto-differentiation/xad) library. Time-varying
 external drivers are interpolated with a cubic Hermite spline. A right-hand side written
 in R can be solved by the same steppers.
 
@@ -17,7 +18,8 @@ core links against it.
 
 **Start here.** `ARCHITECTURE.md` has the map of the headers in dependency order.
 `vignettes/articles/reverse-mode.Rmd` is the design of the gradient machinery and the
-reading order through the headers. The System contract is the concepts in
+reading order through the headers; `vignettes/articles/forward-mode.Rmd` is the
+forward pass and when it costs less than a sweep. The System contract is the concepts in
 `inst/include/odelia/ode_interface.hpp`.
 
 ## Layout
