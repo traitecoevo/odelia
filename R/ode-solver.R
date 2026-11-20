@@ -308,9 +308,13 @@ OdeSolver <- R6::R6Class(
 #' @param control An [OdeControl], or `NULL` for the defaults with the
 #'   tolerances below, the `controller` below, and the largest step set to
 #'   the span of `times` (an [OdeControl] made directly caps the step at 10).
-#'   With a `control` given, `rtol`, `atol` and `controller` are ignored.
+#'   With a `control` given, `rtol`, `atol`, `controller` and `max_steps`
+#'   are ignored.
 #' @param rtol,atol Shorthand for the control's relative and absolute
 #'   tolerances when `control` is `NULL`.
+#' @param max_steps Shorthand for the control's `max_steps` when `control` is
+#'   `NULL`: the most steps one interval between two of `times` may take, or
+#'   `Inf` for no limit; see [OdeControl].
 #' @param autonomous `TRUE` if `func` does not depend on `t`.
 #' @param jac_fd_step,jac_fd_floor The finite-difference Jacobian's relative
 #'   step and small-component floor; see [OdeSolver].
@@ -341,6 +345,7 @@ OdeSolver <- R6::R6Class(
 ode_solve <- function(func, y0, times, parms = NULL, jacfunc = NULL,
                       method = "dopri", control = NULL,
                       rtol = 1e-6, atol = 1e-6, controller = "hairer",
+                      max_steps = Inf,
                       autonomous = FALSE, jac_fd_step = 1e-6, jac_fd_floor = 1e-5,
                       dense = NULL) {
   func <- check_callback(func, "func")
@@ -359,6 +364,7 @@ ode_solve <- function(func, y0, times, parms = NULL, jacfunc = NULL,
     control$set_tol_rel(rtol)
     control$set_tol_abs(atol)
     control$set_controller(controller)
+    control$set_max_steps(max_steps)
     # The control's default largest step (10) is a plant-sized number; here
     # the span of the output is the only natural bound, as in deSolve.
     span <- diff(range(times))

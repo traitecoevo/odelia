@@ -235,8 +235,8 @@ leaf-thermal example does.
   that the system queries during integration. Supplied as time series and
   interpolated with a cubic Hermite spline.
 - **Control** (`OdeControl`) — the solver's tuning knobs: absolute and relative
-  tolerances, state/derivative scaling, minimum/maximum/initial step sizes, and
-  the step-size rule.
+  tolerances, state/derivative scaling, minimum/maximum/initial step sizes, the
+  step-size rule, and the most steps an interval may take (`max_steps`).
 - **Recording** — what a run keeps when asked (`set_keep_states`): one row per
   accepted step with its time, step size, state, and whatever the step solved
   for inside a stage. A sweep reads it; a replay reproduces the run from it.

@@ -407,8 +407,10 @@ public:
     ode::state_type<System> y_at;
     for (size_t k = 1; k < times.size(); ++k)
     {
-      while (time() < times[k])
+      const double from = time();
+      for (size_t taken = 0; time() < times[k]; ++taken)
       {
+        solver.check_max_steps(taken, from, times[k]);
         step(final_time);
       }
       if (util::identical(time(), times[k]))
@@ -477,8 +479,10 @@ public:
       return time();
     }
     const bool positive = g_prev > 0.0;
-    while (time() < time_max)
+    const double from = time();
+    for (size_t taken = 0; time() < time_max; ++taken)
     {
+      solver.check_max_steps(taken, from, time_max);
       solver.hold_step_start();
       solver.step(system, time_max);
       const double g_end = g_finite(time(), solver.state_ref());

@@ -9,6 +9,13 @@
 #' @param step_size_min Minimum allowed step size.
 #' @param step_size_max Maximum allowed step size.
 #' @param step_size_initial Initial step size.
+#' @param max_steps The most accepted steps one interval of an adaptive
+#'   advance may take (an interval between two requested times, or one event
+#'   search), or `Inf`, the default, for no limit. A step the tolerance would
+#'   shrink below `step_size_min` is taken at the floor and accepted, so a
+#'   problem too stiff for an explicit stepper crawls rather than failing;
+#'   this bounds its cost, and the error names the count and where the solve
+#'   had reached.
 #' @param controller Which rule turns the error estimate into the next step:
 #'   `"hairer"` (the default; the error in the RMS norm over components,
 #'   accept at 1 and rescale after every step, as Hairer's codes and
@@ -113,6 +120,17 @@ OdeControl <- R6::R6Class(
     set_step_size_initial = function(step_size_initial) {
       OdeControl_set_step_size_initial(self$ptr, step_size_initial)
       invisible(self)
+    },
+
+    #' @description Set the most steps an interval may take, or `Inf`.
+    set_max_steps = function(max_steps) {
+      OdeControl_set_max_steps(self$ptr, as.numeric(max_steps))
+      invisible(self)
+    },
+
+    #' @description The most steps an interval may take; `Inf` for no limit.
+    get_max_steps = function() {
+      OdeControl_get_max_steps(self$ptr)
     }
   )
 )

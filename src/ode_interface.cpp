@@ -53,8 +53,29 @@ Rcpp::List OdeControl_get_controls(SEXP control_xp) {
     Rcpp::Named("a_dydt") = ctrl->a_dydt,
     Rcpp::Named("step_size_min") = ctrl->step_size_min,
     Rcpp::Named("step_size_max") = ctrl->step_size_max,
-    Rcpp::Named("step_size_initial") = ctrl->step_size_initial
+    Rcpp::Named("step_size_initial") = ctrl->step_size_initial,
+    Rcpp::Named("max_steps") = ctrl->max_steps == 0
+        ? R_PosInf : static_cast<double>(ctrl->max_steps)
   );
+}
+
+// Inf is no limit (the control's 0); otherwise a whole number of at least 1.
+// [[Rcpp::export]]
+void OdeControl_set_max_steps(SEXP control_xp, double max_steps) {
+  if (max_steps == R_PosInf) {
+    get_OdeControl(control_xp)->max_steps = 0;
+    return;
+  }
+  if (!(max_steps >= 1) || max_steps != std::floor(max_steps)) {
+    Rcpp::stop("max_steps must be a whole number of at least 1, or Inf for no limit");
+  }
+  get_OdeControl(control_xp)->max_steps = static_cast<std::size_t>(max_steps);
+}
+
+// [[Rcpp::export]]
+double OdeControl_get_max_steps(SEXP control_xp) {
+  const std::size_t n = get_OdeControl(control_xp)->max_steps;
+  return n == 0 ? R_PosInf : static_cast<double>(n);
 }
 
 // [[Rcpp::export]]

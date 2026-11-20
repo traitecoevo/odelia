@@ -15,5 +15,6 @@
 #' @aliases OdeControl_set_step_size_max OdeControl_set_step_size_initial
 #' @aliases OdeControl_set_controller OdeControl_get_controller
 #' @aliases OdeControl_set_stabilisation OdeControl_get_stabilisation
+#' @aliases OdeControl_set_max_steps OdeControl_get_max_steps
 #' @keywords internal
 NULL

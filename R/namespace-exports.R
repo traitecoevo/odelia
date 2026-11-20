@@ -28,4 +28,6 @@
 #' @rawNamespace export(OdeControl_get_controller)
 #' @rawNamespace export(OdeControl_set_stabilisation)
 #' @rawNamespace export(OdeControl_get_stabilisation)
+#' @rawNamespace export(OdeControl_set_max_steps)
+#' @rawNamespace export(OdeControl_get_max_steps)
 NULL

@@ -118,6 +118,14 @@ struct OdeControl {
   void set_step_size_initial(double value) { step_size_initial = value; }
   double get_step_size_initial() const { return step_size_initial; }
 
+  // The most accepted steps one interval of an adaptive advance may take: an
+  // interval between two requested times, or one event search. 0 is no
+  // limit. A step the tolerance would shrink below step_size_min is taken at
+  // the floor and accepted, so a problem too stiff for an explicit stepper
+  // crawls rather than failing; this is what bounds its cost.
+  void set_max_steps(std::size_t value) { max_steps = value; }
+  std::size_t get_max_steps() const { return max_steps; }
+
   void set_controller(Controller value) { controller = value; }
   Controller get_controller() const { return controller; }
 
@@ -349,6 +357,7 @@ struct OdeControl {
   
   double tol_abs, tol_rel, a_y, a_dydt;
   double step_size_min, step_size_max, step_size_initial;
+  std::size_t max_steps = 0;
   bool last_step_size_shrank;
   Controller controller = Controller::hairer;
   double stabilisation = 0.04;
