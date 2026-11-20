@@ -11,6 +11,17 @@
 New tests: standalone, forward against the sweep under both explicit steppers and across an insertion, RODAS against central differences, one, two and eight lanes, selected directions, a refused subdivided row, and a compile-time refusal of a System that solves for inner values; from R (`test-forward-mode.R`), the same on a stiff consumer-resource System and on Lorenz, RODAS converging on Dormand-Prince as tolerances tighten, and both modes of `$loss_and_gradient()`.
 
 A **minor** bump: gradients from `$loss_and_gradient()` on a `"rodas"` solver move, because they are now RODAS's own; where the System does not declare `nests_tangents` (or have its own `ode_jacobian()`), the call is refused by name, where it used to replay under Cash-Karp. The Lorenz and leaf-thermal examples declare it, and the leaf-thermal runner gains `mode` too. A System that cannot be walked forward at all keeps its reverse sweep: the forward path is compiled only where it can be. Nothing else moves. `set_direction(x, d)` now refuses a scalar with several lanes, where it set every lane; `set_direction(x, lane, d)` names one.
+## odelia 0.11.3
+
+**odelia locates events.** `Solver::advance_until(g, time_max, tol)` steps until `g(t, y)` changes the sign it had where the call started, and stops at that time; in R, `OdeSolver$advance_until(event, time_max, tol)`. A crossing is seen at the end of a step. Its time is found by TOMS748 (`root_find.hpp`) on that step's interpolant, so the search evaluates no rates. The step is then taken back, and the solver steps from its start to the located time. The state left at the event is therefore integrated, not interpolated, under every stepper. It is the state a run would hold, bit for bit, that took the same steps up to the one that crossed and then landed on that time, and so is every step after it: a new standalone test checks both under all three steppers and both step-size rules, and under both explicit steppers for a System whose steps substep a stiff subsystem. The time is as accurate as the interpolant: under Dormand–Prince that is the step's own order, and under Cash–Karp and Rosenbrock cubic Hermite, one order short. In the test, `y' = y` reaches 2, …, 10 within 6e-9 of `log(level)` under `dopri` and `rodas` and 6e-7 under `rkck`, at a solver tolerance of 1e-8. A crossing that starts and ends within one step is not seen. An error while the crossing is located, from `g` or a non-finite value of it, takes the step back before it propagates, so the solver is left between steps.
+
+The pieces are on `SolverInternal`: `locate()` finds the crossing in the last step and allocates nothing once the solver has interpolated; `hold_step_start()` and `retract_step()` take the last adaptive step back, restoring the control's memory, the suggested step, the derivative's carry, the subsystem's trend and the record, and leaving the System evaluated where the step started.
+
+A forward-Euler step now leaves no interpolant, as a pinned step does: `interpolate()` after one used to read the adaptive step before it.
+
+plant's `run(individual, sizes = )` moves to this next, in place of re-integrating from the bracket's start for every trial (traitecoevo/plant#804).
+
+A **patch** bump: additions only, and no number moves.
 
 ## odelia 0.11.2
 

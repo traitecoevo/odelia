@@ -35,7 +35,7 @@
 | `ode_substeps.hpp` | `SubsystemSubsteps`: a step that integrates a System's subsystem (`HasSubsystem`) in substeps of its own, on whichever explicit tableau derives from it |
 | `ode_step_rkck.hpp`, `ode_step_dopri.hpp`, `ode_step_rodas.hpp` | the three steppers; the two explicit ones, `rkck` and `dopri`, record a run, carry `step_adjoint` and substep a subsystem; all three step at a tangent scalar, RODAS with its Jacobian a tangent of a tangent |
 | `ode_callback_system.hpp` | `CallbackSystem`, a System over `std::function`s |
-| `ode_solver_internal.hpp` → `ode_solver.hpp` | `SolverInternal` (stepping, the record), `Solver<System>` (`advance_*`, `recording()`, `sweep_adjoint`, `sweep_tangent`, `advance_schedule`); the free `sweep_tangent`, a schedule walked at `tangent_lanes<W>` |
+| `ode_solver_internal.hpp` → `ode_solver.hpp` | `SolverInternal` (stepping, the record, `locate`/`retract_step` for events), `Solver<System>` (`advance_*`, `advance_until`, `recording()`, `sweep_adjoint`, `sweep_tangent`, `advance_schedule`); the free `sweep_tangent`, a schedule walked at `tangent_lanes<W>` |
 | `sweep.hpp`, `ode_steady_state.hpp` | segment helpers for a consumer driving a sweep itself; Newton to a fixed point with implicit-function-theorem sensitivity |
 | `rcpp_interface_helpers.hpp`, `solver_interface.hpp` | the two headers that need R: `Solver_*_impl` behind the R bindings, including `Solver_loss_and_gradient_impl` |
 

@@ -8,6 +8,7 @@
 #include <odelia/ode_step_rkck.hpp>
 #include <odelia/ode_step_rodas.hpp>
 #include <odelia/ode_step_dopri.hpp>
+#include <odelia/root_find.hpp>
 
 #include <cmath>
 #include <limits>
@@ -203,6 +204,32 @@ public:
   double previous_time() const { return time_prev; }
   Method get_method() const { return method; }
   void interpolate(double t, state_type& out) const;
+
+  // The state the solver holds, by reference, for a caller reading it after
+  // every step without a copy.
+  const state_type& state_ref() const { return y; }
+
+  // Where, inside the last accepted adaptive step, g(t, y(t)) crosses zero,
+  // with y(t) read off the interpolant (above), so the search evaluates no
+  // rates. `g_start` and `g_end` are g at the step's two ends, of opposite
+  // signs. TOMS748 on [previous_time(), current time] to `tol` (root_find.hpp):
+  // the midpoint of the final bracket. Allocates nothing once the solver has
+  // interpolated at its current width.
+  template <class G>
+  double locate(G&& g, double g_start, double g_end, const root::tolerance& tol);
+
+  // Taking the last adaptive step back, for a caller that finds it crossed
+  // something it wants to stop at. hold_step_start(), before the step, keeps
+  // what the step changes beyond y and the record: the control's memory, the
+  // suggested size, the derivative's carry, and the subsystem's trend.
+  // retract_step(), after it, puts all of it back, drops the step's row, and
+  // puts the System back on the step's start, so a step from there to time t
+  // is the one a run that took the same steps and then asked to land on t
+  // would have taken: same size, same control, same result, to the bit. Refused unless the last thing the
+  // solver did was one adaptive step after hold_step_start(). The count of
+  // rejections is a diagnostic of the work done and keeps the step's.
+  void hold_step_start();
+  void retract_step(System& system);
 
 private:
   // Whether a step from the current time to `step_end` substeps the System's
@@ -417,6 +444,27 @@ private:
   std::optional<last_inputs> last_inputs_;
   // subsystem_error_sets_step for the last accepted adaptive step.
   bool subsystem_error_set_step_ = false;
+
+  // What hold_step_start() keeps. Assigned into, not rebuilt, so holding a
+  // step allocates nothing once the subsystem's inputs have been held once.
+  struct held_step {
+    bool valid = false;
+    std::size_t rows = 0; // taken.size() when held
+    OdeControl control;
+    double step_size_last = 0.0;
+    bool dydt_in_is_clean = false;
+    double dydt_in_carried_at = 0.0;
+    bool has_last_inputs = false;
+    state_type last_inputs;
+    double last_inputs_step_size = 0.0;
+    bool subsystem_error_set_step = false;
+    double rkck_stiffness = 0.0;
+    double dopri_stiffness = 0.0;
+  };
+  held_step held_;
+
+  // The state locate() reads the interpolant into.
+  state_type dense_scratch_;
 };
 
 template <class System>
@@ -458,6 +506,9 @@ void SolverInternal<System>::set_state_from_system(System& system) {
   last_inputs_.reset();
   dydt_in_is_clean = true;
   dydt_in_carried_at = std::numeric_limits<double>::quiet_NaN();
+  // A step held before this load is not one a retraction may undo: the state
+  // it would restore is not the one the System was just given.
+  held_.valid = false;
   // The state the run starts from, into the record set_time just opened, once
   // (see first_row_unfilled_). Kept here rather than by the caller because this
   // is the one place that knows the System has been read.
@@ -605,6 +656,7 @@ void SolverInternal<System>::step_euler(System& system, double time_max_) {
     y[i] += h * dydt_in[i];
   }
   time = time_max;
+  have_prev = false; // no interpolant: a forward-Euler step keeps no stages
   // Settle the system onto the new state at the new time.
   ode::internal::set_ode_state(system, y, time);
   push_step(system, {time, h});
@@ -1086,6 +1138,86 @@ void SolverInternal<System>::interpolate(double t, state_type& out) const {
   for (size_t i = 0; i < n; ++i) {
     out[i] = h00 * y_prev[i] + h10 * dydt_prev[i] + h01 * y[i] + h11 * dydt_now[i];
   }
+}
+
+template <class System>
+template <class G>
+double SolverInternal<System>::locate(G&& g, double g_start, double g_end,
+                                      const root::tolerance& tol) {
+  const auto target = [&](double t) {
+    interpolate(t, dense_scratch_);
+    return g(t, std::as_const(dense_scratch_));
+  };
+  return root::toms748(target, time_prev, time, g_start, g_end, tol);
+}
+
+template <class System>
+void SolverInternal<System>::hold_step_start() {
+  held_.valid = true;
+  held_.rows = taken.size();
+  held_.control = control;
+  held_.step_size_last = step_size_last;
+  held_.dydt_in_is_clean = dydt_in_is_clean;
+  held_.dydt_in_carried_at = dydt_in_carried_at;
+  held_.has_last_inputs = last_inputs_.has_value();
+  if (last_inputs_) {
+    held_.last_inputs.assign(last_inputs_->inputs.begin(),
+                             last_inputs_->inputs.end());
+    held_.last_inputs_step_size = last_inputs_->step_size;
+  }
+  held_.subsystem_error_set_step = subsystem_error_set_step_;
+  held_.rkck_stiffness = stepper.subsystem_stiffness;
+  held_.dopri_stiffness = dopri_stepper.subsystem_stiffness;
+}
+
+template <class System>
+void SolverInternal<System>::retract_step(System& system) {
+  if (!(held_.valid && have_prev && taken.size() == held_.rows + 1 &&
+        !taken.back().insertion)) {
+    util::stop("retract_step(): the last thing this solver did was not one "
+               "adaptive step taken after hold_step_start()");
+  }
+  // y_prev and dydt_prev are the step's start and the derivative there, which
+  // step() keeps for the interpolant.
+  y = y_prev;
+  dydt_in = dydt_prev;
+  dydt_in_is_clean = held_.dydt_in_is_clean;
+  dydt_in_carried_at = held_.dydt_in_carried_at;
+  time = time_prev;
+  control = held_.control;
+  step_size_last = held_.step_size_last;
+  if (held_.has_last_inputs) {
+    if (!last_inputs_) {
+      last_inputs_.emplace();
+    }
+    last_inputs_->inputs.assign(held_.last_inputs.begin(),
+                                held_.last_inputs.end());
+    last_inputs_->step_size = held_.last_inputs_step_size;
+  } else {
+    last_inputs_.reset();
+  }
+  subsystem_error_set_step_ = held_.subsystem_error_set_step;
+  stepper.subsystem_stiffness = held_.rkck_stiffness;
+  dopri_stepper.subsystem_stiffness = held_.dopri_stiffness;
+  taken.pop_back();
+  if (keep_states_) {
+    recorded.pop_back();
+  }
+  // The System is left as the step's start found it, because the next step
+  // reads what an evaluation leaves on it (the subsystem's inputs, its
+  // tolerance scales) before evaluating anything itself. A carried derivative
+  // was the last evaluation, at y, at the time it was carried from, or at this
+  // time where the state was loaded; an uncarried one is evaluated again by
+  // the next step's setup_dydt_in, which sets the System itself. Evaluated
+  // into scratch, so dydt_in keeps the bits the step started with.
+  if (dydt_in_is_clean) {
+    const double t_eval = std::isnan(dydt_in_carried_at) ? time : dydt_in_carried_at;
+    ode::derivs(system, y, dense_scratch_, t_eval);
+  } else {
+    internal::set_ode_state(system, y, time);
+  }
+  have_prev = false;
+  held_.valid = false;
 }
 
 template <class System>

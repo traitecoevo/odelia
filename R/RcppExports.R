@@ -225,6 +225,10 @@ RSolver_advance_collect <- function(solver_xp, times, dense) {
     .Call(`_odelia_RSolver_advance_collect`, solver_xp, times, dense)
 }
 
+RSolver_advance_until <- function(solver_xp, event, time_max, tol) {
+    .Call(`_odelia_RSolver_advance_until`, solver_xp, event, time_max, tol)
+}
+
 RSolver_time <- function(solver_xp) {
     .Call(`_odelia_RSolver_time`, solver_xp)
 }

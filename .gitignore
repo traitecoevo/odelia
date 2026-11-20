@@ -24,6 +24,7 @@ tests/standalone/r_free
 tests/standalone/stage_times
 tests/standalone/root_find
 tests/standalone/tangent_refusal.log
+tests/standalone/event_location
 tests/standalone/probe_*
 !tests/standalone/probe_*.cpp
 

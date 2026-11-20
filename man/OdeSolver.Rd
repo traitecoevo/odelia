@@ -54,6 +54,7 @@ s$counts()
     \item \href{#method-OdeSolver-step}{\code{OdeSolver$step()}}
     \item \href{#method-OdeSolver-advance_adaptive}{\code{OdeSolver$advance_adaptive()}}
     \item \href{#method-OdeSolver-advance_collect}{\code{OdeSolver$advance_collect()}}
+    \item \href{#method-OdeSolver-advance_until}{\code{OdeSolver$advance_until()}}
     \item \href{#method-OdeSolver-time}{\code{OdeSolver$time()}}
     \item \href{#method-OdeSolver-state}{\code{OdeSolver$state()}}
     \item \href{#method-OdeSolver-rates}{\code{OdeSolver$rates()}}
@@ -191,6 +192,49 @@ point with [domain_error()].}
       \item{\code{times}}{Times to advance to; the first must be the current time.}
       \item{\code{dense}}{`TRUE` to read the requested times off each step's
 interpolant, `FALSE` to land a step on each; see `advance_collect()`.}
+    }
+    \if{html}{\out{</div>}}
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-OdeSolver-advance_until"></a>}}
+\if{latex}{\out{\hypertarget{method-OdeSolver-advance_until}{}}}
+\subsection{\code{OdeSolver$advance_until()}}{
+  Advance by adaptive steps until `event(t, y)` changes
+  the sign it had when called, or to `time_max`, whichever comes
+  first. Returns the time of the event, or `NA` where `time_max` came
+  first; either way the solver is left there. `event` returns one
+  number, and a value of zero at the start is an event at the start.
+
+  The crossing is seen at the end of a step and located to `tol` in
+  time on that step's interpolant, at no further evaluation of `rhs`
+  (see `advance_collect()` for that interpolant's order under each
+  method). The solver then steps from the start of that step to the
+  located time, so the state there is integrated, and it and everything
+  after it are what a run would do that took the same steps and then
+  landed on that time. A sign change that starts and ends inside one
+  step is not seen. Asking again with the same `event` starts from a
+  value near zero of either sign and can stop straight away; ask for the
+  next level instead.
+
+  `event` is called as `event(t, y)`, without `parms`; a closure can
+  carry them. A non-finite value is an error. An error while the
+  crossing is located leaves the solver at the start of the step that
+  crossed.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{OdeSolver$advance_until(event, time_max, tol = 1e-10)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{event}}{Function `event(t, y)` returning one number; see
+`advance_until()`.}
+      \item{\code{time_max}}{A time the step must not pass; `Inf` for no bound.}
+      \item{\code{tol}}{How closely the time of an event is located: the bracket it is
+found in is narrower than `tol * (1 + |t|)`.}
     }
     \if{html}{\out{</div>}}
   }

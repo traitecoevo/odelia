@@ -185,6 +185,21 @@ inline ode::CallbackSystem::valid_type wrap_valid(Rcpp::Function valid, Rcpp::RO
   };
 }
 
+// event(t, y) returns one number, whose change of sign Solver::advance_until
+// stops at.
+inline auto wrap_event(Rcpp::Function event) {
+  detail::Callback call(event, Rcpp::RObject(), "event");
+  return [call](double t, const std::vector<double>& y) {
+    Rcpp::Shield<SEXP> out(call(t, y));
+    Rcpp::Shield<SEXP> value(detail::as_real(out));
+    if (Rf_xlength(value) != 1) {
+      util::stop("event returned " + std::to_string(Rf_xlength(value)) +
+                 " values, expected one");
+    }
+    return REAL(value)[0];
+  };
+}
+
 inline ode::CallbackSystem make_r_system(Rcpp::Function rhs,
                                          Rcpp::Nullable<Rcpp::Function> jac,
                                          Rcpp::Nullable<Rcpp::Function> valid,
