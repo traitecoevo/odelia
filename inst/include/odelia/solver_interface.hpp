@@ -248,6 +248,12 @@ inline Rcpp::List Solver_loss_and_gradient_impl(
     rows[k] = {schedule[k], schedule[k] - schedule[k - 1]};
   }
 
+  // Whether this System can be walked forward at all, and under RODAS: known at
+  // compile time, so a System that cannot is never instantiated at the lane
+  // scalar, and keeps the reverse sweep it had.
+  using lane_system =
+      typename ode::rebound_system<SystemType, ode::tangent_lanes<W>>::type;
+  constexpr bool walkable = ode::TangentSweepable<SystemType, ode::tangent_lanes<W>>;
   const ode::Method method = solver->method();
   if (mode.empty()) {
     mode = method == ode::Method::rodas ? "forward" : "reverse";
@@ -269,6 +275,22 @@ inline Rcpp::List Solver_loss_and_gradient_impl(
   }
 
   if (mode == "forward") {
+    if constexpr (!walkable) {
+      Rcpp::stop("this System cannot be differentiated in forward mode (see "
+                 "TangentSweepable)%s",
+                 method == ode::Method::rodas
+                     ? ", and a run under method = 'rodas' cannot be swept in "
+                       "reverse; use a solver built with 'rkck' or 'dopri'"
+                     : "; use mode = \"reverse\"");
+    } else {
+    if (method == ode::Method::rodas &&
+        !ode::RodasStep<lane_system>::supported) {
+      Rcpp::stop("under method = 'rodas' this System is differentiated in "
+                 "forward mode, which needs it to declare `static constexpr "
+                 "bool nests_tangents = true` (see NestsTangents) or have its "
+                 "own ode_jacobian(); or use a solver built with 'rkck' or "
+                 "'dopri'");
+    }
     ode::tangent_directions wrt;
     if (params.isNotNull()) {
       for (std::size_t q = 0; q < n_par; ++q) wrt.parameters.push_back(q);
@@ -291,6 +313,7 @@ inline Rcpp::List Solver_loss_and_gradient_impl(
     }
     return Rcpp::List::create(Rcpp::Named("loss") = loss,
                               Rcpp::Named("gradient") = Rcpp::wrap(gradient));
+    }
   }
 
   ode::Solver<SystemType> replay(sys, solver->control(), method);
@@ -350,9 +373,9 @@ inline Rcpp::List Solver_loss_and_gradient_impl(
 // parameters (`parameters`, 0-based into ad_parameters()) and components of the
 // state at times[0] (`initial`, 0-based), by forward mode.
 //
-// The solve is the one $advance_adaptive(times) would take from where this
-// solver stands -- a copy of it is advanced, and the solver itself does not
-// move -- with a step landing on every time. Its recording is then walked again
+// The solve starts from where this solver stands, with its step size afresh --
+// a copy of it is advanced, and the solver itself does not move -- and lands a
+// step on every time. Its recording is then walked again
 // carrying the directions (sweep_tangent), under the solver's own method.
 //
 // Returns list(time, y, dy): y is n_times x n, dy an n_times x n x P array, the
@@ -368,8 +391,11 @@ inline Rcpp::List Solver_sensitivities_impl(SEXP solver_xp,
   if (n_t == 0) {
     Rcpp::stop("'times' must hold at least the current time");
   }
+  // A copy that has stepped keeps no record of where it stands; set_state
+  // starts a new one there (and the step size afresh).
   ode::Solver<SystemType> run(*solver);
   run.set_collect(false);
+  run.set_state(run.state(), run.time());
   run.set_keep_states(true);
   std::vector<std::size_t> rows{0};
   for (std::size_t k = 1; k < n_t; ++k) {

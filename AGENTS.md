@@ -33,7 +33,7 @@ forward pass and when it costs less than a sweep. The System contract is the con
   the R adapter over the callback system and the `OdeSolver` exports.
 - `R/` — friendly **R6** wrappers around the C++ objects.
 - `vignettes/` — `odelia.Rmd` (getting started), `parameter-fitting.Rmd`; `articles/` holds
-  the website-only pieces that compile C++ (`leaf-thermal`, `reverse-mode`).
+  the website-only pieces that compile C++ (`leaf-thermal`, `reverse-mode`, `forward-mode`).
 - `tests/testthat/` — the R suite; `tests/standalone/` — the R-free C++ suite, which also
   holds the smallest complete sweepable System (`Grow`).
 

@@ -73,14 +73,17 @@ LeafThermalSolver <- R6::R6Class(
       invisible(self)
     },
     # Least-squares loss and its exact gradient: d(loss)/d(params), then
-    # d(loss)/d(initial_state), for whichever were given.
-    loss_and_gradient = function(initial_state = NULL, params = NULL) {
+    # d(loss)/d(initial_state), for whichever were given. `mode` is "reverse"
+    # or "forward"; NULL is forward under "rodas" and reverse otherwise.
+    loss_and_gradient = function(initial_state = NULL, params = NULL,
+                                 mode = NULL) {
       if (is.null(private$target)) {
         stop("Must call set_target() before loss_and_gradient()")
       }
+      mode <- if (is.null(mode)) "" else match.arg(mode, c("reverse", "forward"))
       t <- private$target
       LeafSolver_loss_and_gradient(self$ptr, t$schedule, t$target,
-                                   t$obs_indices, initial_state, params)
+                                   t$obs_indices, initial_state, params, mode)
     }
  ),
  private = list(

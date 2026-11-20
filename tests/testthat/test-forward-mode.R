@@ -194,3 +194,20 @@ testthat::test_that("$loss_and_gradient() is forward under rodas and refuses a r
   expect_error(s$loss_and_gradient(params = p, mode = "reverse"),
                "cannot be swept in reverse")
 })
+
+testthat::test_that("$sensitivities() starts from where a solver that has stepped stands", {
+  s <- lorenz_solver("dopri")
+  s$advance_adaptive(c(0, 1))
+  s$step()
+  t0 <- s$time()
+  y0 <- s$state()
+  out <- s$sensitivities(c(t0, t0 + 0.5), parameters = FALSE)
+  expect_identical(s$time(), t0)
+  expect_equal(out$y[1, ], setNames(y0, c("x", "y", "z")))
+  expect_equal(unname(out$dy[1, , ]), diag(3))
+
+  # Against a fresh solver started at that state.
+  fresh <- lorenz_solver("dopri")
+  fresh$set_state(y0, t0)
+  expect_identical(out$dy, fresh$sensitivities(c(t0, t0 + 0.5), parameters = FALSE)$dy)
+})

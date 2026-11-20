@@ -213,7 +213,7 @@ out <- s$sensitivities(c(0, 0.5, 1), parameters = c("sigma", "R"), initial = "x"
 out$dy[3, , ]
 ```
 
-`$sensitivities(times, parameters, initial)` solves from where the solver stands, as `$advance_adaptive(times)` would, without moving it, and returns `y` and `dy`, an array over time, state component and input. `$loss_and_gradient(mode = "forward")` takes a least-squares loss's gradient the same way over the target's schedule; it is the default for a `"rodas"` solver, where `mode = "reverse"` is refused.
+`$sensitivities(times, parameters, initial)` solves from where the solver stands, without moving it, and returns `y` and `dy`, an array over time, state component and input. `$loss_and_gradient(mode = "forward")` takes a least-squares loss's gradient the same way over the target's schedule; it is the default for a `"rodas"` solver, where `mode = "reverse"` is refused.
 
 ## What a System needs
 

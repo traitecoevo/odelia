@@ -583,7 +583,14 @@ public:
         rows[k] = k;
       }
     }
-    const std::vector<ode::schedule_row> schedule(rec.begin(), rec.end());
+    // Only as far as the last row asked for: nothing after it is read.
+    const std::size_t end = *std::max_element(rows.begin(), rows.end()) + 1;
+    if (end > rec.size())
+    {
+      util::stop("sweep_tangent: row " + util::to_string(end - 1) +
+                 " is past the recording's " + util::to_string(rec.size()));
+    }
+    const std::vector<ode::schedule_row> schedule(rec.begin(), rec.begin() + end);
     System start = system;
     ode::be_at_step(start, rec, 0);
     return ode::sweep_tangent<W>(start, control_, method(), schedule, wrt, rows);

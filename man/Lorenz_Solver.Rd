@@ -370,10 +370,9 @@ otherwise.}
 \subsection{\code{Lorenz_Solver$sensitivities()}}{
   The state at each of \code{times} and its derivative with
   respect to the parameters and to the state at \code{times[1]}, by
-  forward-mode automatic differentiation. The solve is the one
-  \code{$advance_adaptive(times)} would take from where this solver
-  stands, with a step landing on every time; the solver itself does not
-  move. Those steps are then walked again carrying one direction per
+  forward-mode automatic differentiation. The solve starts from where
+  this solver stands, with its step size afresh, and lands a step on
+  every time; the solver itself does not move. Those steps are then walked again carrying one direction per
   input, under the solver's own \code{method}, \code{"rodas"} included.
   The cost grows with the number of inputs and not with the number of
   times.

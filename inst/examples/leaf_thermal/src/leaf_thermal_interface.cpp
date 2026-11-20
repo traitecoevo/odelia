@@ -240,15 +240,16 @@ Rcpp::List LeafSolver_get_history(SEXP solver_xp) {
   return odelia::solver::Solver_get_history_impl<SystemType>(solver_xp);
 }
 
-// Least-squares loss against observed states and its gradient by reverse mode,
-// through the time-varying drivers; Solver_loss_and_gradient_impl says what is
-// replayed.
+// Least-squares loss against observed states and its gradient, in reverse or
+// forward mode, through the time-varying drivers; Solver_loss_and_gradient_impl
+// says what is stepped and which mode an empty `mode` means.
 // [[Rcpp::export]]
 Rcpp::List LeafSolver_loss_and_gradient(
     SEXP solver_xp, Rcpp::NumericVector schedule, Rcpp::NumericMatrix target,
     Rcpp::IntegerVector obs_indices,
     Rcpp::Nullable<Rcpp::NumericVector> initial_state = R_NilValue,
-    Rcpp::Nullable<Rcpp::NumericVector> params = R_NilValue) {
+    Rcpp::Nullable<Rcpp::NumericVector> params = R_NilValue,
+    std::string mode = "") {
   return odelia::solver::Solver_loss_and_gradient_impl<SystemType>(
-      solver_xp, schedule, target, obs_indices, initial_state, params);
+      solver_xp, schedule, target, obs_indices, initial_state, params, mode);
 }
