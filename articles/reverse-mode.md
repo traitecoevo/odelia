@@ -343,6 +343,99 @@ recording reads. A System that solves for values inside a stage declares
 which of its members belong to which tier; the smallest complete
 sweepable System in the tree is `Grow` in `tests/standalone/r_free.cpp`.
 
+## Several output times, one sweep
+
+A loss over a time series is a sum of terms at several output times, and
+its gradient needs an adjoint at each of them. One sweep still serves,
+taken interval by interval from the last output time to the first: the
+sweep from the top is seeded with the last time’s adjoint; at each
+output time below, that time’s own adjoint is added to what the sweep
+has carried down to it, and the sweep continues.
+`sweep_adjoint(lambda, dp, k_first, k_last)` sweeps the rows between two
+indices into the recording, and `advance_adaptive(times)` lands a step
+on every time asked for, so each output time is a recorded row, found by
+matching `recording()[k].time`. For the derivative of the sum of
+`x(t_i)` over the output times:
+
+``` cpp
+// [[Rcpp::plugins(cpp20)]]
+#include <Rcpp.h>
+#include <odelia/ode_solver.hpp>
+#include <odelia/adjoint.hpp>
+#include <examples/lorenz_system.hpp>
+
+using namespace odelia::ode;
+
+// d sum_i x(t_i) / d (sigma, R, b): one adjoint row per output time, swept
+// interval by interval; and the same from a forward pass, row by row.
+// [[Rcpp::export]]
+Rcpp::List lorenz_series_adjoint(std::vector<double> times) {
+  LorenzSystem<double> system(10.0, 28.0, 8.0 / 3.0);
+  Solver<LorenzSystem<double>> s(system, OdeControl());
+  s.set_keep_states(true);
+  s.advance_adaptive(times);                     // a step lands on every time
+
+  const auto rec = s.recording();
+  std::vector<std::size_t> rows;                 // the recorded row of each time
+  for (std::size_t k = 0, i = 0; k < rec.size() && i < times.size(); ++k) {
+    if (rec[k].time == times[i]) { rows.push_back(k); ++i; }
+  }
+
+  adjoint_batch lambda(1, 3), dp(1, 3);          // zeroed
+  std::size_t hi = rows.back();
+  lambda[0][0] = 1.0;                            // d x(t_n)
+  for (std::size_t i = rows.size() - 1; i-- > 0;) {
+    s.sweep_adjoint(lambda, dp, rows[i], hi);    // down to the time before
+    lambda[0][0] += 1.0;                         // and add that time's own adjoint
+    hi = rows[i];
+  }
+
+  tangent_directions wrt{{0, 1, 2}, {}};
+  std::vector<double> forward(3, 0.0);
+  for (const tangent_row& d : s.sweep_tangent<3>(wrt, rows)) {
+    for (std::size_t j = 0; j < 3; ++j) forward[j] += d.at(0, j);
+  }
+  return Rcpp::List::create(
+    Rcpp::Named("steps")   = static_cast<int>(rec.size()) - 1,
+    Rcpp::Named("reverse") = std::vector<double>(dp[0].begin(), dp[0].end()),
+    Rcpp::Named("forward") = forward);
+}
+```
+
+The last sweep ends at row 0, where `lambda` holds the derivative with
+respect to the initial state and `dp` the derivative with respect to the
+parameters, accumulated across every interval. The forward pass of the
+same run ([Forward
+mode](https://traitecoevo.github.io/odelia/articles/forward-mode.md))
+gives the derivative at each row directly, and summing those is the
+check:
+
+``` r
+
+r <- lorenz_series_adjoint(c(0, 0.5, 1, 1.5, 2))
+rbind(reverse = r$reverse, forward = r$forward)
+#>              [,1]      [,2]      [,3]
+#> reverse -1.811062 -1.792055 -11.65235
+#> forward -1.811062 -1.792055 -11.65235
+```
+
+Landing a step on every output time changes the run: the steps are
+shorter where an output time falls inside what would have been one step,
+and a fine output grid takes more of them. The cost is in steps, not in
+sweeps, and it is paid by the forward solve as much as by the gradient:
+
+``` r
+
+c(two_times = lorenz_series_adjoint(c(0, 2))$steps,
+  two_hundred = lorenz_series_adjoint(seq(0, 2, by = 0.01))$steps)
+#>   two_times two_hundred 
+#>         171         255
+```
+
+A sum of squares against observations is the same loop with
+`2 * (y - target)` at each output time in place of the unit adjoint;
+that is what `$loss_and_gradient()` does below.
+
 ## From R: what `$loss_and_gradient()` does
 
 `Lorenz_Solver$set_target(schedule, target, obs_indices)` stores a

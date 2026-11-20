@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -40,6 +40,11 @@
       <small>Source: <a href="https://github.com/traitecoevo/odelia/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.12.1" id="odelia-0121">odelia 0.12.1<a class="anchor" aria-label="anchor" href="#odelia-0121"></a></h2>
+<p><strong>Documentation for a user outside the plant family.</strong> A one-file example, <code>inst/examples/consumer_resource/consumer_resource.cpp</code>, is a consumer-resource System with a solve and forward-mode sensitivities as its exports, built with <code><a href="https://rdrr.io/pkg/Rcpp/man/sourceCpp.html" class="external-link">Rcpp::sourceCpp()</a></code> as the README’s new “Your own model in one file” shows; a test compiles it and checks it against the same model as an R function. The reverse-mode article gains “Several output times, one sweep”: the interval-by-interval loop that seeds one adjoint per output time, checked against the forward pass, and what landing a step on every output time costs. The getting-started vignette says what bounds a solve (no step count, and <code>step_size_min</code> is a floor an inaccurate step is accepted at, not a cap; only an invalid step fails there), compares RODAS with <code><a href="https://rdrr.io/pkg/deSolve/man/lsoda.html" class="external-link">deSolve::lsoda</a></code> on Van der Pol, and traces an equilibrium across a parameter with <code><a href="../reference/ode_steady_state.html">ode_steady_state()</a></code>, continuing from the last solution with <code>warmup</code> as the fallback and reading the response curve’s slope from <code>sensitivity</code>. The speed claims in the README and the vignette now say what they compare against: a hundred times is against an explicit stepper on a non-stiff problem; against <code>lsoda</code> on a stiff one the gain is nearer fifteen times.</p>
+<p>A <strong>patch</strong> bump: documentation and a shipped example only; no number moves.</p>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.12.0" id="odelia-0120">odelia 0.12.0<a class="anchor" aria-label="anchor" href="#odelia-0120"></a></h2>
 <p><strong>A run can be differentiated forward, under every stepper.</strong> <code>Solver::sweep_tangent&lt;W&gt;(wrt, rows)</code> walks a run’s recorded steps a second time with the System on <code>tangent_lanes&lt;W&gt;</code>, a scalar carrying one lane per direction, and returns the state and <code>dy/dθ</code> at each row asked for. The directions (<code>tangent_directions</code>) are parameters, by their place in <code>ad_parameters()</code>, and components of the state the run started from; more of them than <code>W</code> are walked in further passes. The steps are the run’s, and nothing a lane carries reaches a step’s size, so the derivative is that of the scheme as the run stepped it: the convention <code>sweep_adjoint</code> keeps. Over the same run the two agree to about 1e-14. A free <code>sweep_tangent</code> walks any schedule from a given start. A System walked forward is <code>TangentSweepable</code>: <code>rebind()</code> to the lane scalar and <code>set_recorded_state()</code>, plus <code>ad_parameters()</code> for a parameter direction. A System that solves for inner values (<code>SolvesForValues</code>) is refused at compile time, since the pass would solve them again rather than load the run’s.</p>

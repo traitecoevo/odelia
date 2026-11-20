@@ -1,5 +1,33 @@
 # Changelog
 
+## odelia 0.12.1
+
+**Documentation for a user outside the plant family.** A one-file
+example, `inst/examples/consumer_resource/consumer_resource.cpp`, is a
+consumer-resource System with a solve and forward-mode sensitivities as
+its exports, built with
+[`Rcpp::sourceCpp()`](https://rdrr.io/pkg/Rcpp/man/sourceCpp.html) as
+the README’s new “Your own model in one file” shows; a test compiles it
+and checks it against the same model as an R function. The reverse-mode
+article gains “Several output times, one sweep”: the
+interval-by-interval loop that seeds one adjoint per output time,
+checked against the forward pass, and what landing a step on every
+output time costs. The getting-started vignette says what bounds a solve
+(no step count, and `step_size_min` is a floor an inaccurate step is
+accepted at, not a cap; only an invalid step fails there), compares
+RODAS with
+[`deSolve::lsoda`](https://rdrr.io/pkg/deSolve/man/lsoda.html) on Van
+der Pol, and traces an equilibrium across a parameter with
+[`ode_steady_state()`](https://traitecoevo.github.io/odelia/reference/ode_steady_state.md),
+continuing from the last solution with `warmup` as the fallback and
+reading the response curve’s slope from `sensitivity`. The speed claims
+in the README and the vignette now say what they compare against: a
+hundred times is against an explicit stepper on a non-stiff problem;
+against `lsoda` on a stiff one the gain is nearer fifteen times.
+
+A **patch** bump: documentation and a shipped example only; no number
+moves.
+
 ## odelia 0.12.0
 
 **A run can be differentiated forward, under every stepper.**
