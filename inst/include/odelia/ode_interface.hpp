@@ -301,6 +301,23 @@ concept Sweepable =
     a.set_recorded_state(y, t);
   };
 
+// What a System needs beyond solving for a forward pass over a schedule
+// (sweep_tangent) to walk it: a copy of itself on the lane scalar U, and a way to
+// stand on a given state there, which is where the pass seats the directions it
+// starts from. A direction on a parameter needs ad_parameters() on that copy as
+// well, asserted where one is asked for.
+//
+// A System that solves for inner values is not walked. The pass would solve them
+// again at U rather than load what the run solved for, and differentiate a
+// function the run never computed.
+template <typename S, typename U>
+concept TangentSweepable =
+  Rebindable<S, U> && !SolvesForValues<S> &&
+  requires(typename rebound_system<S, U>::type a, const std::vector<U>& y,
+           double t) {
+    a.set_recorded_state(y, t);
+  };
+
 // Components [first, first + size) of a System's state.
 struct state_range {
   std::size_t first;

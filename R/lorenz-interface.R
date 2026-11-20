@@ -138,24 +138,59 @@ Lorenz_Solver <- R6::R6Class(
     },
 
     #' @description Least-squares loss against the target, and its exact
-    #'   gradient by reverse-mode automatic differentiation. The schedule is
-    #'   replayed under this solver's \code{method}, except that a
-    #'   \code{"rodas"} solver's is replayed under \code{"rkck"}: the
-    #'   Rosenbrock stepper cannot be swept.
+    #'   gradient by automatic differentiation. The schedule is stepped under
+    #'   this solver's \code{method}.
     #' @param initial_state Initial state to evaluate at, or \code{NULL} to keep
     #'   the system's.
     #' @param params Parameters to evaluate at, or \code{NULL} to keep the
     #'   system's.
+    #' @param mode \code{"reverse"}: one reverse sweep, whose cost does not grow
+    #'   with the number of inputs. \code{"forward"}: the schedule walked again
+    #'   carrying one direction per input, whose cost does; it is the only mode
+    #'   under \code{"rodas"}, which cannot be swept. \code{NULL} (the default)
+    #'   is \code{"forward"} for a \code{"rodas"} solver and \code{"reverse"}
+    #'   otherwise.
     #' @return A list with \code{loss} (sum of squared differences) and
     #'   \code{gradient}: d(loss)/d(params), then d(loss)/d(initial_state), for
     #'   whichever were given.
-    loss_and_gradient = function(initial_state = NULL, params = NULL) {
+    loss_and_gradient = function(initial_state = NULL, params = NULL,
+                                 mode = NULL) {
       if (is.null(private$target)) {
         stop("Must call set_target() before loss_and_gradient()")
       }
+      mode <- if (is.null(mode)) "" else match.arg(mode, c("reverse", "forward"))
       t <- private$target
       Solver_loss_and_gradient(self$ptr, t$schedule, t$target, t$obs_indices,
-                               initial_state, params)
+                               initial_state, params, mode)
+    },
+
+    #' @description The state at each of \code{times} and its derivative with
+    #'   respect to the parameters and to the state at \code{times[1]}, by
+    #'   forward-mode automatic differentiation. The solve starts from where
+    #'   this solver stands, with its step size afresh, and lands a step on
+    #'   every time; the solver itself does not move. Those steps are then walked again carrying one direction per
+    #'   input, under the solver's own \code{method}, \code{"rodas"} included.
+    #'   The cost grows with the number of inputs and not with the number of
+    #'   times.
+    #' @param parameters The parameters to differentiate with respect to:
+    #'   \code{TRUE} (all), \code{FALSE} (none), or names (\code{"sigma"},
+    #'   \code{"R"}, \code{"b"}) or indices.
+    #' @param initial The components of the state at \code{times[1]} to
+    #'   differentiate with respect to: \code{TRUE}, \code{FALSE}, or names
+    #'   (\code{"x"}, \code{"y"}, \code{"z"}) or indices.
+    #' @return A list with \code{time}; \code{y}, the state, one row per time;
+    #'   and \code{dy}, an array indexed by time, state component and input:
+    #'   the parameters first, then the initial state, named \code{x0},
+    #'   \code{y0}, \code{z0}.
+    sensitivities = function(times, parameters = TRUE, initial = TRUE) {
+      states <- c("x", "y", "z")
+      p <- forward_directions(parameters, c("sigma", "R", "b"), "parameters")
+      s <- forward_directions(initial, states, "initial")
+      out <- Solver_sensitivities(self$ptr, as.numeric(times), p - 1L, s - 1L)
+      colnames(out$y) <- states
+      dimnames(out$dy) <- list(NULL, states,
+                               c(names(p), sprintf("%s0", names(s))))
+      out
     }
   ),
   private = list(
@@ -227,3 +262,32 @@ LorenzSystem <- R6::R6Class(
     }
   )
 )
+
+# The inputs a forward pass carries a direction for: positions into `names`
+# (1-based), named. `which` is TRUE (all), FALSE (none), or names or indices.
+forward_directions <- function(which, names, what) {
+  idx <- seq_along(names)
+  names(idx) <- names
+  if (isTRUE(which)) {
+    return(idx)
+  }
+  if (isFALSE(which) || length(which) == 0) {
+    return(idx[0])
+  }
+  if (is.character(which)) {
+    missing <- setdiff(which, names)
+    if (length(missing) > 0) {
+      stop("'", what, "' names not among ", paste(names, collapse = ", "), ": ",
+           paste(missing, collapse = ", "), call. = FALSE)
+    }
+    return(idx[which])
+  }
+  if (is.numeric(which)) {
+    which <- as.integer(which)
+    if (anyNA(which) || any(which < 1L | which > length(names))) {
+      stop("'", what, "' indices must lie in 1..", length(names), call. = FALSE)
+    }
+    return(idx[which])
+  }
+  stop("'", what, "' must be TRUE, FALSE, or names or indices", call. = FALSE)
+}

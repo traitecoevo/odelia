@@ -43,9 +43,20 @@ namespace ode {
 // method = rkck or dopri a run records, replays and sweeps; rodas refuses a sweep
 // or a replay.
 //
+// The same recording is differentiated forward, for few inputs and many
+// outputs and under any of the three steppers, by sweep_tangent: see the free
+// sweep_tangent below, and the article "Forward mode" for a worked example.
+//
 // `collect` (default on) keeps a copy of the whole System at every step in
 // `history`, for callers reading a trajectory from R. A sweep does not read it
 // and does not need it; set_collect(false) where the copies cost.
+
+template <std::size_t W, typename System>
+std::vector<tangent_row> sweep_tangent(const System& start,
+                                       const OdeControl& control, Method method,
+                                       std::span<const schedule_row> schedule,
+                                       const tangent_directions& wrt,
+                                       std::span<const std::size_t> rows);
 
 template <typename System>
 class Solver
@@ -623,6 +634,55 @@ public:
                          extra_stops);
   }
 
+  // The forward counterpart of sweep_adjoint: this run's recording walked again
+  // from its first row, carrying one direction for each input `wrt` names, W
+  // at a time. Returns the state and its derivative along each direction at
+  // each of `rows`, indices into recording(), every row when none are given.
+  // The steps are the run's, so over the same rows this and a sweep
+  // differentiate the same function and agree to rounding.
+  //
+  // A subdivided row is refused, as a sweep refuses it: its size is the
+  // interval's, and one step across the interval is not what the run took.
+  template <std::size_t W>
+  std::vector<ode::tangent_row> sweep_tangent(const ode::tangent_directions& wrt,
+                                              std::vector<std::size_t> rows = {})
+      const
+  {
+    const auto rec = recording();
+    if (rec.empty())
+    {
+      util::stop("sweep_tangent: nothing recorded; set_keep_states(true) "
+                 "before the run");
+    }
+    for (std::size_t k = 0; k < rec.size(); ++k)
+    {
+      if (rec[k].subdivided)
+      {
+        util::stop("sweep_tangent: recorded step " + util::to_string(k) +
+                   " was subdivided, so its row is not one step of the run");
+      }
+    }
+    if (rows.empty())
+    {
+      rows.resize(rec.size());
+      for (std::size_t k = 0; k < rows.size(); ++k)
+      {
+        rows[k] = k;
+      }
+    }
+    // Only as far as the last row asked for: nothing after it is read.
+    const std::size_t end = *std::max_element(rows.begin(), rows.end()) + 1;
+    if (end > rec.size())
+    {
+      util::stop("sweep_tangent: row " + util::to_string(end - 1) +
+                 " is past the recording's " + util::to_string(rec.size()));
+    }
+    const std::vector<ode::schedule_row> schedule(rec.begin(), rec.begin() + end);
+    System start = system;
+    ode::be_at_step(start, rec, 0);
+    return ode::sweep_tangent<W>(start, control_, method(), schedule, wrt, rows);
+  }
+
   // Rate evaluations the sweeps since the last clear have recorded;
   // Step::recorded_rates says what the number means and what it catches.
   std::size_t recorded_rates() const { return solver.recorded_rates(); }
@@ -918,6 +978,157 @@ private:
   OdeControl control_;
   SolverInternal<System> solver;
 };
+
+// The forward counterpart of a sweep: `schedule` walked from `start`, which
+// stands where the schedule starts, with the System rebound to a scalar
+// carrying one lane per direction `wrt` names. Returns the state and its
+// derivative along each direction at each of `rows`, indices into the schedule,
+// in the order asked.
+//
+// The steps are the schedule's, at its sizes, and nothing a lane carries reaches
+// a step's size or whether it is taken, so the derivative is that of the scheme
+// as those steps took it -- the convention sweep_adjoint keeps. Under RODAS the
+// Jacobian carries the lanes too (Jacobian::compute), so a step's derivative is
+// the step's own. A row of NaN size is stepped to its time and may be
+// subdivided there, which is differentiated as taken.
+//
+// More directions than W are walked in further passes of W. The lanes do not
+// mix, so the answer does not depend on W; the value is the same in every pass.
+template <std::size_t W, typename System>
+std::vector<tangent_row> sweep_tangent(const System& start,
+                                       const OdeControl& control, Method method,
+                                       std::span<const schedule_row> schedule,
+                                       const tangent_directions& wrt,
+                                       std::span<const std::size_t> rows)
+{
+  using lane_type = tangent_lanes<W>;
+  static_assert(W > 0, "sweep_tangent needs at least one lane");
+  static_assert(TangentSweepable<System, lane_type>,
+                "sweep_tangent needs a System that rebinds to the lane scalar, "
+                "stands on a given state there (set_recorded_state), and "
+                "solves for no inner values (see TangentSweepable)");
+  using lane_system = typename rebound_system<System, lane_type>::type;
+
+  if (schedule.empty())
+  {
+    util::stop("sweep_tangent: 'schedule' must hold at least the row it "
+               "starts from");
+  }
+  if (method == Method::rodas && !RodasStep<lane_system>::supported)
+  {
+    util::stop("sweep_tangent: under method='rodas' the System's Jacobian is a "
+               "tangent of a tangent, which it must declare it compiles "
+               "(`static constexpr bool nests_tangents = true`; see "
+               "NestsTangents) unless it has its own ode_jacobian()");
+  }
+  for (const std::size_t r : rows)
+  {
+    if (r >= schedule.size())
+    {
+      util::stop("sweep_tangent: row " + util::to_string(r) +
+                 " is past the schedule's " + util::to_string(schedule.size()));
+    }
+  }
+  const std::size_t n_start = start.ode_size();
+  for (const std::size_t i : wrt.initial)
+  {
+    if (i >= n_start)
+    {
+      util::stop("sweep_tangent: initial-state direction " + util::to_string(i) +
+                 " is past the state's " + util::to_string(n_start) +
+                 " components");
+    }
+  }
+  std::vector<double> y_start(n_start);
+  start.ode_state(y_start.begin());
+  const double t_start = schedule.front().time;
+
+  const std::vector<schedule_row> walk(schedule.begin(), schedule.end());
+  const std::size_t n_parameters = wrt.parameters.size();
+  const std::size_t n_directions = wrt.size();
+  std::vector<tangent_row> out(rows.size());
+  for (tangent_row& row : out)
+  {
+    row.directions = n_directions;
+  }
+
+  for (std::size_t first = 0; first == 0 || first < n_directions; first += W)
+  {
+    const std::size_t last = std::min(first + W, n_directions);
+    lane_system walker = start.template rebind<lane_type>();
+
+    // Parameters before the state: the state's load computes the rates the
+    // first step starts from, and they must carry the parameters' lanes.
+    if (first < n_parameters)
+    {
+      if constexpr (has_ad_parameters<lane_system>::value)
+      {
+        const std::vector<lane_type*> parameters = walker.ad_parameters();
+        for (std::size_t k = first; k < std::min(last, n_parameters); ++k)
+        {
+          const std::size_t p = wrt.parameters[k];
+          if (p >= parameters.size())
+          {
+            util::stop("sweep_tangent: parameter direction " +
+                       util::to_string(p) + " is past the System's " +
+                       util::to_string(parameters.size()) + " ad_parameters()");
+          }
+          set_direction(*parameters[p], k - first, 1.0);
+        }
+      }
+      else
+      {
+        util::stop("sweep_tangent: a direction on a parameter needs "
+                   "ad_parameters() on the System");
+      }
+    }
+    std::vector<lane_type> y(n_start);
+    for (std::size_t i = 0; i < n_start; ++i)
+    {
+      y[i] = lane_type(y_start[i]);
+    }
+    for (std::size_t k = std::max(first, n_parameters); k < last; ++k)
+    {
+      set_direction(y[wrt.initial[k - n_parameters]], k - first, 1.0);
+    }
+    walker.set_recorded_state(y, t_start);
+
+    Solver<lane_system> s(walker, control, method);
+    s.set_collect(false);
+    s.set_keep_states(true);
+    s.advance_schedule(walk);
+    const auto rec = s.recording();
+    if (rec.size() != schedule.size())
+    {
+      util::stop("sweep_tangent: the walk kept " + util::to_string(rec.size()) +
+                 " rows of a schedule of " + util::to_string(schedule.size()));
+    }
+
+    for (std::size_t j = 0; j < rows.size(); ++j)
+    {
+      const auto& state = rec[rows[j]].state;
+      tangent_row& row = out[j];
+      if (first == 0)
+      {
+        row.value.resize(state.size());
+        row.derivative.assign(state.size() * n_directions, 0.0);
+        for (std::size_t i = 0; i < state.size(); ++i)
+        {
+          row.value[i] = xad::value(state[i]);
+        }
+      }
+      for (std::size_t i = 0; i < state.size(); ++i)
+      {
+        for (std::size_t k = first; k < last; ++k)
+        {
+          row.derivative[i * n_directions + k] =
+              derivative_along(state[i], k - first);
+        }
+      }
+    }
+  }
+  return out;
+}
 }
 }
 #endif

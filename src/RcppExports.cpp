@@ -291,8 +291,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // Solver_loss_and_gradient
-Rcpp::List Solver_loss_and_gradient(SEXP solver_xp, Rcpp::NumericVector schedule, Rcpp::NumericMatrix target, Rcpp::IntegerVector obs_indices, Rcpp::Nullable<Rcpp::NumericVector> initial_state, Rcpp::Nullable<Rcpp::NumericVector> params);
-RcppExport SEXP _odelia_Solver_loss_and_gradient(SEXP solver_xpSEXP, SEXP scheduleSEXP, SEXP targetSEXP, SEXP obs_indicesSEXP, SEXP initial_stateSEXP, SEXP paramsSEXP) {
+Rcpp::List Solver_loss_and_gradient(SEXP solver_xp, Rcpp::NumericVector schedule, Rcpp::NumericMatrix target, Rcpp::IntegerVector obs_indices, Rcpp::Nullable<Rcpp::NumericVector> initial_state, Rcpp::Nullable<Rcpp::NumericVector> params, std::string mode);
+RcppExport SEXP _odelia_Solver_loss_and_gradient(SEXP solver_xpSEXP, SEXP scheduleSEXP, SEXP targetSEXP, SEXP obs_indicesSEXP, SEXP initial_stateSEXP, SEXP paramsSEXP, SEXP modeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -302,7 +302,22 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type obs_indices(obs_indicesSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type initial_state(initial_stateSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type params(paramsSEXP);
-    rcpp_result_gen = Rcpp::wrap(Solver_loss_and_gradient(solver_xp, schedule, target, obs_indices, initial_state, params));
+    Rcpp::traits::input_parameter< std::string >::type mode(modeSEXP);
+    rcpp_result_gen = Rcpp::wrap(Solver_loss_and_gradient(solver_xp, schedule, target, obs_indices, initial_state, params, mode));
+    return rcpp_result_gen;
+END_RCPP
+}
+// Solver_sensitivities
+Rcpp::List Solver_sensitivities(SEXP solver_xp, Rcpp::NumericVector times, Rcpp::IntegerVector parameters, Rcpp::IntegerVector initial);
+RcppExport SEXP _odelia_Solver_sensitivities(SEXP solver_xpSEXP, SEXP timesSEXP, SEXP parametersSEXP, SEXP initialSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type solver_xp(solver_xpSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type times(timesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type parameters(parametersSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type initial(initialSEXP);
+    rcpp_result_gen = Rcpp::wrap(Solver_sensitivities(solver_xp, times, parameters, initial));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -816,7 +831,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_odelia_Solver_get_history_size", (DL_FUNC) &_odelia_Solver_get_history_size, 1},
     {"_odelia_Solver_get_history_step", (DL_FUNC) &_odelia_Solver_get_history_step, 2},
     {"_odelia_Solver_get_history", (DL_FUNC) &_odelia_Solver_get_history, 1},
-    {"_odelia_Solver_loss_and_gradient", (DL_FUNC) &_odelia_Solver_loss_and_gradient, 6},
+    {"_odelia_Solver_loss_and_gradient", (DL_FUNC) &_odelia_Solver_loss_and_gradient, 7},
+    {"_odelia_Solver_sensitivities", (DL_FUNC) &_odelia_Solver_sensitivities, 4},
     {"_odelia_lorenz_rhs", (DL_FUNC) &_odelia_lorenz_rhs, 3},
     {"_odelia_test_param_types", (DL_FUNC) &_odelia_test_param_types, 1},
     {"_odelia_OdeControl_new", (DL_FUNC) &_odelia_OdeControl_new, 0},

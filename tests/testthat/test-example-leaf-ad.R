@@ -3,7 +3,7 @@
 # forcing to be right. The gradient is refereed against a central difference of
 # the loss, which shares no code with the sweep.
 
-leaf_fit_setup <- function() {
+leaf_fit_setup <- function(method = "rkck") {
   ensure_leaf_thermal_interfaces(rebuild = FALSE)
 
   # Air temperature varying through the day, so the drivers matter at every step.
@@ -27,7 +27,7 @@ leaf_fit_setup <- function() {
   pars_guess <- list(k_H = 0.5, g_tr_max = 1.0, m_tr = 0.5, T_tr_mid = 30.0)
   sys_fit <- LeafThermalSystem$new(pars_guess, drivers)
   sys_fit$set_initial_state(20.0, 0.0)
-  fitter <- LeafThermalSolver$new(sys_fit$ptr, ctrl$ptr, drivers$ptr)
+  fitter <- LeafThermalSolver$new(sys_fit$ptr, ctrl$ptr, drivers$ptr, method)
   fitter$set_target(times, matrix(hist$T_LC, ncol = 1), match(hist$time, times))
 
   list(fitter = fitter, truth = unlist(pars_true), guess = unlist(pars_guess))
@@ -87,4 +87,18 @@ testthat::test_that("a fit does not read the freed R system it was built from", 
   invisible(gc(full = TRUE))
   invisible(gc(full = TRUE))
   expect_identical(s$fitter$loss_and_gradient(initial_state = 25.0, params = p), before)
+})
+
+testthat::test_that("leaf thermal gradient is one in either mode, and forward through RODAS", {
+  s <- leaf_fit_setup()
+  p <- unname(s$guess)
+  rev <- s$fitter$loss_and_gradient(params = p, mode = "reverse")
+  fwd <- s$fitter$loss_and_gradient(params = p, mode = "forward")
+  expect_equal(fwd$loss, rev$loss, tolerance = 1e-12)
+  expect_lt(max(abs(fwd$gradient - rev$gradient) / pmax(1, abs(rev$gradient))), 1e-10)
+
+  r <- leaf_fit_setup("rodas")
+  res <- r$fitter$loss_and_gradient(params = p)
+  fd <- central_difference(function(q) r$fitter$loss_and_gradient(params = q)$loss, p)
+  expect_lt(max(abs(res$gradient - fd) / pmax(1, abs(fd))), 1e-6)
 })

@@ -135,8 +135,10 @@ system with its scalar type swapped) so its right-hand side can be
 differentiated for the Jacobian, as the Lorenz example does, or an
 `ode_jacobian(y, t, dydt, J)` method that fills the Jacobian itself -- the
 header `ode_jacobian.hpp` has `fd_jacobian()` for a one-line finite-difference
-version. The implicit stepper currently runs on the passive (non-AD) solver;
-differentiating a fit *through* RODAS is planned (odelia issue #36).
+version. A run under RODAS cannot be swept in reverse, but it is differentiated
+in forward mode: `$sensitivities()` and `$loss_and_gradient()` take the
+derivative of the RODAS steps themselves (see the article
+[Forward mode](articles/forward-mode.html)).
 
 ## Solving a system written in R
 

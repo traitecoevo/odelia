@@ -34,6 +34,7 @@ R6 wrapper for the Lorenz ODE solver.
     \item \href{#method-Lorenz_Solver-history}{\code{Lorenz_Solver$history()}}
     \item \href{#method-Lorenz_Solver-set_target}{\code{Lorenz_Solver$set_target()}}
     \item \href{#method-Lorenz_Solver-loss_and_gradient}{\code{Lorenz_Solver$loss_and_gradient()}}
+    \item \href{#method-Lorenz_Solver-sensitivities}{\code{Lorenz_Solver$sensitivities()}}
     \item \href{#method-Lorenz_Solver-clone}{\code{Lorenz_Solver$clone()}}
   }
 }
@@ -329,13 +330,15 @@ each row of \code{target} was observed.}
 \if{latex}{\out{\hypertarget{method-Lorenz_Solver-loss_and_gradient}{}}}
 \subsection{\code{Lorenz_Solver$loss_and_gradient()}}{
   Least-squares loss against the target, and its exact
-  gradient by reverse-mode automatic differentiation. The schedule is
-  replayed under this solver's \code{method}, except that a
-  \code{"rodas"} solver's is replayed under \code{"rkck"}: the
-  Rosenbrock stepper cannot be swept.
+  gradient by automatic differentiation. The schedule is stepped under
+  this solver's \code{method}.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
-    \preformatted{Lorenz_Solver$loss_and_gradient(initial_state = NULL, params = NULL)}
+    \preformatted{Lorenz_Solver$loss_and_gradient(
+  initial_state = NULL,
+  params = NULL,
+  mode = NULL
+)}
     \if{html}{\out{</div>}}
   }
   \subsection{Arguments}{
@@ -345,6 +348,12 @@ each row of \code{target} was observed.}
 the system's.}
       \item{\code{params}}{Parameters to evaluate at, or \code{NULL} to keep the
 system's.}
+      \item{\code{mode}}{\code{"reverse"}: one reverse sweep, whose cost does not grow
+with the number of inputs. \code{"forward"}: the schedule walked again
+carrying one direction per input, whose cost does; it is the only mode
+under \code{"rodas"}, which cannot be swept. \code{NULL} (the default)
+is \code{"forward"} for a \code{"rodas"} solver and \code{"reverse"}
+otherwise.}
     }
     \if{html}{\out{</div>}}
   }
@@ -352,6 +361,44 @@ system's.}
     A list with \code{loss} (sum of squared differences) and
   \code{gradient}: d(loss)/d(params), then d(loss)/d(initial_state), for
   whichever were given.
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Lorenz_Solver-sensitivities"></a>}}
+\if{latex}{\out{\hypertarget{method-Lorenz_Solver-sensitivities}{}}}
+\subsection{\code{Lorenz_Solver$sensitivities()}}{
+  The state at each of \code{times} and its derivative with
+  respect to the parameters and to the state at \code{times[1]}, by
+  forward-mode automatic differentiation. The solve starts from where
+  this solver stands, with its step size afresh, and lands a step on
+  every time; the solver itself does not move. Those steps are then walked again carrying one direction per
+  input, under the solver's own \code{method}, \code{"rodas"} included.
+  The cost grows with the number of inputs and not with the number of
+  times.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Lorenz_Solver$sensitivities(times, parameters = TRUE, initial = TRUE)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{times}}{Numeric vector of requested output times.}
+      \item{\code{parameters}}{The parameters to differentiate with respect to:
+\code{TRUE} (all), \code{FALSE} (none), or names (\code{"sigma"},
+\code{"R"}, \code{"b"}) or indices.}
+      \item{\code{initial}}{The components of the state at \code{times[1]} to
+differentiate with respect to: \code{TRUE}, \code{FALSE}, or names
+(\code{"x"}, \code{"y"}, \code{"z"}) or indices.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    A list with \code{time}; \code{y}, the state, one row per time;
+  and \code{dy}, an array indexed by time, state component and input:
+  the parameters first, then the initial state, named \code{x0},
+  \code{y0}, \code{z0}.
   }
 }
 

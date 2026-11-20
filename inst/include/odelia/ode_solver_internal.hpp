@@ -338,12 +338,13 @@ private:
         rodas_stepper.step(system, time_, step_size, y_, yerr_, dydt_in_,
                            dydt_out_);
       } else {
-        // RODAS is unavailable for this System: it has neither an
-        // ode_jacobian() hook nor a rebind() hook for the AD Jacobian, or its
-        // scalar type is itself active.
-        util::stop("method='rodas' is not available for this system/scalar type "
-                   "(needs an ode_jacobian() hook, or a rebind() hook with a "
-                   "non-active scalar); use method='rkck' or method='dopri'.");
+        // No Jacobian for this System at this scalar: see Jacobian::supported.
+        util::stop("method='rodas' has no Jacobian for this System at this "
+                   "scalar: it needs an ode_jacobian() hook, or a rebind() for "
+                   "the AD Jacobian, which is closed at a scalar carrying an "
+                   "adjoint and open at a tangent scalar only where the System "
+                   "declares `static constexpr bool nests_tangents = true`; "
+                   "use method='rkck' or method='dopri'.");
       }
     } else {
       with_row(stepper, substeps, inputs);

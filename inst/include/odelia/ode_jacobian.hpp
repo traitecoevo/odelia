@@ -18,10 +18,11 @@
 //      to the tangent scalar FReal<value_type>. Forward mode is used
 //      (not adjoint) because: for a square N->N Jacobian both cost N sweeps, but
 //      forward mode needs no tape (no recording, no allocation, no interaction
-//      with the single thread-local active-tape pointer). It therefore composes
-//      cleanly as FReal<AReal<double>> when the solver itself is being
-//      differentiated by an outer adjoint fit -- the tangent layer never contends
-//      with the outer tape. Rebinding requires the System to expose
+//      with the single thread-local active-tape pointer). At a solver scalar
+//      that is itself a tangent -- a forward pass over the run, sweep_tangent --
+//      this is a tangent of a tangent, and J carries the pass's directions:
+//      the derivative of the step is then the step's own. A tangent is never
+//      put above an adjoint (tangent.hpp). Rebinding requires the System to expose
 //        template <class U> Self<U> rebind() const;
 //      which returns a copy of itself with the scalar type swapped to U
 //      (parameters carried over via xad::value + U(...)) -- the same double->AD
@@ -29,7 +30,10 @@
 //
 // A system declaring neither cannot use the implicit stepper: `supported` says so
 // at compile time and the stepper raises a clear error. When both exist the hook
-// wins -- whoever wrote it meant it.
+// wins -- whoever wrote it meant it. Under a forward pass the hook is called at
+// the pass's scalar: one written over the System's value_type (fd_jacobian
+// included) carries its directions, and one that drops to double loses them, so
+// the pass differentiates a step whose Jacobian ignores the inputs.
 //
 // The AD route also yields the parameter Jacobian d(dydt)/dtheta, used by the
 // implicit-function-theorem steady-state sensitivity in ode_steady_state.hpp:
@@ -86,6 +90,17 @@ struct has_ad_parameters<
     S, std::void_t<decltype(std::declval<S&>().ad_parameters())>>
     : std::true_type {};
 
+// A System whose rates compile two tangent layers deep, declared with
+//   static constexpr bool nests_tangents = true;
+// The Jacobian of a step taken at a tangent scalar -- a forward pass over a
+// RODAS run (sweep_tangent) -- is a tangent of a tangent. Declared rather than
+// detected: whether a System's rates compile at that scalar shows only when
+// they are instantiated, too late for the stepper to decline, and a System
+// stepped at a tangent scalar under the explicit steppers alone must not be
+// made to.
+template <typename S>
+concept NestsTangents = requires { requires S::nests_tangents; };
+
 // The tangent scalar a Jacobian differentiates on, formed lazily so that naming
 // it at an adjoint scalar does not instantiate tangent_over's refusal: there it
 // is the scalar itself, which Jacobian::ad_supported then rules out.
@@ -117,11 +132,14 @@ public:
 
   // Whether the forward-AD route is instantiable and usable for this System.
   // Requires (a) a rebind() hook, (b) a scalar that does not already carry
-  // an adjoint (see value_is_adjoint), and (c) that the tangent System can be
-  // built from the current scalar type.
+  // an adjoint (see value_is_adjoint), and (c) a tangent that can stand at the
+  // current scalar: one built from it, or, when the scalar is itself a tangent
+  // and the System declares it NestsTangents, one seated through its value slot
+  // (see seat()).
   static constexpr bool ad_supported =
       !value_is_adjoint && Rebindable<System, tangent_type> &&
-      std::is_constructible<tangent_type, value_type>::value;
+      (std::is_constructible<tangent_type, value_type>::value ||
+       (CarriesDirection<value_type> && NestsTangents<System>));
 
   // Whether a Jacobian can be had at all: the system's own hook, or the AD
   // route. Callers gate on this, so Jacobian can be class-instantiated even for
@@ -131,9 +149,13 @@ public:
   // Whether the parameter Jacobian df/dtheta is additionally available: needs
   // the AD route (a rebound System to differentiate on; a hook says nothing
   // about parameters) plus an `ad_parameters()` hook on that System exposing
-  // pointers to the differentiable parameters to set directions on.
+  // pointers to the differentiable parameters to set directions on. At a
+  // scalar that already carries directions, the parameters' own would have to
+  // be put back as compute() does; nothing asks for df/dtheta there, so it is
+  // not offered.
   static constexpr bool params_supported =
-      ad_supported && has_ad_parameters<tangent_system_type>::value;
+      ad_supported && !CarriesDirection<value_type> &&
+      has_ad_parameters<tangent_system_type>::value;
 
   void resize(size_t size_) {
     size = size_;
@@ -157,12 +179,27 @@ public:
     } else {
       // Rebuild from the live system each call so current parameters are
       // reflected (cheap: a small value copy). Its scalar is the tangent type;
-      // its parameters carry zero derivative.
+      // its parameters carry zero derivative in the direction taken here.
       tangent_system_type tangent_system =
           system.template rebind<tangent_type>();
 
+      // At a scalar that carries directions of its own -- a forward pass over
+      // the step -- J must carry them too, or the pass differentiates a step
+      // whose Jacobian ignores the parameters. A rebind carries values only, so
+      // each parameter's directions are put back here. This reaches what the
+      // rates read through ad_parameters() and nothing else: the contract at
+      // has_ad_parameters.
+      if constexpr (CarriesDirection<value_type> &&
+                    has_ad_parameters<System>::value) {
+        const std::vector<value_type*> from = system.ad_parameters();
+        const std::vector<tangent_type*> to = tangent_system.ad_parameters();
+        for (size_t k = 0; k < from.size(); ++k) {
+          xad::value(*to[k]) = *from[k];
+        }
+      }
+
       for (size_t j = 0; j < size; ++j) {
-        v[j] = tangent_type(y[j]);
+        seat(v[j], y[j]);
       }
 
       J.assign(size * size, value_type(0.0));
@@ -203,7 +240,7 @@ public:
         system.template rebind<tangent_type>();
 
     for (size_t j = 0; j < size; ++j) {
-      v[j] = tangent_type(y[j]);
+      seat(v[j], y[j]);
     }
 
     // Pointers into the rebound System's own parameter storage; valid for the
@@ -225,6 +262,14 @@ public:
   }
 
 private:
+  // A tangent at y, in no direction. Seated through the value slot rather than
+  // built: a tangent above a tangent cannot be built from the scalar below it,
+  // and the slot keeps whatever directions y itself carries.
+  static void seat(tangent_type& x, const value_type& y) {
+    x = tangent_type();
+    xad::value(x) = y;
+  }
+
   size_t size = 0;
   std::vector<tangent_type> v;
   std::vector<tangent_type> dydt_ad;

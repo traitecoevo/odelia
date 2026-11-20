@@ -23,19 +23,19 @@
 |---|---|
 | `ode_util.hpp` | `util::stop` / `util::warning` (R-free), `to_passive`, `DomainError`, and the root-finders' `BracketError` and `RootFindError` |
 | `root_find.hpp` | `root::toms748`, `root::toms748_bracket`, `root::bisect`, `root::tolerance`: bracketed root-finding on a target `double -> double`, Boost.Math's searches carried without Boost; includes only `ode_util.hpp` |
-| `tangent.hpp` | `tangent_scalar<T>`, the forward-mode scalar; refuses a tangent above an adjoint |
+| `tangent.hpp` | `tangent_scalar<T>`, the forward-mode scalar, and `tangent_lanes<W>`, one lane per direction; refuses a tangent above an adjoint; `tangent_directions` and `tangent_row`, what a forward pass over a run is asked and answers |
 | `adjoint_scalar.hpp` | `adjoint_scalar<T>` and `adjoint_tape<T>`, the reverse-mode scalar and its tape; `visit_active` and `count_active_slots`, the walk over the active values a class holds |
 | `with_slope.hpp` | `with_slope<T>`, a value paired with its slope; no includes |
 | `spline.hpp` → `interpolator.hpp` → `drivers.hpp` | cubic Hermite backend, `hermite_interpolator`, `Drivers` (time-varying forcing) |
 | `ode_control.hpp` | `OdeControl`: tolerances, step bounds, the `gsl` / `hairer` controller |
-| `ode_interface.hpp` | the System concepts (`HasOdeTime`, `Rebindable`, `SolvesForValues`, `ChecksState`, `Sweepable`, `HasSubsystem`, `ScalesTolerances`), `schedule_row`, `step_record`, `be_at_step`, `apply_insertion` |
+| `ode_interface.hpp` | the System concepts (`HasOdeTime`, `Rebindable`, `SolvesForValues`, `ChecksState`, `Sweepable`, `TangentSweepable`, `HasSubsystem`, `ScalesTolerances`), `schedule_row`, `step_record`, `be_at_step`, `apply_insertion` |
 | `adjoint.hpp` | `adjoint_batch`, `adjoint_system`, `vector_jacobian_product`, `state_and_parameter_adjoints`: the transpose of one map |
 | `implicit_node.hpp` | `supply_derivatives`, `implicit_value`: a value on the tape carrying rows obtained elsewhere; includes no solver header |
 | `ode_linalg.hpp`, `ode_jacobian.hpp` | dense LU and eigenvalues; the Jacobian from a System's hook or by forward AD |
 | `ode_substeps.hpp` | `SubsystemSubsteps`: a step that integrates a System's subsystem (`HasSubsystem`) in substeps of its own, on whichever explicit tableau derives from it |
-| `ode_step_rkck.hpp`, `ode_step_dopri.hpp`, `ode_step_rodas.hpp` | the three steppers; the two explicit ones, `rkck` and `dopri`, record a run, carry `step_adjoint` and substep a subsystem |
+| `ode_step_rkck.hpp`, `ode_step_dopri.hpp`, `ode_step_rodas.hpp` | the three steppers; the two explicit ones, `rkck` and `dopri`, record a run, carry `step_adjoint` and substep a subsystem; all three step at a tangent scalar, RODAS with its Jacobian a tangent of a tangent |
 | `ode_callback_system.hpp` | `CallbackSystem`, a System over `std::function`s |
-| `ode_solver_internal.hpp` → `ode_solver.hpp` | `SolverInternal` (stepping, the record, `locate`/`retract_step` for events), `Solver<System>` (`advance_*`, `advance_until`, `recording()`, `sweep_adjoint`, `advance_schedule`) |
+| `ode_solver_internal.hpp` → `ode_solver.hpp` | `SolverInternal` (stepping, the record, `locate`/`retract_step` for events), `Solver<System>` (`advance_*`, `advance_until`, `recording()`, `sweep_adjoint`, `sweep_tangent`, `advance_schedule`); the free `sweep_tangent`, a schedule walked at `tangent_lanes<W>` |
 | `sweep.hpp`, `ode_steady_state.hpp` | segment helpers for a consumer driving a sweep itself; Newton to a fixed point with implicit-function-theorem sensitivity |
 | `rcpp_interface_helpers.hpp`, `solver_interface.hpp` | the two headers that need R: `Solver_*_impl` behind the R bindings, including `Solver_loss_and_gradient_impl` |
 

@@ -24,6 +24,9 @@ template <typename T = double>
 class LeafThermalSystem {
 public:
   using value_type = T;
+  // The rates compile at a tangent of a tangent, which a forward pass over a
+  // RODAS run takes the Jacobian at (NestsTangents in odelia/ode_jacobian.hpp).
+  static constexpr bool nests_tangents = true;
 
   LeafThermalSystem(const LeafThermalPars &pars_, const drivers::Drivers &drivers_)
       : pars(pars_),
