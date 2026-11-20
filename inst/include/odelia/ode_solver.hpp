@@ -43,17 +43,9 @@ namespace ode {
 // method = rkck or dopri a run records, replays and sweeps; rodas refuses a sweep
 // or a replay.
 //
-// The same run differentiated forward, for few inputs and many outputs, under
-// any of the three steppers:
-//
-//   s.set_keep_states(true);
-//   s.advance_adaptive(times);            // a step lands on every output time
-//   tangent_directions wrt{{0, 1, 2}, {0}};    // every parameter, and x(0)
-//   std::vector<tangent_row> d = s.sweep_tangent<4>(wrt);
-//   // d[k].at(i, j) = d y_i / d (direction j) at recording()[k]
-//
-// sweep_tangent walks the run's steps again with the System on a scalar carrying
-// one lane per direction; see the free sweep_tangent below.
+// The same recording is differentiated forward, for few inputs and many
+// outputs and under any of the three steppers, by sweep_tangent: see the free
+// sweep_tangent below, and the article "Forward mode" for a worked example.
 //
 // `collect` (default on) keeps a copy of the whole System at every step in
 // `history`, for callers reading a trajectory from R. A sweep does not read it

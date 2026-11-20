@@ -1802,7 +1802,7 @@ void test_jacobian_is_closed_at_an_adjoint_scalar() {
   try {
     s.advance_fixed(std::vector<double>{0.0, 0.1});
   } catch (const std::runtime_error& e) {
-    refused = std::string(e.what()).find("not available") != std::string::npos;
+    refused = std::string(e.what()).find("no Jacobian") != std::string::npos;
   }
   check(refused, "and a RODAS step at an adjoint scalar is refused at run time");
   odelia::ode::Solver<Sys> rk(sys, odelia::ode::OdeControl());
