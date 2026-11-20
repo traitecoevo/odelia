@@ -99,15 +99,16 @@ ctrl$set_tol_abs(1e-8)
 ctrl$set_tol_rel(1e-8)
 ```
 
-There is no limit on the number of steps a solve may take. The limit is
-`step_size_min`: a step that would have to be smaller than it to meet the
-tolerance fails, with the error "Cannot achieve the desired accuracy" (a step
-that would have to be smaller to stay inside the system's domain fails naming
-the state it could not leave). An explicit stepper on a stiff problem holds its
-step near 3/λ for the fastest rate λ whatever the tolerance, so `step_size_min`
-also bounds the stiffness an explicit solve will accept: set it so that a
-problem too stiff for the stepper fails quickly rather than crawling, and switch
-to `"rodas"` (below) for the problems that fail.
+There is no limit on the number of steps a solve may take, and `step_size_min`
+is not one either: a step the tolerance would shrink below it is taken at the
+floor and accepted, inaccurate, with no error. What stops a solve at the floor
+is a step that is invalid rather than inaccurate. A non-finite error estimate
+fails with "Cannot achieve the desired accuracy", and a state the system refuses
+(`domain_error()` from an R right-hand side, or a C++ system's
+`ode_state_valid()`) fails naming the time and the reason. An explicit stepper
+on a stiff problem holds its step near 3/λ for the fastest rate λ whatever the
+tolerance, so a problem too stiff for it crawls rather than failing: watch
+`ode_counts()`, and switch to `"rodas"` (below).
 
 ## Choosing an integration method
 
@@ -264,9 +265,10 @@ reference. The compiled route above is a hundred times faster still, because
 nothing crosses into R per stage. That figure is against an explicit stepper on
 a non-stiff problem. On a stiff one the comparison is a compiled RODAS against
 `lsoda`, and the gap is nearer fifteen times, because `lsoda` driving an R
-function already takes few steps and forms few Jacobians (a stiff
-consumer-resource model at 96 output times: 0.05 ms against 0.7 ms, with the
-explicit steppers at 0.14 ms compiled and 6 to 20 ms in R). For a right-hand
+function already takes few steps and forms few Jacobians (the consumer-resource
+model below with the resource turning over fifty times faster than the
+consumer, 96 output times: 0.05 ms against 0.7 ms, with the explicit steppers
+at 0.14 ms compiled and 6 to 20 ms in R). For a right-hand
 side that is itself a large computation the solver's own cost is nothing, and
 what `ode_counts()` reports is the whole cost of the integration.
 
@@ -306,10 +308,20 @@ curve <- do.call(rbind, lapply(seq(0.35, 0.65, by = 0.05), function(m) {
 curve
 ```
 
-This model has a closed form, `R* = h m / (a - m)`, which is how to check the
-column: the slope agrees with the derivative of the closed form to the accuracy
-of the finite difference it takes in `m`. A model with no closed form is handled
-the same way. At a larger `K` the equilibrium loses stability (the paradox of
+This model has a closed form, `R* = h m / (a - m)` and
+`N* = r (1 - R*/K) (h + R*) / (a q)`, which is how to check the column: the
+slope from `sensitivity` agrees with the slope of the closed form to the
+accuracy of the finite difference it takes in `m`.
+
+```{r steady-state-check}
+N_star <- function(m) {
+  R <- p[["h"]] * m / (p[["a"]] - m)
+  p[["r"]] * (1 - R / p[["K"]]) * (p[["h"]] + R) / (p[["a"]] * p[["q"]])
+}
+max(abs(curve$dN_dm - (N_star(curve$m + 1e-6) - N_star(curve$m - 1e-6)) / 2e-6))
+```
+
+A model with no closed form is handled the same way. At a larger `K` the equilibrium loses stability (the paradox of
 enrichment) and `stable` turns `FALSE`: the fixed point is still a root, but
 the system cycles around it rather than settling on it.
 

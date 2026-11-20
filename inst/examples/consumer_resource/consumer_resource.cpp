@@ -6,27 +6,13 @@
 // A consumer N takes up a resource R with a saturating (type II) response,
 // a R / (h + R), and is lost at a rate m, harvesting or mortality; the resource
 // regrows logistically to a capacity K, and q is the resource consumed per
-// consumer produced (Rosenzweig & MacArthur 1963, Am. Nat. 97:209). A small
-// half-saturation h makes the resource relax much faster than the consumer,
-// which is where the implicit stepper earns its place.
+// consumer produced (Rosenzweig & MacArthur 1963, Am. Nat. 97:209). A resource
+// that turns over much faster than the consumer (a large r) makes the system
+// stiff, which is where the implicit stepper earns its place.
 //
-// Build it from R with odelia loaded first, so the compiled tape runtime is
-// resolved from odelia's own library (ARCHITECTURE.md):
-//
-//   library(odelia)
-//   Sys.setenv(PKG_CPPFLAGS = paste0(
-//     "-I", shQuote(system.file("include", package = "odelia")),
-//     " -DXAD_NO_THREADLOCAL -DXAD_USE_STRONG_INLINE"),
-//     PKG_LIBS = shQuote(odelia_load_dll()))
-//   Rcpp::sourceCpp(system.file("examples/consumer_resource/consumer_resource.cpp",
-//                               package = "odelia"))
-//
-// Every scalar function the rates call must be found by unqualified lookup, so
-// that XAD's overloads are chosen at an AD scalar: write `using std::exp;` and
-// then `exp(x)`, never `std::exp(x)`. A quantity that must stay positive, or a
-// state whose components differ by orders of magnitude, is better carried as
-// its logarithm: the stepper then cannot cross zero, and the tolerances mean
-// the same thing for every component.
+// Built from R with Rcpp::sourceCpp(), with odelia loaded first so the compiled
+// tape runtime is resolved from odelia's own library: the README's "Your own
+// model in one file" has the flags.
 
 // [[Rcpp::plugins(cpp20)]]
 #include <Rcpp.h>
@@ -123,11 +109,12 @@ ode::OdeControl control_of(double tol) {
   return control;
 }
 
-// A solver at parameters p and initial state y0, from time times[0], for R to
-// hold: $sensitivities() and the like are instantiated on it below.
+// A solver at parameters p and initial state y0, from time t0, for R to hold
+// and hand to the exports below.
 // [[Rcpp::export]]
-SEXP cr_solver(std::vector<double> p, std::vector<double> y0, double t0 = 0.0,
-               std::string method = "dopri", double tol = 1e-8) {
+SEXP consumer_resource_solver(std::vector<double> p, std::vector<double> y0,
+                              double t0 = 0.0, std::string method = "dopri",
+                              double tol = 1e-8) {
   CR system(p);
   system.set_initial_state(y0.begin(), t0);
   system.reset();
@@ -137,7 +124,8 @@ SEXP cr_solver(std::vector<double> p, std::vector<double> y0, double t0 = 0.0,
 
 // The state at each of `times`, the first of which is where the solver stands.
 // [[Rcpp::export]]
-Rcpp::NumericMatrix cr_solve(SEXP solver, std::vector<double> times) {
+Rcpp::NumericMatrix consumer_resource_solve(SEXP solver,
+                                            std::vector<double> times) {
   ode::Solver<CR> s(*solver::get_solver<CR>(solver));
   s.set_collect(false);
   Rcpp::NumericMatrix out(times.size(), 3);
@@ -155,8 +143,9 @@ Rcpp::NumericMatrix cr_solve(SEXP solver, std::vector<double> times) {
 // under any stepper. The inputs are named by their place in ad_parameters()
 // (a, h, q, m, r, K) and in the state (N, R).
 // [[Rcpp::export]]
-Rcpp::List cr_sensitivities(SEXP solver, Rcpp::NumericVector times,
-                            Rcpp::IntegerVector parameters,
-                            Rcpp::IntegerVector initial) {
+Rcpp::List consumer_resource_sensitivities(SEXP solver,
+                                           Rcpp::NumericVector times,
+                                           Rcpp::IntegerVector parameters,
+                                           Rcpp::IntegerVector initial) {
   return solver::Solver_sensitivities_impl<CR>(solver, times, parameters, initial);
 }

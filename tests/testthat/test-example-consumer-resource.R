@@ -44,7 +44,11 @@ testthat::test_that("the one-file example solves the model its R twin solves", {
   ensure_consumer_resource_example()
   times <- seq(0, 40, by = 2)
   for (method in c("dopri", "rodas")) {
-    out <- cr_solve(cr_solver(cr_example_pars, cr_example_y0, 0, method, 1e-10), times)
+    # Each run takes its own steps (under "rodas" the example's Jacobian is by
+    # AD, the R twin's by differences), so they agree to the integration error
+    # at a 1e-10 tolerance, not to rounding.
+    out <- consumer_resource_solve(
+      consumer_resource_solver(cr_example_pars, cr_example_y0, 0, method, 1e-10), times)
     ref <- ode_solve(cr_example_rhs, cr_example_y0, times, parms = cr_example_pars,
                      method = method, rtol = 1e-10, atol = 1e-10, autonomous = TRUE)
     expect_identical(colnames(out), c("time", "N", "R"))
@@ -56,17 +60,26 @@ testthat::test_that("the one-file example solves the model its R twin solves", {
 testthat::test_that("the one-file example's sensitivities are central differences of its solves", {
   ensure_consumer_resource_example()
   times <- seq(0, 40, by = 10)
+  # The differenced solves are adaptive, so each carries its own step sequence
+  # and an error of order the tolerance; divided by the step 2h that is the
+  # noise floor of the difference, 1e-10 / 1e-4, under the 1e-5 asked for. The
+  # difference's own truncation error, of order h^2, is smaller still.
+  tol <- 1e-10
   for (method in c("dopri", "rodas")) {
-    sens <- cr_sensitivities(cr_solver(cr_example_pars, cr_example_y0, 0, method, 1e-8),
-                             times, 0:5, 0:1)
+    sens <- consumer_resource_sensitivities(
+      consumer_resource_solver(cr_example_pars, cr_example_y0, 0, method, tol),
+      times, 0:5, 0:1)
     expect_identical(dim(sens$dy), c(length(times), 2L, 8L))
     inputs <- c(cr_example_pars, cr_example_y0)
+    solve_at <- function(x) {
+      consumer_resource_solve(
+        consumer_resource_solver(x[1:6], x[7:8], 0, method, tol), times)[, 2:3]
+    }
     for (j in seq_along(inputs)) {
-      h <- 1e-5 * max(1, abs(inputs[[j]]))
+      h <- 1e-4 * max(1, abs(inputs[[j]]))
       up <- inputs; up[[j]] <- up[[j]] + h
       down <- inputs; down[[j]] <- down[[j]] - h
-      fd <- (cr_solve(cr_solver(up[1:6], up[7:8], 0, method, 1e-8), times)[, 2:3] -
-             cr_solve(cr_solver(down[1:6], down[7:8], 0, method, 1e-8), times)[, 2:3]) / (2 * h)
+      fd <- (solve_at(up) - solve_at(down)) / (2 * h)
       expect_lt(max(abs(sens$dy[, , j] - fd) / pmax(1, abs(fd))), 1e-5)
     }
   }

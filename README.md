@@ -26,8 +26,9 @@ code out so it can be used more widely.
   right-hand side written in R under an explicit stepper (Lorenz: 1 ms against
   25-60 ms under `deSolve`). On a stiff problem the comparison is RODAS against
   `deSolve::lsoda`, which switches to a multistep method and takes far fewer
-  steps: there the gain is nearer fifteen times (a stiff consumer-resource model
-  at 96 output times: 0.05 ms against 0.7 ms).
+  steps: there the gain is nearer fifteen times (the shipped consumer-resource
+  model with the resource turning over fifty times faster than the consumer, 96
+  output times: 0.05 ms against 0.7 ms).
 - **Reverse-mode automatic differentiation** of a recorded run, via the vendored
   [XAD](https://github.com/auto-differentiation/xad) library: one sweep, every
   parameter and initial condition. Sweeps need an explicit stepper (Cash-Karp
@@ -157,8 +158,9 @@ class, then the `[[Rcpp::export]]` functions that build a `Solver` on it and
 return what R wants. The shipped
 [`examples/consumer_resource/consumer_resource.cpp`](inst/examples/consumer_resource/consumer_resource.cpp)
 is that file for a consumer-resource model (a consumer taking up a resource with
-a saturating response, the resource regrowing logistically), with a solve and
-forward-mode sensitivities as its two exports. Copy it and replace the rates.
+a saturating response, the resource regrowing logistically), with three exports:
+a solver, a solve, and forward-mode sensitivities. Copy it and replace the
+rates.
 
 Load `odelia` first: the compiled tape runtime lives in odelia's library, and
 loading the package makes it visible to the file you compile. The flags are the
@@ -175,19 +177,22 @@ Rcpp::sourceCpp(system.file("examples/consumer_resource/consumer_resource.cpp",
                             package = "odelia"))
 
 p <- c(a = 1, h = 0.5, q = 0.5, m = 0.4, r = 1, K = 1)
-s <- cr_solver(p, y0 = c(N = 0.5, R = 0.5), method = "rodas")
-cr_solve(s, times = seq(0, 40, by = 5))            # N and R at each time
-cr_sensitivities(s, times = c(0, 20, 40),
-                 parameters = 0:5, initial = 0:1)   # and d(N, R)/d(a, ..., K, N0, R0)
+s <- consumer_resource_solver(p, y0 = c(N = 0.5, R = 0.5), method = "rodas")
+consumer_resource_solve(s, times = seq(0, 40, by = 5))   # N and R at each time
+consumer_resource_sensitivities(s, times = c(0, 20, 40),  # and d(N, R)/d(a, ..., K, N0, R0)
+                                parameters = 0:5, initial = 0:1)
 ```
 
-Two habits the file's comments spell out: call `exp(x)` and the other scalar
-functions unqualified, after `using std::exp;`, so that the AD scalar's
-overloads are found; and carry a quantity that must stay positive, or a state
-whose components differ by orders of magnitude, as its logarithm. The website
-articles [Reverse mode](https://traitecoevo.github.io/odelia/articles/reverse-mode.html)
+Two habits worth keeping when you write the rates: call `exp(x)` and the other
+scalar functions unqualified, after `using std::exp;`, so that the AD scalar's
+overloads are found (`std::exp(x)` would not find them); and carry a quantity
+that must stay positive, or a state whose components differ by orders of
+magnitude, as its logarithm, so that the stepper cannot cross zero and the
+tolerances mean the same for every component. The website articles
+[Reverse mode](https://traitecoevo.github.io/odelia/articles/reverse-mode.html)
 and [Forward mode](https://traitecoevo.github.io/odelia/articles/forward-mode.html)
-compile their examples this way too.
+compile their examples the same way, without `PKG_LIBS`, which Linux and macOS
+do not need.
 
 ## Parameter fitting with automatic differentiation
 
