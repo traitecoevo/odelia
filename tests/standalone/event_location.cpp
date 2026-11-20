@@ -9,9 +9,11 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <new>
 #include <numbers>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -123,12 +125,14 @@ struct Growth {
 // A plant x drawing water from two soil layers w1, w2. Rain fills the top
 // layer seasonally and drainage K w^2 carries water down and out, fast where K
 // is large, so the layers are a stiff subsystem the explicit steppers substep;
-// the plant's uptake c x w is what the rest hands them. x declines from 1 and
-// passes 0.5 near t = 1.3.
+// the plant's uptake c x w is what the rest hands them, worked out with the
+// rates as a model with costly rates would. x declines from 1 and passes 0.5
+// near t = 1.3.
 struct SoilPlant {
   using value_type = double;
   double a = 1.0, m = 0.8, K = 1e4, rain = 200.0, c = 0.3;
   double x = 1.0, w1 = 0.5, w2 = 0.5, time = 0.0;
+  mutable double uptake1 = 0.0, uptake2 = 0.0;
 
   std::size_t ode_size() const { return 3; }
   double ode_time() const { return time; }
@@ -148,9 +152,11 @@ struct SoilPlant {
   template <typename It> It ode_rates(It it) const {
     std::vector<double> f(2);
     soil_rates(time, {w1, w2}, f);
+    uptake1 = c * x * w1;
+    uptake2 = c * x * w2;
     *it++ = a * x * (w1 + w2) - m * x;
-    *it++ = f[0] - c * x * w1;
-    *it++ = f[1] - c * x * w2;
+    *it++ = f[0] - uptake1;
+    *it++ = f[1] - uptake2;
     return it;
   }
   template <typename It> It ode_aux(It it) const { return it; }
@@ -158,7 +164,7 @@ struct SoilPlant {
   ode::state_range subsystem() const { return {1, 2}; }
   std::vector<double> subsystem_knots(double, double) const { return {}; }
   void subsystem_inputs(std::vector<double>& u) const {
-    u = {c * x * w1, c * x * w2};
+    u = {uptake1, uptake2};
   }
   void subsystem_rates(double t, const std::vector<double>& w,
                        const std::vector<double>& u,
@@ -252,7 +258,8 @@ void test_is_a_landing_time(Method m, ode::Controller rule) {
 }
 
 // The same, where steps substep a subsystem: a retracted step must also put
-// back the subsystem's input trend and its stiffness estimate, which the next
+// back the subsystem's input trend and its stiffness estimate, and leave the
+// System holding the inputs its last evaluation left, all of which the next
 // step reads.
 void test_is_a_landing_time_with_subsystem(Method m, ode::Controller rule) {
   ode::Solver<SoilPlant> s(SoilPlant{}, control(rule), m);
@@ -316,6 +323,16 @@ void test_edges() {
     }
     check(threw, "a time_max before the current time is refused");
   }
+  {
+    ode::Solver<Growth> s(Growth{}, control(ode::Controller::hairer));
+    bool threw = false;
+    try {
+      s.advance_until(x_is_zero, std::numeric_limits<double>::infinity(), tight);
+    } catch (const std::runtime_error&) {
+      threw = true;
+    }
+    check(threw, "and so is an infinite one");
+  }
 }
 
 // A sequence of levels, each from where the last stopped: what a run to a
@@ -340,6 +357,46 @@ void test_a_sequence_of_levels(Method m) {
   check(all && worst < 1e-6,
         std::string(name(m)) + ": y = e^t reaches 2, ..., 10 at their logs, "
         "worst error " + worst_text);
+}
+
+// Something thrown while the crossing is located takes the crossing step
+// back: the solver is left between steps, and an event asked for from there
+// is the one a solver that never saw the throw finds, to the bit.
+void test_a_throw_while_locating(bool nan) {
+  ode::Solver<Oscillator> a(Oscillator{}, control(ode::Controller::hairer));
+  ode::Solver<Oscillator> b = a;
+  int negatives = 0;
+  const auto fails_inside = [&](double, const std::vector<double>& y) {
+    // The first negative value is the step's end; the next call is inside
+    // the step.
+    if (y[0] < 0.0 && ++negatives > 1) {
+      if (nan) {
+        return std::nan("");
+      }
+      throw std::runtime_error("an event that fails");
+    }
+    return y[0];
+  };
+  std::string what;
+  try {
+    a.advance_until(fails_inside, 10.0, tight);
+  } catch (const std::runtime_error& e) {
+    what = e.what();
+  }
+  const std::string label = nan ? "a NaN from g inside the step" :
+                                  "a throw from g inside the step";
+  check(nan ? what.find("g is not finite") != std::string::npos
+            : what == "an event that fails",
+        label + " is raised: " + what);
+  check(a.time() < std::numbers::pi / 2 && a.times().back() == a.time() &&
+            a.state()[0] > 0.0,
+        "and leaves the solver at the start of the step that crossed");
+  const std::optional<double> ta = a.advance_until(x_is_zero, 10.0, tight);
+  const std::optional<double> tb = b.advance_until(x_is_zero, 10.0, tight);
+  check(ta && tb && *ta == *tb && a.state() == b.state() &&
+            a.times() == b.times() && same(a.step_sizes(), b.step_sizes()) &&
+            a.get_history_size() == b.get_history_size(),
+        "from where the event is found as if nothing had been thrown");
 }
 
 void test_locate_allocates_nothing() {
@@ -390,6 +447,11 @@ void test_retract_refusals() {
   s.step_to(sys, 1.5);
   check(refused([&] { s.retract_step(sys); }),
         "and a pinned step, which leaves no interpolant");
+  s.step(sys, 2.0);
+  s.hold_step_start();
+  s.step_euler(sys, 2.1);
+  check(refused([&] { s.retract_step(sys); }),
+        "and a forward-Euler step, which leaves none either");
 }
 
 }  // namespace
@@ -414,6 +476,8 @@ int main() {
     test_a_sequence_of_levels(m);
   }
   test_edges();
+  test_a_throw_while_locating(false);
+  test_a_throw_while_locating(true);
   test_locate_allocates_nothing();
   test_retract_refusals();
   if (failures > 0) {

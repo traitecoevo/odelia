@@ -420,11 +420,12 @@ public:
   // An event is a change in the sign g had where the call started, seen at
   // the end of a step. It is located on that step's interpolant (locate(), no
   // rates evaluated) to `tol` in time, the step is taken back
-  // (retract_step()), and the solver then steps to the located time as a run
-  // asked to land on it would. The state left there is therefore an
-  // integrated one, to the solver's own tolerance under every stepper, and
-  // everything after it is what that run would do from there. g = 0 at the
-  // start is an event at the start, and stepping stops there.
+  // (retract_step()), and the solver then steps to the located time. The state
+  // left there is therefore an integrated one, to the solver's own tolerance
+  // under every stepper. It and everything after it are what a run would
+  // hold that took the same steps up to the one that crossed and then asked to
+  // land on the event. g = 0 at the start is an event at the start, and
+  // stepping stops there.
   //
   // A step whose ends share a sign is taken to cross nothing, so a g that
   // crosses and crosses back inside one step goes unseen; step_size_max is
@@ -436,22 +437,30 @@ public:
   // the next level instead, as a sequence of sizes does.
   //
   // `g` is called as g(t, y) with y a const state_type&, and must not change
-  // the System: the interpolant's states are not ones the System holds.
+  // the System: the interpolant's states are not ones the System holds. A
+  // non-finite g is refused. Anything thrown while the crossing is located
+  // takes the crossing step back first, so the solver is left between steps,
+  // at the start of that step.
   template <class G>
   std::optional<double> advance_until(G&& g, double time_max,
                                       const root::tolerance& tol)
   {
-    if (!(time_max >= time()))
+    if (!(std::isfinite(time_max) && time_max >= time()))
     {
       util::stop("advance_until(): time_max = " + util::format_double(time_max) +
-                 " is before the current time " + util::format_double(time()));
-    }
-    double g_prev = g(time(), solver.state_ref());
-    if (!std::isfinite(g_prev))
-    {
-      util::stop("advance_until(): g is not finite at the start, t = " +
+                 " must be finite and not before the current time " +
                  util::format_double(time()));
     }
+    const auto g_finite = [&g](double t, const ode::state_type<System>& y) {
+      const double value = g(t, y);
+      if (!std::isfinite(value))
+      {
+        util::stop("advance_until(): g is not finite at t = " +
+                   util::format_double(t));
+      }
+      return value;
+    };
+    double g_prev = g_finite(time(), solver.state_ref());
     if (g_prev == 0.0)
     {
       return time();
@@ -461,12 +470,7 @@ public:
     {
       solver.hold_step_start();
       solver.step(system, time_max);
-      const double g_end = g(time(), solver.state_ref());
-      if (!std::isfinite(g_end))
-      {
-        util::stop("advance_until(): g is not finite at t = " +
-                   util::format_double(time()));
-      }
+      const double g_end = g_finite(time(), solver.state_ref());
       if (g_end == 0.0)
       {
         if (collect)
@@ -484,7 +488,16 @@ public:
         }
         continue;
       }
-      const double t_event = solver.locate(g, g_prev, g_end, tol);
+      double t_event;
+      try
+      {
+        t_event = solver.locate(g_finite, g_prev, g_end, tol);
+      }
+      catch (...)
+      {
+        solver.retract_step(system);
+        throw;
+      }
       solver.retract_step(system);
       while (time() < t_event)
       {

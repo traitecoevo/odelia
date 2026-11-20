@@ -61,9 +61,34 @@ testthat::test_that("bad events and arguments are refused", {
                "tol must be a single positive number")
   expect_error(s$advance_until(function(t, y) y - 2, time_max = -1),
                "before the current time")
+  expect_error(s$advance_until(function(t, y) y - 2, time_max = Inf),
+               "must be finite")
   # An error raised by the event leaves the solver between steps, usable.
   expect_error(s$advance_until(function(t, y) stop("no event here"), time_max = 2),
                "no event here")
   expect_equal(s$advance_until(function(t, y) y - 2, time_max = 2), log(2),
                tolerance = 1e-8)
+})
+
+testthat::test_that("an error while the crossing is located takes the step back", {
+  a <- OdeSolver$new(oscillator, y0 = c(1, 0), autonomous = TRUE)
+  b <- OdeSolver$new(oscillator, y0 = c(1, 0), autonomous = TRUE)
+  negatives <- 0
+  # The first negative value is the end of the step that crossed; the next
+  # call is inside it.
+  fails_inside <- function(t, y) {
+    if (y[[1]] < 0) {
+      negatives <<- negatives + 1
+      if (negatives > 1) stop("an event that fails")
+    }
+    y[[1]]
+  }
+  expect_error(a$advance_until(fails_inside, time_max = 10), "an event that fails")
+  expect_lt(a$time(), pi / 2)
+  expect_gt(a$state()[[1]], 0)
+  x <- function(t, y) y[[1]]
+  expect_identical(a$advance_until(x, time_max = 10),
+                   b$advance_until(x, time_max = 10))
+  expect_identical(a$state(), b$state())
+  expect_identical(a$times(), b$times())
 })

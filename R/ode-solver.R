@@ -207,11 +207,17 @@ OdeSolver <- R6::R6Class(
     #'   time on that step's interpolant, at no further evaluation of `rhs`
     #'   (see `advance_collect()` for that interpolant's order under each
     #'   method). The solver then steps from the start of that step to the
-    #'   located time, so the state there is integrated, and everything after
-    #'   it is what a run asked to land on that time would do. A sign change
-    #'   that starts and ends inside one step is not seen. Asking again with
-    #'   the same `event` starts from a value near zero of either sign and
-    #'   can stop straight away; ask for the next level instead.
+    #'   located time, so the state there is integrated, and it and everything
+    #'   after it are what a run would do that took the same steps and then
+    #'   landed on that time. A sign change that starts and ends inside one
+    #'   step is not seen. Asking again with the same `event` starts from a
+    #'   value near zero of either sign and can stop straight away; ask for the
+    #'   next level instead.
+    #'
+    #'   `event` is called as `event(t, y)`, without `parms`; a closure can
+    #'   carry them. A non-finite value is an error. An error while the
+    #'   crossing is located leaves the solver at the start of the step that
+    #'   crossed.
     advance_until = function(event, time_max, tol = 1e-10) {
       private$guard()
       event <- check_callback(event, "event")

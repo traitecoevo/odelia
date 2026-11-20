@@ -224,8 +224,8 @@ public:
   // suggested size, the derivative's carry, and the subsystem's trend.
   // retract_step(), after it, puts all of it back, drops the step's row, and
   // puts the System back on the step's start, so a step from there to time t
-  // is the one a run asked to land on t would have taken: same size, same
-  // control, same result, to the bit. Refused unless the last thing the
+  // is the one a run that took the same steps and then asked to land on t
+  // would have taken: same size, same control, same result, to the bit. Refused unless the last thing the
   // solver did was one adaptive step after hold_step_start(). The count of
   // rejections is a diagnostic of the work done and keeps the step's.
   void hold_step_start();
@@ -451,6 +451,7 @@ private:
     std::size_t rows = 0; // taken.size() when held
     OdeControl control;
     double step_size_last = 0.0;
+    bool dydt_in_is_clean = false;
     double dydt_in_carried_at = 0.0;
     bool has_last_inputs = false;
     state_type last_inputs;
@@ -654,6 +655,7 @@ void SolverInternal<System>::step_euler(System& system, double time_max_) {
     y[i] += h * dydt_in[i];
   }
   time = time_max;
+  have_prev = false; // no interpolant: a forward-Euler step keeps no stages
   // Settle the system onto the new state at the new time.
   ode::internal::set_ode_state(system, y, time);
   push_step(system, {time, h});
@@ -1154,6 +1156,7 @@ void SolverInternal<System>::hold_step_start() {
   held_.rows = taken.size();
   held_.control = control;
   held_.step_size_last = step_size_last;
+  held_.dydt_in_is_clean = dydt_in_is_clean;
   held_.dydt_in_carried_at = dydt_in_carried_at;
   held_.has_last_inputs = last_inputs_.has_value();
   if (last_inputs_) {
@@ -1174,10 +1177,10 @@ void SolverInternal<System>::retract_step(System& system) {
                "adaptive step taken after hold_step_start()");
   }
   // y_prev and dydt_prev are the step's start and the derivative there, which
-  // step() keeps for the interpolant; dydt_prev was clean when it was taken.
+  // step() keeps for the interpolant.
   y = y_prev;
   dydt_in = dydt_prev;
-  dydt_in_is_clean = true;
+  dydt_in_is_clean = held_.dydt_in_is_clean;
   dydt_in_carried_at = held_.dydt_in_carried_at;
   time = time_prev;
   control = held_.control;
@@ -1199,7 +1202,19 @@ void SolverInternal<System>::retract_step(System& system) {
   if (keep_states_) {
     recorded.pop_back();
   }
-  internal::set_ode_state(system, y, time);
+  // The System is left as the step's start found it, because the next step
+  // reads what an evaluation leaves on it (the subsystem's inputs, its
+  // tolerance scales) before evaluating anything itself. A carried derivative
+  // was the last evaluation, at y, at the time it was carried from, or at this
+  // time where the state was loaded; an uncarried one is evaluated again by
+  // the next step's setup_dydt_in, which sets the System itself. Evaluated
+  // into scratch, so dydt_in keeps the bits the step started with.
+  if (dydt_in_is_clean) {
+    const double t_eval = std::isnan(dydt_in_carried_at) ? time : dydt_in_carried_at;
+    ode::derivs(system, y, dense_scratch_, t_eval);
+  } else {
+    internal::set_ode_state(system, y, time);
+  }
   have_prev = false;
   held_.valid = false;
 }
