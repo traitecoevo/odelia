@@ -99,6 +99,16 @@ ctrl$set_tol_abs(1e-8)
 ctrl$set_tol_rel(1e-8)
 ```
 
+There is no limit on the number of steps a solve may take. The limit is
+`step_size_min`: a step that would have to be smaller than it to meet the
+tolerance fails, with the error "Cannot achieve the desired accuracy" (a step
+that would have to be smaller to stay inside the system's domain fails naming
+the state it could not leave). An explicit stepper on a stiff problem holds its
+step near 3/λ for the fastest rate λ whatever the tolerance, so `step_size_min`
+also bounds the stiffness an explicit solve will accept: set it so that a
+problem too stiff for the stepper fails quickly rather than crawling, and switch
+to `"rodas"` (below) for the problems that fail.
+
 ## Choosing an integration method
 
 `odelia` ships three steppers, chosen with the `method` argument when you create
@@ -202,6 +212,21 @@ stiff_dopri <- ode_solve(vdp, c(2, 0), times, parms = 1e-4, method = "dopri", au
 rbind(rodas = ode_counts(stiff_rodas), dopri = ode_counts(stiff_dopri))
 ```
 
+`deSolve::lsoda` is the usual comparison on a stiff problem. It detects the
+stiffness and switches to a multistep method, which takes about as many steps as
+RODAS but forms a Jacobian only when the last one stops working, where RODAS
+forms one every step:
+
+```{r r-rhs-lsoda, eval = requireNamespace("deSolve", quietly = TRUE)}
+stiff_lsoda <- deSolve::lsoda(c(2, 0), times, vdp, parms = 1e-4)
+c(steps = attr(stiff_lsoda, "istate")[2], n_rhs = attr(stiff_lsoda, "istate")[3],
+  n_jac = attr(stiff_lsoda, "istate")[14])
+```
+
+With a right-hand side in R, where each evaluation is the whole cost, that
+makes `lsoda` the faster of the two here, by about two to one. The explicit
+stepper is twenty times slower than either.
+
 Underneath `ode_solve()` is the R6 class `OdeSolver`, which is driven a step
 at a time. That is what a caller with *events* needs: after each accepted step
 it can look at the state, change it, and even change its length, before the
@@ -236,14 +261,65 @@ on every requested time, odelia does not have to. Lorenz to t = 100 at 1e-6
 with 10001 rows takes 27 ms here against 62 ms for `ode45` and 33 ms for
 `lsoda`, with the same R function and the same accuracy against a tight
 reference. The compiled route above is a hundred times faster still, because
-nothing crosses into R per stage. For a right-hand side that is itself a large
-computation the solver's own cost is nothing, and what `ode_counts()` reports is
-the whole cost of the integration.
+nothing crosses into R per stage. That figure is against an explicit stepper on
+a non-stiff problem. On a stiff one the comparison is a compiled RODAS against
+`lsoda`, and the gap is nearer fifteen times, because `lsoda` driving an R
+function already takes few steps and forms few Jacobians (a stiff
+consumer-resource model at 96 output times: 0.05 ms against 0.7 ms, with the
+explicit steppers at 0.14 ms compiled and 6 to 20 ms in R). For a right-hand
+side that is itself a large computation the solver's own cost is nothing, and
+what `ode_counts()` reports is the whole cost of the integration.
+
+## Equilibria, and how they move with a parameter
+
+`ode_steady_state()` takes the same right-hand side to a fixed point by Newton's
+method, says whether the fixed point is attracting, and gives its sensitivity to
+every parameter by the implicit function theorem, with no integration through
+the transient. A consumer `N` taking up a resource `R` with a saturating
+response, under a harvest rate `m` (Rosenzweig and MacArthur's model):
+
+```{r steady-state}
+cr <- function(t, y, p) {           # y = (N, R)
+  uptake <- p[["a"]] * y[2] / (p[["h"]] + y[2])
+  list(c(y[1] * (uptake - p[["m"]]),
+         p[["r"]] * y[2] * (1 - y[2] / p[["K"]]) - p[["q"]] * y[1] * uptake))
+}
+p <- c(a = 1, h = 0.5, q = 0.5, m = 0.4, r = 1, K = 1)
+```
+
+To trace the equilibrium across harvest rates, start each solve from the
+previous equilibrium, which is near the next one, and give `warmup` as the
+fallback for the solves where Newton lands on a repelling root or does not
+converge. `sensitivity = "m"` is the slope of the response curve, `dy*/dm`,
+read off the equilibrium directly rather than by differencing neighbouring
+solves:
+
+```{r steady-state-sweep}
+y <- c(N = 0.5, R = 0.5)
+curve <- do.call(rbind, lapply(seq(0.35, 0.65, by = 0.05), function(m) {
+  p[["m"]] <- m
+  eq <- ode_steady_state(cr, y, p, warmup = 50, sensitivity = "m", autonomous = TRUE)
+  y <<- eq$y
+  data.frame(m = m, N = eq$y[["N"]], R = eq$y[["R"]], dN_dm = eq$sensitivity["N", "m"],
+             stable = eq$stable, warmed = eq$warmed)
+}))
+curve
+```
+
+This model has a closed form, `R* = h m / (a - m)`, which is how to check the
+column: the slope agrees with the derivative of the closed form to the accuracy
+of the finite difference it takes in `m`. A model with no closed form is handled
+the same way. At a larger `K` the equilibrium loses stability (the paradox of
+enrichment) and `stable` turns `FALSE`: the fixed point is still a root, but
+the system cycles around it rather than settling on it.
 
 ## Where next
 
 - For models with **external time-varying forcing**, and how to define your own
   ODE system in C++, see
   [Building your own model with external drivers](https://traitecoevo.github.io/odelia/articles/leaf-thermal.html).
+  For a one-off model, one file compiled with `Rcpp::sourceCpp()` is enough:
+  the README's "Your own model in one file" walks through the shipped
+  `examples/consumer_resource/consumer_resource.cpp`, the model above in C++.
 - To recover parameters from data using exact gradients, see
   `vignette("parameter-fitting", package = "odelia")`.
