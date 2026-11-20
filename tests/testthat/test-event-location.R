@@ -1,4 +1,4 @@
-# Event location through OdeSolver$advance_until (#92). That the state left at
+# Event location through OdeSolver$advance_until. That the state left at
 # an event is the one a run asked to land there holds, to the bit, is proven in
 # R-free C++ (tests/standalone/event_location.cpp); these tests prove the R
 # adapter: the time returned, the state left, NA, and refusals.

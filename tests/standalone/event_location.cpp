@@ -1,4 +1,4 @@
-// Event location (#92): Solver::advance_until, and the two pieces it is built
+// Event location: Solver::advance_until, and the two pieces it is built
 // from, SolverInternal::locate and retract_step. What it finds, that the state
 // it stops on is the one a run asked to land on the event would hold, and that
 // the search on the interpolant allocates nothing.
@@ -120,6 +120,65 @@ struct Growth {
   }
 };
 
+// A plant x drawing water from two soil layers w1, w2. Rain fills the top
+// layer seasonally and drainage K w^2 carries water down and out, fast where K
+// is large, so the layers are a stiff subsystem the explicit steppers substep;
+// the plant's uptake c x w is what the rest hands them. x declines from 1 and
+// passes 0.5 near t = 1.3.
+struct SoilPlant {
+  using value_type = double;
+  double a = 1.0, m = 0.8, K = 1e4, rain = 200.0, c = 0.3;
+  double x = 1.0, w1 = 0.5, w2 = 0.5, time = 0.0;
+
+  std::size_t ode_size() const { return 3; }
+  double ode_time() const { return time; }
+  template <typename It> It set_ode_state(It it, double t) {
+    x = *it++;
+    w1 = *it++;
+    w2 = *it++;
+    time = t;
+    return it;
+  }
+  template <typename It> It ode_state(It it) const {
+    *it++ = x;
+    *it++ = w1;
+    *it++ = w2;
+    return it;
+  }
+  template <typename It> It ode_rates(It it) const {
+    std::vector<double> f(2);
+    soil_rates(time, {w1, w2}, f);
+    *it++ = a * x * (w1 + w2) - m * x;
+    *it++ = f[0] - c * x * w1;
+    *it++ = f[1] - c * x * w2;
+    return it;
+  }
+  template <typename It> It ode_aux(It it) const { return it; }
+
+  ode::state_range subsystem() const { return {1, 2}; }
+  std::vector<double> subsystem_knots(double, double) const { return {}; }
+  void subsystem_inputs(std::vector<double>& u) const {
+    u = {c * x * w1, c * x * w2};
+  }
+  void subsystem_rates(double t, const std::vector<double>& w,
+                       const std::vector<double>& u,
+                       std::vector<double>& out) const {
+    soil_rates(t, w, out);
+    out[0] -= u[0];
+    out[1] -= u[1];
+  }
+
+  void soil_rates(double t, const std::vector<double>& w,
+                  std::vector<double>& out) const {
+    const double inflow =
+        rain * (1.0 + 0.5 * std::sin(2.0 * std::numbers::pi * t));
+    out.resize(2);
+    out[0] = inflow - K * w[0] * w[0];
+    out[1] = K * w[0] * w[0] - K * w[1] * w[1];
+  }
+};
+static_assert(ode::HasSubsystem<SoilPlant>);
+
 ode::OdeControl control(ode::Controller rule) {
   ode::OdeControl c(1e-8, 1e-8, 1.0, 0.0, 1e-8, 10.0, 1e-6);
   c.set_controller(rule);
@@ -147,21 +206,22 @@ void test_finds_the_crossing(Method m) {
 // the same steps to the start of the step that crossed, then steps to the
 // event under the same control. Run B takes A's steps by copying the solver
 // before each, and from the copy before the step that passed the event, steps
-// to it. Everything after is compared too.
-void test_is_a_landing_time(Method m, ode::Controller rule) {
-  ode::Solver<Oscillator> a(Oscillator{}, control(rule), m);
-  a.set_collect(false);
-  const std::optional<double> t = a.advance_until(x_is_zero, 10.0, tight);
+// to it. Everything after is compared too. Returns run A's schedule.
+template <class System, class G>
+std::vector<ode::schedule_row> landing_check(const ode::Solver<System>& start,
+                                             G&& g, double time_max,
+                                             const std::string& label) {
+  ode::Solver<System> a = start;
+  const std::optional<double> t = a.advance_until(g, time_max, tight);
   if (!t) {
-    check(false, "no event found");
-    return;
+    check(false, label + "no event found");
+    return {};
   }
 
-  ode::Solver<Oscillator> b(Oscillator{}, control(rule), m);
-  b.set_collect(false);
+  ode::Solver<System> b = start;
   while (true) {
-    ode::Solver<Oscillator> before = b;
-    b.step(10.0);
+    ode::Solver<System> before = b;
+    b.step(time_max);
     if (b.time() >= *t) {
       b = before;
       break;
@@ -170,17 +230,47 @@ void test_is_a_landing_time(Method m, ode::Controller rule) {
   while (b.time() < *t) {
     b.step(*t);
   }
-  const std::string label = std::string(name(m)) + ", " +
-      (rule == ode::Controller::hairer ? "hairer" : "gsl") + ": ";
+  const std::vector<ode::schedule_row> taken = a.steps_taken();
   check(a.time() == b.time() && a.state() == b.state() &&
             a.times() == b.times() && same(a.step_sizes(), b.step_sizes()) &&
             a.get_step_size() == b.get_step_size(),
         label + "the event's state, times and next step are a landing run's");
-  a.advance_adaptive({a.time(), 10.0});
-  b.advance_adaptive({b.time(), 10.0});
+  a.advance_adaptive({a.time(), time_max});
+  b.advance_adaptive({b.time(), time_max});
   check(a.state() == b.state() && a.times() == b.times() &&
             same(a.step_sizes(), b.step_sizes()),
         label + "and so is every step after it");
+  return taken;
+}
+
+void test_is_a_landing_time(Method m, ode::Controller rule) {
+  ode::Solver<Oscillator> s(Oscillator{}, control(rule), m);
+  s.set_collect(false);
+  landing_check(s, x_is_zero, 10.0,
+                std::string(name(m)) + ", " +
+                    (rule == ode::Controller::hairer ? "hairer" : "gsl") + ": ");
+}
+
+// The same, where steps substep a subsystem: a retracted step must also put
+// back the subsystem's input trend and its stiffness estimate, which the next
+// step reads.
+void test_is_a_landing_time_with_subsystem(Method m, ode::Controller rule) {
+  ode::Solver<SoilPlant> s(SoilPlant{}, control(rule), m);
+  s.set_collect(false);
+  const auto halved = [](double, const std::vector<double>& y) {
+    return y[0] - 0.5;
+  };
+  const std::string label = std::string(name(m)) + ", " +
+      (rule == ode::Controller::hairer ? "hairer" : "gsl") +
+      ", substepping a soil store: ";
+  const std::vector<ode::schedule_row> taken =
+      landing_check(s, halved, 2.0, label);
+  std::size_t substepped = 0;
+  for (const ode::schedule_row& row : taken) {
+    substepped += row.subsystem.has_value();
+  }
+  check(substepped > 1, label + "steps before the event substepped (" +
+                            std::to_string(substepped) + ")");
 }
 
 void test_no_event_is_an_ordinary_run(Method m) {
@@ -312,6 +402,11 @@ int main() {
   for (Method m : {Method::rkck, Method::dopri, Method::rodas}) {
     for (ode::Controller rule : {ode::Controller::hairer, ode::Controller::gsl}) {
       test_is_a_landing_time(m, rule);
+    }
+  }
+  for (Method m : {Method::rkck, Method::dopri}) {
+    for (ode::Controller rule : {ode::Controller::hairer, ode::Controller::gsl}) {
+      test_is_a_landing_time_with_subsystem(m, rule);
     }
   }
   for (Method m : {Method::rkck, Method::dopri, Method::rodas}) {
