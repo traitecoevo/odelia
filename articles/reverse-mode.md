@@ -1,13 +1,13 @@
 # Reverse mode: one solve, every parameter
 
 Calibrating a model against data needs the derivative of a solved
-trajectory with respect to every parameter. Forward mode costs one solve
-per parameter. Reverse mode costs one solve for all of them, but it must
-first record every operation the solve performed, and a run of several
-thousand adaptive steps performs far more of them than memory holds.
-This article is how `odelia` does it, from C++, and what a System has to
-provide to take part. The R surface, `$set_target()` and
-`$loss_and_gradient()`, is the last section.
+trajectory with respect to every parameter. Forward mode costs a pass
+that grows with the number of parameters. Reverse mode costs one pass
+for all of them, but it must first record every operation the solve
+performed, and a run of several thousand adaptive steps performs far
+more of them than memory holds. This article is how `odelia` does it,
+from C++, and what a System has to provide to take part. The R surface,
+`$set_target()` and `$loss_and_gradient()`, is the last section.
 
 > This is a website-only article rather than a packaged vignette,
 > because it compiles C++ at build time.
@@ -103,7 +103,11 @@ rbind(sweep = r$d_params, difference = fd, relative = abs(r$d_params - fd) / abs
 
 The cost of `sweep_adjoint` is one more pass over the trajectory, which
 re-runs the model’s rate evaluations as it goes. It is not one pass per
-parameter, which is the point, and it is not free.
+parameter, which is the point, and it is not free: on a small system the
+sweep costs several plain solves, so with up to a few tens of parameters
+forward mode costs less. [Forward
+mode](https://traitecoevo.github.io/odelia/articles/forward-mode.md)
+measures where the two meet.
 
 ## Forward, then reverse
 
@@ -190,7 +194,8 @@ way. A Dormand-Prince run can therefore give dense output and a gradient
 from one stepper. The shape is shared but the meaning is not: entry i is
 each tableau’s own stage, so a recording names its method and replays
 only under it. `"rodas"` keeps no per-stage row and refuses a sweep or a
-replay.
+replay; a run under it is differentiated in forward mode instead
+(`sweep_tangent`).
 
 ## Where the state grows
 
@@ -288,8 +293,10 @@ yields `dy*/dp = -(dF/dp) / (dF/dy)`.
 
 `tangent_scalar<T>` (`tangent.hpp`) carries a directional derivative
 forward and touches no tape. It is what the implicit stepper’s Jacobian
-is taken with. `adjoint_scalar<T>` (`adjoint_scalar.hpp`) is the adjoint
-scalar a sweep rebinds a System to.
+is taken with, and `tangent_lanes<W>`, the same with one lane per
+direction, is what `sweep_tangent` walks a run at. `adjoint_scalar<T>`
+(`adjoint_scalar.hpp`) is the adjoint scalar a sweep rebinds a System
+to.
 
 Nesting a tangent above an adjoint is a compile error. At an active
 inner scalar every operand copy inside an expression template becomes a
@@ -348,7 +355,10 @@ each observed index, and `sweep_adjoint` is called once per observation
 interval from the last to the first. `times` must therefore be a step
 schedule, normally a reference run’s `$times()`, not an output grid; a
 replay that cannot take the schedule’s steps one row each is refused.
-The optimiser is the caller’s;
+`mode = "forward"` walks the same schedule once carrying one direction
+per input and takes each observation’s term against `dy/dθ` at its row;
+it is the default for a `"rodas"` solver, which cannot be swept. The
+optimiser is the caller’s;
 [`vignette("parameter-fitting")`](https://traitecoevo.github.io/odelia/articles/parameter-fitting.md)
 hands the gradient to [`optim()`](https://rdrr.io/r/stats/optim.html).
 

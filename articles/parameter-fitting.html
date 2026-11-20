@@ -19,7 +19,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.11.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,6 +36,7 @@
 <li><a class="dropdown-item" href="../articles/parameter-fitting.html">Parameter fitting with automatic differentiation</a></li>
     <li><a class="dropdown-item" href="../articles/leaf-thermal.html">Building your own model with external drivers</a></li>
     <li><a class="dropdown-item" href="../articles/reverse-mode.html">Reverse mode: one solve, every parameter</a></li>
+    <li><a class="dropdown-item" href="../articles/forward-mode.html">Forward mode: few parameters, many outputs</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -127,9 +128,11 @@ while keeping one record per step, sets the adjoint at each observed
 index with the residual against the target, and sweeps the recording
 backwards once, which yields the derivative with respect to every
 parameter (and, when asked, every initial condition) from that single
-pass. The <code>times</code> must therefore be a step schedule rather
-than an output grid, which is why <code>obs_index</code> picks the
-observations out of it. The article <a href="articles/reverse-mode.html">Reverse mode</a> describes the
+pass. <code>mode = "forward"</code> walks the same steps again carrying
+one direction per input instead, which costs less with few inputs, and
+is what a <code>"rodas"</code> solver uses. The <code>times</code> must
+therefore be a step schedule rather than an output grid, which is why
+<code>obs_index</code> picks the observations out of it. The article <a href="articles/reverse-mode.html">Reverse mode</a> describes the
 machinery.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res0</span> <span class="op">&lt;-</span> <span class="va">ad_runner</span><span class="op">$</span><span class="fu">loss_and_gradient</span><span class="op">(</span>params <span class="op">=</span> <span class="va">initial_guess</span><span class="op">)</span></span>

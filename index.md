@@ -4,10 +4,13 @@
 interface to R via Rcpp. Three adaptive steppers (Cash-Karp RK4(5),
 Dormand-Prince 5(4), and RODAS4(3) for stiff systems) run entirely in
 compiled code, so it is fast. ODE systems are templated on their scalar
-type, so a run can be recorded and differentiated in **reverse mode**:
-one sweep over the recorded run gives the exact derivative of a solution
-with respect to every parameter and initial condition at once, for
-optimisation and calibration.
+type, so a run can be recorded and differentiated exactly, for
+optimisation and calibration: in **reverse mode**, one sweep over the
+recorded run gives the derivative of a solution with respect to every
+parameter and initial condition at once; in **forward mode**, the run’s
+steps are walked again carrying a few directions, which is cheaper for a
+few parameters and many output times, and works under all three
+steppers.
 
 The core solver was first developed by Rich FitzJohn as part of the
 [plant package](https://github.com/traitecoevo/plant/). This package
@@ -22,9 +25,14 @@ spins that code out so it can be used more widely.
   against 25-60 ms under `deSolve`).
 - **Reverse-mode automatic differentiation** of a recorded run, via the
   vendored [XAD](https://github.com/auto-differentiation/xad) library:
-  one sweep, every parameter and initial condition. Forward mode
-  supplies the implicit stepper’s Jacobian. See the article [Reverse
+  one sweep, every parameter and initial condition. Sweeps need an
+  explicit stepper (Cash-Karp or Dormand-Prince). See the article
+  [Reverse
   mode](https://traitecoevo.github.io/odelia/articles/reverse-mode.html).
+- **Forward-mode sensitivities** `dy(t)/dθ` at every output time, under
+  all three steppers, RODAS included: cheaper than a sweep for up to a
+  few tens of parameters. See the article [Forward
+  mode](https://traitecoevo.github.io/odelia/articles/forward-mode.html).
 - **External drivers**: time-varying forcing variables, interpolated
   with a cubic Hermite spline and queried by the system at each step.
 - A C++ core (header-only but for the XAD tape runtime) that other
@@ -111,6 +119,11 @@ And the worked examples:
   — the gradient machinery from C++: what a run records, how the sweep
   walks it, what a System must provide
   ([source](https://traitecoevo.github.io/odelia/vignettes/articles/reverse-mode.Rmd)).
+- [Forward mode: few parameters, many
+  outputs](https://traitecoevo.github.io/odelia/articles/forward-mode.html)
+  — sensitivities at every output time, through RODAS too, and when they
+  cost less than a sweep
+  ([source](https://traitecoevo.github.io/odelia/vignettes/articles/forward-mode.Rmd)).
 
 ## From C++
 
@@ -157,7 +170,8 @@ The shipped Lorenz and leaf-thermal runners expose a
 `$loss_and_gradient()` method that returns the least-squares loss
 against a target trajectory and its exact gradient with respect to the
 parameters (and initial conditions), by one reverse sweep over a replay
-of the reference run. Hand it to a gradient-based optimiser such as
+of the reference run, or by forward mode with `mode = "forward"` (the
+default under `"rodas"`). Hand it to a gradient-based optimiser such as
 [`optim()`](https://rdrr.io/r/stats/optim.html):
 
 ``` r

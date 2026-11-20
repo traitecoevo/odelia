@@ -19,7 +19,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.11.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,6 +36,7 @@
 <li><a class="dropdown-item" href="../articles/parameter-fitting.html">Parameter fitting with automatic differentiation</a></li>
     <li><a class="dropdown-item" href="../articles/leaf-thermal.html">Building your own model with external drivers</a></li>
     <li><a class="dropdown-item" href="../articles/reverse-mode.html">Reverse mode: one solve, every parameter</a></li>
+    <li><a class="dropdown-item" href="../articles/forward-mode.html">Forward mode: few parameters, many outputs</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -228,9 +229,10 @@ so its right-hand side can be differentiated for the Jacobian, as the
 Lorenz example does, or an <code>ode_jacobian(y, t, dydt, J)</code>
 method that fills the Jacobian itself – the header
 <code>ode_jacobian.hpp</code> has <code>fd_jacobian()</code> for a
-one-line finite-difference version. The implicit stepper currently runs
-on the passive (non-AD) solver; differentiating a fit <em>through</em>
-RODAS is planned (odelia issue #36).</p>
+one-line finite-difference version. A run under RODAS cannot be swept in
+reverse, but it is differentiated in forward mode:
+<code>$sensitivities()</code> and <code>$loss_and_gradient()</code> take
+the derivative of the RODAS steps themselves (see the article <a href="articles/forward-mode.html">Forward mode</a>).</p>
 </div>
 <div class="section level2">
 <h2 id="solving-a-system-written-in-r">Solving a system written in R<a class="anchor" aria-label="anchor" href="#solving-a-system-written-in-r"></a>

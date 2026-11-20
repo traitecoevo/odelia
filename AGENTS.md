@@ -6,11 +6,13 @@ steppers (Cash–Karp RK4(5), Dormand–Prince 5(4), RODAS4(3) for stiff
 systems) run entirely in compiled code. ODE systems are templated on
 their scalar type, so a recorded run can be differentiated in **reverse
 mode** (one sweep gives the derivative with respect to every parameter
-and initial condition) and the implicit stepper’s Jacobian is taken in
-forward mode, both through the vendored
-[XAD](https://github.com/auto-differentiation/xad) library. Time-varying
-external drivers are interpolated with a cubic Hermite spline. A
-right-hand side written in R can be solved by the same steppers.
+and initial condition) or in **forward mode** (the run’s steps walked
+again carrying a few directions, under every stepper, RODAS included),
+and the implicit stepper’s Jacobian is taken in forward mode, all
+through the vendored [XAD](https://github.com/auto-differentiation/xad)
+library. Time-varying external drivers are interpolated with a cubic
+Hermite spline. A right-hand side written in R can be solved by the same
+steppers.
 
 The solver core was first written by Rich FitzJohn inside
 [`plant`](https://github.com/traitecoevo/plant); `odelia` spins it out
@@ -20,8 +22,9 @@ next-generation `plant` core links against it.
 
 **Start here.** `ARCHITECTURE.md` has the map of the headers in
 dependency order. `vignettes/articles/reverse-mode.Rmd` is the design of
-the gradient machinery and the reading order through the headers. The
-System contract is the concepts in
+the gradient machinery and the reading order through the headers;
+`vignettes/articles/forward-mode.Rmd` is the forward pass and when it
+costs less than a sweep. The System contract is the concepts in
 `inst/include/odelia/ode_interface.hpp`.
 
 ## Layout
@@ -39,7 +42,7 @@ System contract is the concepts in
 - `R/` — friendly **R6** wrappers around the C++ objects.
 - `vignettes/` — `odelia.Rmd` (getting started),
   `parameter-fitting.Rmd`; `articles/` holds the website-only pieces
-  that compile C++ (`leaf-thermal`, `reverse-mode`).
+  that compile C++ (`leaf-thermal`, `reverse-mode`, `forward-mode`).
 - `tests/testthat/` — the R suite; `tests/standalone/` — the R-free C++
   suite, which also holds the smallest complete sweepable System
   (`Grow`).

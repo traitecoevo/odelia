@@ -1,6 +1,76 @@
 # Changelog
 
-## odelia 0.11.3
+## odelia 0.12.0
+
+**A run can be differentiated forward, under every stepper.**
+`Solver::sweep_tangent<W>(wrt, rows)` walks a run’s recorded steps a
+second time with the System on `tangent_lanes<W>`, a scalar carrying one
+lane per direction, and returns the state and `dy/dθ` at each row asked
+for. The directions (`tangent_directions`) are parameters, by their
+place in `ad_parameters()`, and components of the state the run started
+from; more of them than `W` are walked in further passes. The steps are
+the run’s, and nothing a lane carries reaches a step’s size, so the
+derivative is that of the scheme as the run stepped it: the convention
+`sweep_adjoint` keeps. Over the same run the two agree to about 1e-14. A
+free `sweep_tangent` walks any schedule from a given start. A System
+walked forward is `TangentSweepable`: `rebind()` to the lane scalar and
+`set_recorded_state()`, plus `ad_parameters()` for a parameter
+direction. A System that solves for inner values (`SolvesForValues`) is
+refused at compile time, since the pass would solve them again rather
+than load the run’s.
+
+**RODAS can be differentiated.** It cannot be swept, but it now steps at
+a tangent scalar. Its Jacobian, taken by forward-mode AD, is then a
+tangent of a tangent: the tangent is seated through its value slot, and
+the parameters’ own directions, which a values-only `rebind()` drops,
+are put back. The derivative is the RODAS step’s own, which is RODAS
+applied to the variational system with its exact Jacobian. A System opts
+in with `static constexpr bool nests_tangents = true` (`NestsTangents`),
+since whether its rates compile two tangent layers deep shows only when
+they are instantiated; one with its own `ode_jacobian()` needs nothing.
+plant’s Patch, stepped at a tangent scalar under the explicit steppers,
+does not compile two layers deep and is untouched. It matches central
+differences of the same pinned RODAS steps to about 1e-7, the precision
+of the differences. Without the parameters put back the gap is 2e-3. At
+`double` nothing changes.
+
+**Forward mode costs less than a sweep with up to a few tens of
+parameters.** On a two-state System with `P` parameters and 200 output
+times, a sweep cost 5–8 plain solves whatever `P` was, and a forward
+pass at 8 lanes 1.4–1.7 for `P` up to 8 and about 5 at `P = 32`, plus
+the plain solve that fixes the steps. The new article “Forward mode: few
+parameters, many outputs” measures this at build.
+
+**From R**, a compiled solver has
+`$sensitivities(times, parameters, initial)`, solving from where the
+solver stands without moving it, and returning `y` and `dy`, an array
+over time, state component and input. `$loss_and_gradient()` gains
+`mode = "forward"` or `"reverse"`; by default a `"rodas"` solver now
+takes forward mode through RODAS, where it used to replay the schedule
+under Cash-Karp silently, and `mode = "reverse"` there is refused. Both
+are templates in `solver_interface.hpp` (`Solver_sensitivities_impl`,
+`Solver_loss_and_gradient_impl`), so a consumer’s own System gets them
+with one export each. An empty `obs_indices` is refused rather than read
+out of range.
+
+New tests: standalone, forward against the sweep under both explicit
+steppers and across an insertion, RODAS against central differences,
+one, two and eight lanes, selected directions, a refused subdivided row,
+and a compile-time refusal of a System that solves for inner values;
+from R (`test-forward-mode.R`), the same on a stiff consumer-resource
+System and on Lorenz, RODAS converging on Dormand-Prince as tolerances
+tighten, and both modes of `$loss_and_gradient()`.
+
+A **minor** bump: gradients from `$loss_and_gradient()` on a `"rodas"`
+solver move, because they are now RODAS’s own; where the System does not
+declare `nests_tangents` (or have its own `ode_jacobian()`), the call is
+refused by name, where it used to replay under Cash-Karp. The Lorenz and
+leaf-thermal examples declare it, and the leaf-thermal runner gains
+`mode` too. A System that cannot be walked forward at all keeps its
+reverse sweep: the forward path is compiled only where it can be.
+Nothing else moves. `set_direction(x, d)` now refuses a scalar with
+several lanes, where it set every lane; `set_direction(x, lane, d)`
+names one. \## odelia 0.11.3
 
 **odelia locates events.** `Solver::advance_until(g, time_max, tol)`
 steps until `g(t, y)` changes the sign it had where the call started,

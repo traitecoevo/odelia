@@ -48,6 +48,8 @@ R6 wrapper for the Lorenz ODE solver.
 
 - [`Lorenz_Solver$loss_and_gradient()`](#method-Lorenz_Solver-loss_and_gradient)
 
+- [`Lorenz_Solver$sensitivities()`](#method-Lorenz_Solver-sensitivities)
+
 - [`Lorenz_Solver$clone()`](#method-Lorenz_Solver-clone)
 
 ------------------------------------------------------------------------
@@ -313,13 +315,16 @@ Set the calibration target for `$loss_and_gradient()`.
 ### `Lorenz_Solver$loss_and_gradient()`
 
 Least-squares loss against the target, and its exact gradient by
-reverse-mode automatic differentiation. The schedule is replayed under
-this solver's `method`, except that a `"rodas"` solver's is replayed
-under `"rkck"`: the Rosenbrock stepper cannot be swept.
+automatic differentiation. The schedule is stepped under this solver's
+`method`.
 
 #### Usage
 
-    Lorenz_Solver$loss_and_gradient(initial_state = NULL, params = NULL)
+    Lorenz_Solver$loss_and_gradient(
+      initial_state = NULL,
+      params = NULL,
+      mode = NULL
+    )
 
 #### Arguments
 
@@ -331,11 +336,58 @@ under `"rkck"`: the Rosenbrock stepper cannot be swept.
 
   Parameters to evaluate at, or `NULL` to keep the system's.
 
+- `mode`:
+
+  `"reverse"`: one reverse sweep, whose cost does not grow with the
+  number of inputs. `"forward"`: the schedule walked again carrying one
+  direction per input, whose cost does; it is the only mode under
+  `"rodas"`, which cannot be swept. `NULL` (the default) is `"forward"`
+  for a `"rodas"` solver and `"reverse"` otherwise.
+
 #### Returns
 
 A list with `loss` (sum of squared differences) and `gradient`:
 d(loss)/d(params), then d(loss)/d(initial_state), for whichever were
 given.
+
+------------------------------------------------------------------------
+
+### `Lorenz_Solver$sensitivities()`
+
+The state at each of `times` and its derivative with respect to the
+parameters and to the state at `times[1]`, by forward-mode automatic
+differentiation. The solve starts from where this solver stands, with
+its step size afresh, and lands a step on every time; the solver itself
+does not move. Those steps are then walked again carrying one direction
+per input, under the solver's own `method`, `"rodas"` included. The cost
+grows with the number of inputs and not with the number of times.
+
+#### Usage
+
+    Lorenz_Solver$sensitivities(times, parameters = TRUE, initial = TRUE)
+
+#### Arguments
+
+- `times`:
+
+  Numeric vector of requested output times.
+
+- `parameters`:
+
+  The parameters to differentiate with respect to: `TRUE` (all), `FALSE`
+  (none), or names (`"sigma"`, `"R"`, `"b"`) or indices.
+
+- `initial`:
+
+  The components of the state at `times[1]` to differentiate with
+  respect to: `TRUE`, `FALSE`, or names (`"x"`, `"y"`, `"z"`) or
+  indices.
+
+#### Returns
+
+A list with `time`; `y`, the state, one row per time; and `dy`, an array
+indexed by time, state component and input: the parameters first, then
+the initial state, named `x0`, `y0`, `z0`.
 
 ------------------------------------------------------------------------
 

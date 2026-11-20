@@ -19,7 +19,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.11.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,6 +36,7 @@
 <li><a class="dropdown-item" href="../articles/parameter-fitting.html">Parameter fitting with automatic differentiation</a></li>
     <li><a class="dropdown-item" href="../articles/leaf-thermal.html">Building your own model with external drivers</a></li>
     <li><a class="dropdown-item" href="../articles/reverse-mode.html">Reverse mode: one solve, every parameter</a></li>
+    <li><a class="dropdown-item" href="../articles/forward-mode.html">Forward mode: few parameters, many outputs</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -68,14 +69,14 @@
     
     
 <p>Calibrating a model against data needs the derivative of a solved
-trajectory with respect to every parameter. Forward mode costs one solve
-per parameter. Reverse mode costs one solve for all of them, but it must
-first record every operation the solve performed, and a run of several
-thousand adaptive steps performs far more of them than memory holds.
-This article is how <code>odelia</code> does it, from C++, and what a
-System has to provide to take part. The R surface,
-<code>$set_target()</code> and <code>$loss_and_gradient()</code>, is the
-last section.</p>
+trajectory with respect to every parameter. Forward mode costs a pass
+that grows with the number of parameters. Reverse mode costs one pass
+for all of them, but it must first record every operation the solve
+performed, and a run of several thousand adaptive steps performs far
+more of them than memory holds. This article is how <code>odelia</code>
+does it, from C++, and what a System has to provide to take part. The R
+surface, <code>$set_target()</code> and
+<code>$loss_and_gradient()</code>, is the last section.</p>
 <blockquote>
 <p>This is a website-only article rather than a packaged vignette,
 because it compiles C++ at build time.</p>
@@ -159,7 +160,10 @@ differentiates the run that was taken, with its steps held fixed.</p>
 <span><span class="co">#&gt; relative   8.340217e-07  7.629323e-08  2.907339e-07</span></span></code></pre></div>
 <p>The cost of <code>sweep_adjoint</code> is one more pass over the
 trajectory, which re-runs the model’s rate evaluations as it goes. It is
-not one pass per parameter, which is the point, and it is not free.</p>
+not one pass per parameter, which is the point, and it is not free: on a
+small system the sweep costs several plain solves, so with up to a few
+tens of parameters forward mode costs less. <a href="forward-mode.html">Forward mode</a> measures where the two
+meet.</p>
 </div>
 <div class="section level2">
 <h2 id="forward-then-reverse">Forward, then reverse<a class="anchor" aria-label="anchor" href="#forward-then-reverse"></a>
@@ -242,7 +246,8 @@ reads them the same way. A Dormand-Prince run can therefore give dense
 output and a gradient from one stepper. The shape is shared but the
 meaning is not: entry i is each tableau’s own stage, so a recording
 names its method and replays only under it. <code>"rodas"</code> keeps
-no per-stage row and refuses a sweep or a replay.</p>
+no per-stage row and refuses a sweep or a replay; a run under it is
+differentiated in forward mode instead (<code>sweep_tangent</code>).</p>
 </div>
 <div class="section level2">
 <h2 id="where-the-state-grows">Where the state grows<a class="anchor" aria-label="anchor" href="#where-the-state-grows"></a>
@@ -345,7 +350,9 @@ slopes in the parameters and yields
 </h2>
 <p><code>tangent_scalar&lt;T&gt;</code> (<code>tangent.hpp</code>)
 carries a directional derivative forward and touches no tape. It is what
-the implicit stepper’s Jacobian is taken with.
+the implicit stepper’s Jacobian is taken with, and
+<code>tangent_lanes&lt;W&gt;</code>, the same with one lane per
+direction, is what <code>sweep_tangent</code> walks a run at.
 <code>adjoint_scalar&lt;T&gt;</code> (<code>adjoint_scalar.hpp</code>)
 is the adjoint scalar a sweep rebinds a System to.</p>
 <p>Nesting a tangent above an adjoint is a compile error. At an active
@@ -421,9 +428,12 @@ index, and <code>sweep_adjoint</code> is called once per observation
 interval from the last to the first. <code>times</code> must therefore
 be a step schedule, normally a reference run’s <code>$times()</code>,
 not an output grid; a replay that cannot take the schedule’s steps one
-row each is refused. The optimiser is the caller’s;
-<code><a href="../articles/parameter-fitting.html">vignette("parameter-fitting")</a></code> hands the gradient to
-<code><a href="https://rdrr.io/r/stats/optim.html" class="external-link">optim()</a></code>.</p>
+row each is refused. <code>mode = "forward"</code> walks the same
+schedule once carrying one direction per input and takes each
+observation’s term against <code>dy/dθ</code> at its row; it is the
+default for a <code>"rodas"</code> solver, which cannot be swept. The
+optimiser is the caller’s; <code><a href="../articles/parameter-fitting.html">vignette("parameter-fitting")</a></code>
+hands the gradient to <code><a href="https://rdrr.io/r/stats/optim.html" class="external-link">optim()</a></code>.</p>
 </div>
 <div class="section level2">
 <h2 id="reading-order-through-the-headers">Reading order through the headers<a class="anchor" aria-label="anchor" href="#reading-order-through-the-headers"></a>

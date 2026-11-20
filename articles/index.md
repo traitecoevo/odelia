@@ -10,3 +10,5 @@
   drivers](https://traitecoevo.github.io/odelia/articles/leaf-thermal.md):
 - [Reverse mode: one solve, every
   parameter](https://traitecoevo.github.io/odelia/articles/reverse-mode.md):
+- [Forward mode: few parameters, many
+  outputs](https://traitecoevo.github.io/odelia/articles/forward-mode.md):

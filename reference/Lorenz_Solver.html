@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.11.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -22,6 +22,7 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/parameter-fitting.html">Parameter fitting with automatic differentiation</a></li>
     <li><a class="dropdown-item" href="../articles/leaf-thermal.html">Building your own model with external drivers</a></li>
     <li><a class="dropdown-item" href="../articles/reverse-mode.html">Reverse mode: one solve, every parameter</a></li>
+    <li><a class="dropdown-item" href="../articles/forward-mode.html">Forward mode: few parameters, many outputs</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
@@ -76,6 +77,7 @@
 <li><p><a href="#method-Lorenz_Solver-history"><code>Lorenz_Solver$history()</code></a></p></li>
 <li><p><a href="#method-Lorenz_Solver-set_target"><code>Lorenz_Solver$set_target()</code></a></p></li>
 <li><p><a href="#method-Lorenz_Solver-loss_and_gradient"><code>Lorenz_Solver$loss_and_gradient()</code></a></p></li>
+<li><p><a href="#method-Lorenz_Solver-sensitivities"><code>Lorenz_Solver$sensitivities()</code></a></p></li>
 <li><p><a href="#method-Lorenz_Solver-clone"><code>Lorenz_Solver$clone()</code></a></p></li>
 </ul></div><p></p><hr><a id="method-Lorenz_Solver-initialize"></a><div class="section">
 <h3 id="lorenz-solver-new-"><code>Lorenz_Solver$new()</code><a class="anchor" aria-label="anchor" href="#lorenz-solver-new-"></a></h3>
@@ -326,12 +328,14 @@ each row of <code>target</code> was observed.</p></dd>
 <p></p><hr><a id="method-Lorenz_Solver-loss_and_gradient"></a><div class="section">
 <h3 id="lorenz-solver-loss-and-gradient-"><code>Lorenz_Solver$loss_and_gradient()</code><a class="anchor" aria-label="anchor" href="#lorenz-solver-loss-and-gradient-"></a></h3>
 <p>Least-squares loss against the target, and its exact
-  gradient by reverse-mode automatic differentiation. The schedule is
-  replayed under this solver's <code>method</code>, except that a
-  <code>"rodas"</code> solver's is replayed under <code>"rkck"</code>: the
-  Rosenbrock stepper cannot be swept.</p><div class="section">
+  gradient by automatic differentiation. The schedule is stepped under
+  this solver's <code>method</code>.</p><div class="section">
 <h4 id="usage-17">Usage<a class="anchor" aria-label="anchor" href="#usage-17"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">Lorenz_Solver</span><span class="op">$</span><span class="fu">loss_and_gradient</span><span class="op">(</span>initial_state <span class="op">=</span> <span class="cn">NULL</span>, params <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">Lorenz_Solver</span><span class="op">$</span><span class="fu">loss_and_gradient</span><span class="op">(</span></span>
+<span>  initial_state <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  params <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  mode <span class="op">=</span> <span class="cn">NULL</span></span>
+<span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
 <h4 id="arguments-9">Arguments<a class="anchor" aria-label="anchor" href="#arguments-9"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>initial_state</code></dt>
@@ -341,6 +345,14 @@ the system's.</p></dd>
       <dt><code>params</code></dt>
 <dd><p>Parameters to evaluate at, or <code>NULL</code> to keep the
 system's.</p></dd>
+
+      <dt><code>mode</code></dt>
+<dd><p><code>"reverse"</code>: one reverse sweep, whose cost does not grow
+with the number of inputs. <code>"forward"</code>: the schedule walked again
+carrying one direction per input, whose cost does; it is the only mode
+under <code>"rodas"</code>, which cannot be swept. <code>NULL</code> (the default)
+is <code>"forward"</code> for a <code>"rodas"</code> solver and <code>"reverse"</code>
+otherwise.</p></dd>
 
 
 </dl><p></p></div>
@@ -353,13 +365,52 @@ system's.</p></dd>
 
 </div>
 
+<p></p><hr><a id="method-Lorenz_Solver-sensitivities"></a><div class="section">
+<h3 id="lorenz-solver-sensitivities-"><code>Lorenz_Solver$sensitivities()</code><a class="anchor" aria-label="anchor" href="#lorenz-solver-sensitivities-"></a></h3>
+<p>The state at each of <code>times</code> and its derivative with
+  respect to the parameters and to the state at <code>times[1]</code>, by
+  forward-mode automatic differentiation. The solve starts from where
+  this solver stands, with its step size afresh, and lands a step on
+  every time; the solver itself does not move. Those steps are then walked again carrying one direction per
+  input, under the solver's own <code>method</code>, <code>"rodas"</code> included.
+  The cost grows with the number of inputs and not with the number of
+  times.</p><div class="section">
+<h4 id="usage-18">Usage<a class="anchor" aria-label="anchor" href="#usage-18"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">Lorenz_Solver</span><span class="op">$</span><span class="fu">sensitivities</span><span class="op">(</span><span class="va">times</span>, parameters <span class="op">=</span> <span class="cn">TRUE</span>, initial <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div><p></p></div>
+</div><p></p><div class="section">
+<h4 id="arguments-10">Arguments<a class="anchor" aria-label="anchor" href="#arguments-10"></a></h4>
+<p></p><div class="arguments"><dl><dt><code>times</code></dt>
+<dd><p>Numeric vector of requested output times.</p></dd>
+
+      <dt><code>parameters</code></dt>
+<dd><p>The parameters to differentiate with respect to:
+<code>TRUE</code> (all), <code>FALSE</code> (none), or names (<code>"sigma"</code>,
+<code>"R"</code>, <code>"b"</code>) or indices.</p></dd>
+
+      <dt><code>initial</code></dt>
+<dd><p>The components of the state at <code>times[1]</code> to
+differentiate with respect to: <code>TRUE</code>, <code>FALSE</code>, or names
+(<code>"x"</code>, <code>"y"</code>, <code>"z"</code>) or indices.</p></dd>
+
+
+</dl><p></p></div>
+</div><p></p><div class="section">
+<h4 id="returns-1">Returns<a class="anchor" aria-label="anchor" href="#returns-1"></a></h4>
+<p>A list with <code>time</code>; <code>y</code>, the state, one row per time;
+  and <code>dy</code>, an array indexed by time, state component and input:
+  the parameters first, then the initial state, named <code>x0</code>,
+  <code>y0</code>, <code>z0</code>.</p>
+</div>
+
+</div>
+
 <p></p><hr><a id="method-Lorenz_Solver-clone"></a><div class="section">
 <h3 id="lorenz-solver-clone-"><code>Lorenz_Solver$clone()</code><a class="anchor" aria-label="anchor" href="#lorenz-solver-clone-"></a></h3>
 <p>The objects of this class are cloneable with this method.</p><div class="section">
-<h4 id="usage-18">Usage<a class="anchor" aria-label="anchor" href="#usage-18"></a></h4>
+<h4 id="usage-19">Usage<a class="anchor" aria-label="anchor" href="#usage-19"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">Lorenz_Solver</span><span class="op">$</span><span class="fu">clone</span><span class="op">(</span>deep <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
-<h4 id="arguments-10">Arguments<a class="anchor" aria-label="anchor" href="#arguments-10"></a></h4>
+<h4 id="arguments-11">Arguments<a class="anchor" aria-label="anchor" href="#arguments-11"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>deep</code></dt>
 <dd><p>Whether to make a deep clone.</p></dd>
 

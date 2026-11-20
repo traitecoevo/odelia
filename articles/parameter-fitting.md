@@ -66,9 +66,12 @@ Underneath, it replays the schedule in `times` step for step while
 keeping one record per step, sets the adjoint at each observed index
 with the residual against the target, and sweeps the recording backwards
 once, which yields the derivative with respect to every parameter (and,
-when asked, every initial condition) from that single pass. The `times`
-must therefore be a step schedule rather than an output grid, which is
-why `obs_index` picks the observations out of it. The article [Reverse
+when asked, every initial condition) from that single pass.
+`mode = "forward"` walks the same steps again carrying one direction per
+input instead, which costs less with few inputs, and is what a `"rodas"`
+solver uses. The `times` must therefore be a step schedule rather than
+an output grid, which is why `obs_index` picks the observations out of
+it. The article [Reverse
 mode](https://traitecoevo.github.io/odelia/articles/articles/reverse-mode.md)
 describes the machinery.
 

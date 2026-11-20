@@ -10,8 +10,8 @@
 <script src="deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="ODE Solver with Automatic Differentiation, in C++ Header Files">
-<meta name="description" content="odelia provides an ODE solver in C++ header files, offering both an explicit adaptive-step Runge-Kutta 4-5 method and an implicit, adaptive-step RODAS4(3) Rosenbrock method for stiff systems, with an interface to R via Rcpp. ODE systems can be templated on their scalar type to support automatic differentiation, enabling exact reverse-mode gradients of a recorded run and exact Jacobians for the implicit solver. A system written as an R function can be solved by the same steppers.">
-<meta property="og:description" content="odelia provides an ODE solver in C++ header files, offering both an explicit adaptive-step Runge-Kutta 4-5 method and an implicit, adaptive-step RODAS4(3) Rosenbrock method for stiff systems, with an interface to R via Rcpp. ODE systems can be templated on their scalar type to support automatic differentiation, enabling exact reverse-mode gradients of a recorded run and exact Jacobians for the implicit solver. A system written as an R function can be solved by the same steppers.">
+<meta name="description" content="odelia provides an ODE solver in C++ header files, offering both an explicit adaptive-step Runge-Kutta 4-5 method and an implicit, adaptive-step RODAS4(3) Rosenbrock method for stiff systems, with an interface to R via Rcpp. ODE systems can be templated on their scalar type to support automatic differentiation, enabling exact gradients of a recorded run, by a reverse sweep or by forward-mode sensitivities (the latter under every stepper, the implicit one included), and exact Jacobians for the implicit solver. A system written as an R function can be solved by the same steppers.">
+<meta property="og:description" content="odelia provides an ODE solver in C++ header files, offering both an explicit adaptive-step Runge-Kutta 4-5 method and an implicit, adaptive-step RODAS4(3) Rosenbrock method for stiff systems, with an interface to R via Rcpp. ODE systems can be templated on their scalar type to support automatic differentiation, enabling exact gradients of a recorded run, by a reverse sweep or by forward-mode sensitivities (the latter under every stepper, the implicit one included), and exact Jacobians for the implicit solver. A system written as an R function can be solved by the same steppers.">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.11.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,7 @@
 <li><a class="dropdown-item" href="articles/parameter-fitting.html">Parameter fitting with automatic differentiation</a></li>
     <li><a class="dropdown-item" href="articles/leaf-thermal.html">Building your own model with external drivers</a></li>
     <li><a class="dropdown-item" href="articles/reverse-mode.html">Reverse mode: one solve, every parameter</a></li>
+    <li><a class="dropdown-item" href="articles/forward-mode.html">Forward mode: few parameters, many outputs</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="news/index.html">Changelog</a></li>
@@ -59,7 +60,7 @@
 </h1></div>
 <!-- badges: start -->
 
-<p><code>odelia</code> is an ODE solver implemented in C++ header files, with an interface to R via Rcpp. Three adaptive steppers (Cash-Karp RK4(5), Dormand-Prince 5(4), and RODAS4(3) for stiff systems) run entirely in compiled code, so it is fast. ODE systems are templated on their scalar type, so a run can be recorded and differentiated in <strong>reverse mode</strong>: one sweep over the recorded run gives the exact derivative of a solution with respect to every parameter and initial condition at once, for optimisation and calibration.</p>
+<p><code>odelia</code> is an ODE solver implemented in C++ header files, with an interface to R via Rcpp. Three adaptive steppers (Cash-Karp RK4(5), Dormand-Prince 5(4), and RODAS4(3) for stiff systems) run entirely in compiled code, so it is fast. ODE systems are templated on their scalar type, so a run can be recorded and differentiated exactly, for optimisation and calibration: in <strong>reverse mode</strong>, one sweep over the recorded run gives the derivative of a solution with respect to every parameter and initial condition at once; in <strong>forward mode</strong>, the run’s steps are walked again carrying a few directions, which is cheaper for a few parameters and many output times, and works under all three steppers.</p>
 <p>The core solver was first developed by Rich FitzJohn as part of the <a href="https://github.com/traitecoevo/plant/" class="external-link">plant package</a>. This package spins that code out so it can be used more widely.</p>
 <div class="section level2">
 <h2 id="features">Features<a class="anchor" aria-label="anchor" href="#features"></a>
@@ -67,7 +68,9 @@
 <ul>
 <li>Three adaptive steppers running entirely in C++: explicit Cash-Karp RK4(5), Dormand-Prince 5(4) with dense output, and the implicit RODAS4(3) for stiff systems. A compiled system solves about a hundred times faster than the same right-hand side written in R (Lorenz: 1 ms against 25-60 ms under <code>deSolve</code>).</li>
 <li>
-<strong>Reverse-mode automatic differentiation</strong> of a recorded run, via the vendored <a href="https://github.com/auto-differentiation/xad" class="external-link">XAD</a> library: one sweep, every parameter and initial condition. Forward mode supplies the implicit stepper’s Jacobian. See the article <a href="https://traitecoevo.github.io/odelia/articles/reverse-mode.html">Reverse mode</a>.</li>
+<strong>Reverse-mode automatic differentiation</strong> of a recorded run, via the vendored <a href="https://github.com/auto-differentiation/xad" class="external-link">XAD</a> library: one sweep, every parameter and initial condition. Sweeps need an explicit stepper (Cash-Karp or Dormand-Prince). See the article <a href="https://traitecoevo.github.io/odelia/articles/reverse-mode.html">Reverse mode</a>.</li>
+<li>
+<strong>Forward-mode sensitivities</strong> <code>dy(t)/dθ</code> at every output time, under all three steppers, RODAS included: cheaper than a sweep for up to a few tens of parameters. See the article <a href="https://traitecoevo.github.io/odelia/articles/forward-mode.html">Forward mode</a>.</li>
 <li>
 <strong>External drivers</strong>: time-varying forcing variables, interpolated with a cubic Hermite spline and queried by the system at each step.</li>
 <li>A C++ core (header-only but for the XAD tape runtime) that other packages link against, with no R needed to compile or test it.</li>
@@ -117,6 +120,8 @@
 <a href="https://traitecoevo.github.io/odelia/articles/leaf-thermal.html">Building your own model with external drivers</a> — a leaf-thermal model showing how to define your own ODE system in C++ and drive it with time-varying forcing (<a href="vignettes/articles/leaf-thermal.Rmd">source</a>).</li>
 <li>
 <a href="https://traitecoevo.github.io/odelia/articles/reverse-mode.html">Reverse mode: one solve, every parameter</a> — the gradient machinery from C++: what a run records, how the sweep walks it, what a System must provide (<a href="vignettes/articles/reverse-mode.Rmd">source</a>).</li>
+<li>
+<a href="https://traitecoevo.github.io/odelia/articles/forward-mode.html">Forward mode: few parameters, many outputs</a> — sensitivities at every output time, through RODAS too, and when they cost less than a sweep (<a href="vignettes/articles/forward-mode.Rmd">source</a>).</li>
 </ul>
 </div>
 <div class="section level2">
@@ -142,7 +147,7 @@
 <div class="section level2">
 <h2 id="parameter-fitting-with-automatic-differentiation">Parameter fitting with automatic differentiation<a class="anchor" aria-label="anchor" href="#parameter-fitting-with-automatic-differentiation"></a>
 </h2>
-<p>The shipped Lorenz and leaf-thermal runners expose a <code>$loss_and_gradient()</code> method that returns the least-squares loss against a target trajectory and its exact gradient with respect to the parameters (and initial conditions), by one reverse sweep over a replay of the reference run. Hand it to a gradient-based optimiser such as <code><a href="https://rdrr.io/r/stats/optim.html" class="external-link">optim()</a></code>:</p>
+<p>The shipped Lorenz and leaf-thermal runners expose a <code>$loss_and_gradient()</code> method that returns the least-squares loss against a target trajectory and its exact gradient with respect to the parameters (and initial conditions), by one reverse sweep over a replay of the reference run, or by forward mode with <code>mode = "forward"</code> (the default under <code>"rodas"</code>). Hand it to a gradient-based optimiser such as <code><a href="https://rdrr.io/r/stats/optim.html" class="external-link">optim()</a></code>:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit_runner</span> <span class="op">&lt;-</span> <span class="va"><a href="reference/Lorenz_Solver.html">Lorenz_Solver</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="va">lz</span><span class="op">$</span><span class="va">ptr</span>, <span class="va">ctrl</span><span class="op">$</span><span class="va">ptr</span><span class="op">)</span></span>
 <span><span class="va">fit_runner</span><span class="op">$</span><span class="fu">set_target</span><span class="op">(</span><span class="va">times</span>, <span class="va">target_vals</span>, <span class="va">obs_index</span><span class="op">)</span></span>
