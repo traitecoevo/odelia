@@ -49,6 +49,8 @@ evaluation can rely on them matching the solver's state.
 
 - [`OdeSolver$advance_collect()`](#method-OdeSolver-advance_collect)
 
+- [`OdeSolver$advance_until()`](#method-OdeSolver-advance_until)
+
 - [`OdeSolver$time()`](#method-OdeSolver-time)
 
 - [`OdeSolver$state()`](#method-OdeSolver-state)
@@ -216,6 +218,50 @@ FALSE\`, which lands a step on every time.
 
   \`TRUE\` to read the requested times off each step's interpolant,
   \`FALSE\` to land a step on each; see \`advance_collect()\`.
+
+------------------------------------------------------------------------
+
+### `OdeSolver$advance_until()`
+
+Advance by adaptive steps until \`event(t, y)\` changes the sign it had
+when called, or to \`time_max\`, whichever comes first. Returns the time
+of the event, or \`NA\` where \`time_max\` came first; either way the
+solver is left there. \`event\` returns one number, and a value of zero
+at the start is an event at the start.
+
+The crossing is seen at the end of a step and located to \`tol\` in time
+on that step's interpolant, at no further evaluation of \`rhs\` (see
+\`advance_collect()\` for that interpolant's order under each method).
+The solver then steps from the start of that step to the located time,
+so the state there is integrated, and it and everything after it are
+what a run would do that took the same steps and then landed on that
+time. A sign change that starts and ends inside one step is not seen.
+Asking again with the same \`event\` starts from a value near zero of
+either sign and can stop straight away; ask for the next level instead.
+
+\`event\` is called as \`event(t, y)\`, without \`parms\`; a closure can
+carry them. A non-finite value is an error. An error while the crossing
+is located leaves the solver at the start of the step that crossed.
+
+#### Usage
+
+    OdeSolver$advance_until(event, time_max, tol = 1e-10)
+
+#### Arguments
+
+- `event`:
+
+  Function \`event(t, y)\` returning one number; see
+  \`advance_until()\`.
+
+- `time_max`:
+
+  A time the step must not pass; \`Inf\` for no bound.
+
+- `tol`:
+
+  How closely the time of an event is located: the bracket it is found
+  in is narrower than \`tol \* (1 + \|t\|)\`.
 
 ------------------------------------------------------------------------
 

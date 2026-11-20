@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.11.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.11.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,14 @@
       <small>Source: <a href="https://github.com/traitecoevo/odelia/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.11.3" id="odelia-0113">odelia 0.11.3<a class="anchor" aria-label="anchor" href="#odelia-0113"></a></h2>
+<p><strong>odelia locates events.</strong> <code>Solver::advance_until(g, time_max, tol)</code> steps until <code>g(t, y)</code> changes the sign it had where the call started, and stops at that time; in R, <code>OdeSolver$advance_until(event, time_max, tol)</code>. A crossing is seen at the end of a step. Its time is found by TOMS748 (<code>root_find.hpp</code>) on that step’s interpolant, so the search evaluates no rates. The step is then taken back, and the solver steps from its start to the located time. The state left at the event is therefore integrated, not interpolated, under every stepper. It is the state a run would hold, bit for bit, that took the same steps up to the one that crossed and then landed on that time, and so is every step after it: a new standalone test checks both under all three steppers and both step-size rules, and under both explicit steppers for a System whose steps substep a stiff subsystem. The time is as accurate as the interpolant: under Dormand–Prince that is the step’s own order, and under Cash–Karp and Rosenbrock cubic Hermite, one order short. In the test, <code>y' = y</code> reaches 2, …, 10 within 6e-9 of <code>log(level)</code> under <code>dopri</code> and <code>rodas</code> and 6e-7 under <code>rkck</code>, at a solver tolerance of 1e-8. A crossing that starts and ends within one step is not seen. An error while the crossing is located, from <code>g</code> or a non-finite value of it, takes the step back before it propagates, so the solver is left between steps.</p>
+<p>The pieces are on <code>SolverInternal</code>: <code>locate()</code> finds the crossing in the last step and allocates nothing once the solver has interpolated; <code>hold_step_start()</code> and <code>retract_step()</code> take the last adaptive step back, restoring the control’s memory, the suggested step, the derivative’s carry, the subsystem’s trend and the record, and leaving the System evaluated where the step started.</p>
+<p>A forward-Euler step now leaves no interpolant, as a pinned step does: <code>interpolate()</code> after one used to read the adaptive step before it.</p>
+<p>plant’s <code>run(individual, sizes = )</code> moves to this next, in place of re-integrating from the bracket’s start for every trial (traitecoevo/plant#804).</p>
+<p>A <strong>patch</strong> bump: additions only, and no number moves.</p>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.11.2" id="odelia-0112">odelia 0.11.2<a class="anchor" aria-label="anchor" href="#odelia-0112"></a></h2>
 <p><strong>odelia finds roots.</strong> <code>root_find.hpp</code> holds bracketed one-dimensional root-finding on any target <code>double -&gt; double</code>: TOMS748 (<code>root::toms748</code>, and <code>root::toms748_bracket</code> returning the final bracket) for a smooth target, and bisection (<code>root::bisect</code>) for one with no smoothness to exploit. TOMS748 takes the caller’s values at the ends, which a caller that chose the bracket by evaluating them already has, or evaluates them itself. A search allocates nothing and takes its target by reference, so it can run inside a step.</p>

@@ -69,7 +69,7 @@ solver's state."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.11.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.11.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -147,6 +147,7 @@ solver's state.</p>
 <li><p><a href="#method-OdeSolver-step"><code>OdeSolver$step()</code></a></p></li>
 <li><p><a href="#method-OdeSolver-advance_adaptive"><code>OdeSolver$advance_adaptive()</code></a></p></li>
 <li><p><a href="#method-OdeSolver-advance_collect"><code>OdeSolver$advance_collect()</code></a></p></li>
+<li><p><a href="#method-OdeSolver-advance_until"><code>OdeSolver$advance_until()</code></a></p></li>
 <li><p><a href="#method-OdeSolver-time"><code>OdeSolver$time()</code></a></p></li>
 <li><p><a href="#method-OdeSolver-state"><code>OdeSolver$state()</code></a></p></li>
 <li><p><a href="#method-OdeSolver-rates"><code>OdeSolver$rates()</code></a></p></li>
@@ -297,10 +298,52 @@ interpolant, `FALSE` to land a step on each; see `advance_collect()`.</p></dd>
 
 </div>
 
+<p></p><hr><a id="method-OdeSolver-advance_until"></a><div class="section">
+<h3 id="odesolver-advance-until-"><code>OdeSolver$advance_until()</code><a class="anchor" aria-label="anchor" href="#odesolver-advance-until-"></a></h3>
+<p>Advance by adaptive steps until `event(t, y)` changes
+  the sign it had when called, or to `time_max`, whichever comes
+  first. Returns the time of the event, or `NA` where `time_max` came
+  first; either way the solver is left there. `event` returns one
+  number, and a value of zero at the start is an event at the start.</p>
+<p>The crossing is seen at the end of a step and located to `tol` in
+  time on that step's interpolant, at no further evaluation of `rhs`
+  (see `advance_collect()` for that interpolant's order under each
+  method). The solver then steps from the start of that step to the
+  located time, so the state there is integrated, and it and everything
+  after it are what a run would do that took the same steps and then
+  landed on that time. A sign change that starts and ends inside one
+  step is not seen. Asking again with the same `event` starts from a
+  value near zero of either sign and can stop straight away; ask for the
+  next level instead.</p>
+<p>`event` is called as `event(t, y)`, without `parms`; a closure can
+  carry them. A non-finite value is an error. An error while the
+  crossing is located leaves the solver at the start of the step that
+  crossed.</p><div class="section">
+<h4 id="usage-4">Usage<a class="anchor" aria-label="anchor" href="#usage-4"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">OdeSolver</span><span class="op">$</span><span class="fu">advance_until</span><span class="op">(</span><span class="va">event</span>, <span class="va">time_max</span>, tol <span class="op">=</span> <span class="fl">1e-10</span><span class="op">)</span></span></code></pre></div><p></p></div>
+</div><p></p><div class="section">
+<h4 id="arguments-4">Arguments<a class="anchor" aria-label="anchor" href="#arguments-4"></a></h4>
+<p></p><div class="arguments"><dl><dt><code>event</code></dt>
+<dd><p>Function `event(t, y)` returning one number; see
+`advance_until()`.</p></dd>
+
+      <dt><code>time_max</code></dt>
+<dd><p>A time the step must not pass; `Inf` for no bound.</p></dd>
+
+      <dt><code>tol</code></dt>
+<dd><p>How closely the time of an event is located: the bracket it is
+found in is narrower than `tol * (1 + |t|)`.</p></dd>
+
+
+</dl><p></p></div>
+</div>
+
+</div>
+
 <p></p><hr><a id="method-OdeSolver-time"></a><div class="section">
 <h3 id="odesolver-time-"><code>OdeSolver$time()</code><a class="anchor" aria-label="anchor" href="#odesolver-time-"></a></h3>
 <p>Current time.</p><div class="section">
-<h4 id="usage-4">Usage<a class="anchor" aria-label="anchor" href="#usage-4"></a></h4>
+<h4 id="usage-5">Usage<a class="anchor" aria-label="anchor" href="#usage-5"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">OdeSolver</span><span class="op">$</span><span class="fu">time</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
@@ -309,7 +352,7 @@ interpolant, `FALSE` to land a step on each; see `advance_collect()`.</p></dd>
 <p></p><hr><a id="method-OdeSolver-state"></a><div class="section">
 <h3 id="odesolver-state-"><code>OdeSolver$state()</code><a class="anchor" aria-label="anchor" href="#odesolver-state-"></a></h3>
 <p>Current state.</p><div class="section">
-<h4 id="usage-5">Usage<a class="anchor" aria-label="anchor" href="#usage-5"></a></h4>
+<h4 id="usage-6">Usage<a class="anchor" aria-label="anchor" href="#usage-6"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">OdeSolver</span><span class="op">$</span><span class="fu">state</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
@@ -319,7 +362,7 @@ interpolant, `FALSE` to land a step on each; see `advance_collect()`.</p></dd>
 <h3 id="odesolver-rates-"><code>OdeSolver$rates()</code><a class="anchor" aria-label="anchor" href="#odesolver-rates-"></a></h3>
 <p>Rates at the current state, as last evaluated (no new
   evaluation after a step or `set_state()`).</p><div class="section">
-<h4 id="usage-6">Usage<a class="anchor" aria-label="anchor" href="#usage-6"></a></h4>
+<h4 id="usage-7">Usage<a class="anchor" aria-label="anchor" href="#usage-7"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">OdeSolver</span><span class="op">$</span><span class="fu">rates</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
@@ -329,7 +372,7 @@ interpolant, `FALSE` to land a step on each; see `advance_collect()`.</p></dd>
 <h3 id="odesolver-times-"><code>OdeSolver$times()</code><a class="anchor" aria-label="anchor" href="#odesolver-times-"></a></h3>
 <p>Times of every accepted step since the last
   `set_state()`, starting with the time it was set at.</p><div class="section">
-<h4 id="usage-7">Usage<a class="anchor" aria-label="anchor" href="#usage-7"></a></h4>
+<h4 id="usage-8">Usage<a class="anchor" aria-label="anchor" href="#usage-8"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">OdeSolver</span><span class="op">$</span><span class="fu">times</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
@@ -341,10 +384,10 @@ interpolant, `FALSE` to land a step on each; see `advance_collect()`.</p></dd>
   length from before. Resets the step size to the control's initial
   value and the recorded times; evaluates `rhs` once; clears the
   effect of an error in a callback.</p><div class="section">
-<h4 id="usage-8">Usage<a class="anchor" aria-label="anchor" href="#usage-8"></a></h4>
+<h4 id="usage-9">Usage<a class="anchor" aria-label="anchor" href="#usage-9"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">OdeSolver</span><span class="op">$</span><span class="fu">set_state</span><span class="op">(</span><span class="va">y</span>, <span class="va">time</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
-<h4 id="arguments-4">Arguments<a class="anchor" aria-label="anchor" href="#arguments-4"></a></h4>
+<h4 id="arguments-5">Arguments<a class="anchor" aria-label="anchor" href="#arguments-5"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>y</code></dt>
 <dd><p>A state vector, of any length.</p></dd>
 
@@ -360,7 +403,7 @@ interpolant, `FALSE` to land a step on each; see `advance_collect()`.</p></dd>
 <p></p><hr><a id="method-OdeSolver-step_size"></a><div class="section">
 <h3 id="odesolver-step-size-"><code>OdeSolver$step_size()</code><a class="anchor" aria-label="anchor" href="#odesolver-step-size-"></a></h3>
 <p>The step the controller will try next.</p><div class="section">
-<h4 id="usage-9">Usage<a class="anchor" aria-label="anchor" href="#usage-9"></a></h4>
+<h4 id="usage-10">Usage<a class="anchor" aria-label="anchor" href="#usage-10"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">OdeSolver</span><span class="op">$</span><span class="fu">step_size</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
@@ -370,10 +413,10 @@ interpolant, `FALSE` to land a step on each; see `advance_collect()`.</p></dd>
 <h3 id="odesolver-set-step-size-"><code>OdeSolver$set_step_size()</code><a class="anchor" aria-label="anchor" href="#odesolver-set-step-size-"></a></h3>
 <p>Set the step the controller tries next, for example to
   carry a known-good step across a `set_state()`.</p><div class="section">
-<h4 id="usage-10">Usage<a class="anchor" aria-label="anchor" href="#usage-10"></a></h4>
+<h4 id="usage-11">Usage<a class="anchor" aria-label="anchor" href="#usage-11"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">OdeSolver</span><span class="op">$</span><span class="fu">set_step_size</span><span class="op">(</span><span class="va">h</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
-<h4 id="arguments-5">Arguments<a class="anchor" aria-label="anchor" href="#arguments-5"></a></h4>
+<h4 id="arguments-6">Arguments<a class="anchor" aria-label="anchor" href="#arguments-6"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>h</code></dt>
 <dd><p>A step size.</p></dd>
 
@@ -390,7 +433,7 @@ interpolant, `FALSE` to land a step on each; see `advance_collect()`.</p></dd>
   formations) since the solver was created, `n_steps` (accepted steps
   since the last `set_state()`) and `n_rejections` (attempts rejected
   and retried smaller, since the solver was created).</p><div class="section">
-<h4 id="usage-11">Usage<a class="anchor" aria-label="anchor" href="#usage-11"></a></h4>
+<h4 id="usage-12">Usage<a class="anchor" aria-label="anchor" href="#usage-12"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">OdeSolver</span><span class="op">$</span><span class="fu">counts</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
@@ -399,10 +442,10 @@ interpolant, `FALSE` to land a step on each; see `advance_collect()`.</p></dd>
 <p></p><hr><a id="method-OdeSolver-clone"></a><div class="section">
 <h3 id="odesolver-clone-"><code>OdeSolver$clone()</code><a class="anchor" aria-label="anchor" href="#odesolver-clone-"></a></h3>
 <p>The objects of this class are cloneable with this method.</p><div class="section">
-<h4 id="usage-12">Usage<a class="anchor" aria-label="anchor" href="#usage-12"></a></h4>
+<h4 id="usage-13">Usage<a class="anchor" aria-label="anchor" href="#usage-13"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">OdeSolver</span><span class="op">$</span><span class="fu">clone</span><span class="op">(</span>deep <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
-<h4 id="arguments-6">Arguments<a class="anchor" aria-label="anchor" href="#arguments-6"></a></h4>
+<h4 id="arguments-7">Arguments<a class="anchor" aria-label="anchor" href="#arguments-7"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>deep</code></dt>
 <dd><p>Whether to make a deep clone.</p></dd>
 
