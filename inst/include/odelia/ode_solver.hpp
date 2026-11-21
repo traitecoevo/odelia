@@ -639,6 +639,80 @@ public:
                          extra_stops);
   }
 
+  // One sweep seeded at several rows, for a derivative that sums terms at
+  // several output times. `at[i]` is the adjoint to add at row `rows[i]`, the
+  // rows ascending: the sweep starts at the last with its adjoint, and at each
+  // row below adds that row's adjoint to what it has carried down, on to row 0.
+  // `lambda` comes back as the adjoint at row 0, the initial state;
+  // `parameter_adjoint` accumulates, zeroed by the caller, as sweep_adjoint has
+  // it. Every batch in `at` has the same number of outputs, each at the width
+  // of its row.
+  std::size_t sweep_adjoint_at(std::span<const std::size_t> rows,
+                               std::span<const ode::adjoint_batch> at,
+                               ode::adjoint_batch& lambda,
+                               ode::adjoint_batch& parameter_adjoint)
+  {
+    if (rows.empty() || rows.size() != at.size()) {
+      util::stop("sweep_adjoint_at: one adjoint batch per row, and at least "
+                 "one row");
+    }
+    for (std::size_t i = 1; i < rows.size(); ++i) {
+      if (!(rows[i] > rows[i - 1])) {
+        util::stop("sweep_adjoint_at: rows must ascend, each named once");
+      }
+    }
+    const auto add = [&](const ode::adjoint_batch& term, std::size_t row) {
+      if (term.size() != lambda.size() || term.width() != lambda.width()) {
+        util::stop("sweep_adjoint_at: the adjoint at row " +
+                   util::to_string(row) + " is " + util::to_string(term.size()) +
+                   " by " + util::to_string(term.width()) +
+                   " against the sweep's " + util::to_string(lambda.size()) +
+                   " by " + util::to_string(lambda.width()));
+      }
+      for (std::size_t m = 0; m < lambda.size(); ++m) {
+        const std::span<const double> from = term[m];
+        const std::span<double> to = lambda[m];
+        for (std::size_t j = 0; j < to.size(); ++j) to[j] += from[j];
+      }
+    };
+    std::size_t i = rows.size() - 1;
+    lambda = at[i];
+    std::size_t hi = rows[i];
+    std::size_t swept = 0;
+    while (i-- > 0) {
+      swept += sweep_adjoint(lambda, parameter_adjoint, rows[i], hi);
+      add(at[i], rows[i]);
+      hi = rows[i];
+    }
+    if (hi > 0) {
+      swept += sweep_adjoint(lambda, parameter_adjoint, 0, hi);
+    }
+    return swept;
+  }
+
+  // The recorded row at each of `times`, ascending, which the run landed a
+  // step on (advance_adaptive lands on every time it is given). Where an
+  // insertion's row shares its time with the row below, the insertion's: the
+  // state the run carried forward. A time no row holds is refused.
+  std::vector<std::size_t> rows_at(std::span<const double> times) const
+  {
+    const auto rec = recording();
+    std::vector<std::size_t> rows;
+    rows.reserve(times.size());
+    std::size_t k = 0;
+    for (const double t : times) {
+      while (k < rec.size() && rec[k].time < t) ++k;
+      if (k == rec.size() || rec[k].time != t) {
+        util::stop("rows_at: no recorded row at t = " + util::format_double(t) +
+                   "; a run lands a step on every time advance_adaptive is "
+                   "given, and the times asked for here must ascend");
+      }
+      while (k + 1 < rec.size() && rec[k + 1].time == t) ++k;
+      rows.push_back(k);
+    }
+    return rows;
+  }
+
   // The forward counterpart of sweep_adjoint: this run's recording walked again
   // from its first row, carrying one direction for each input `wrt` names, W
   // at a time. Returns the state and its derivative along each direction at
