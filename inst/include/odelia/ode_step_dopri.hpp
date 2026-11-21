@@ -362,9 +362,13 @@ void DopriStep<System>::step_adjoint(adjoint_system<System>& active,
   auto whole_step = [&](auto& sys,
                         typename std::vector<scalar>::const_iterator x,
                         std::vector<scalar>& y_end) -> void {
-    const std::vector<scalar> y_start(x, x + static_cast<std::ptrdiff_t>(size));
-    std::vector<std::vector<scalar>> rate(6, std::vector<scalar>(size));
-    std::vector<scalar> stage(size);
+    std::vector<scalar>& y_start = active.stage_start;
+    y_start.assign(x, x + static_cast<std::ptrdiff_t>(size));
+    std::vector<std::vector<scalar>>& rate = active.stage_rates;
+    rate.resize(6);
+    for (std::vector<scalar>& r : rate) r.assign(size, scalar(0.0));
+    std::vector<scalar>& stage = active.stage;
+    stage.assign(size, scalar(0.0));
     // k1 as the run took it: see Step::step_adjoint.
     bool k1_loaded = false;
     if constexpr (SolvesForValues<System>) {
