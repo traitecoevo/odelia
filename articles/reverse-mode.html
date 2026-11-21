@@ -19,7 +19,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -420,12 +420,12 @@ and its gradient needs an adjoint at each of them. One sweep still
 serves, taken interval by interval from the last output time to the
 first: the sweep from the top is seeded with the last time’s adjoint; at
 each output time below, that time’s own adjoint is added to what the
-sweep has carried down to it, and the sweep continues.
-<code>sweep_adjoint(lambda, dp, k_first, k_last)</code> sweeps the rows
-between two indices into the recording, and
+sweep has carried down to it, and the sweep continues to row 0.
+<code>sweep_adjoint_at(rows, at, lambda, dp)</code> is that loop: one
+adjoint batch per row, the rows ascending.
 <code>advance_adaptive(times)</code> lands a step on every time asked
-for, so each output time is a recorded row, found by matching
-<code>recording()[k].time</code>. For the derivative of the sum of
+for, so each output time is a recorded row, and
+<code>rows_at(times)</code> finds them. For the derivative of the sum of
 <code>x(t_i)</code> over the output times:</p>
 <div class="sourceCode" id="cb9"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="co">// [[Rcpp::plugins(cpp20)]]</span></span>
 <span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;Rcpp.h&gt;</span></span>
@@ -444,32 +444,23 @@ for, so each output time is a recorded row, found by matching
 <span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a>  s<span class="op">.</span>set_keep_states<span class="op">(</span><span class="kw">true</span><span class="op">);</span></span>
 <span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a>  s<span class="op">.</span>advance_adaptive<span class="op">(</span>times<span class="op">);</span>                     <span class="co">// a step lands on every time</span></span>
 <span id="cb9-17"><a href="#cb9-17" tabindex="-1"></a></span>
-<span id="cb9-18"><a href="#cb9-18" tabindex="-1"></a>  <span class="at">const</span> <span class="kw">auto</span> rec <span class="op">=</span> s<span class="op">.</span>recording<span class="op">();</span></span>
-<span id="cb9-19"><a href="#cb9-19" tabindex="-1"></a>  <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>size_t<span class="op">&gt;</span> rows<span class="op">;</span>                 <span class="co">// the recorded row of each time</span></span>
-<span id="cb9-20"><a href="#cb9-20" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t k <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> k <span class="op">&lt;</span> rec<span class="op">.</span>size<span class="op">()</span> <span class="op">&amp;&amp;</span> i <span class="op">&lt;</span> times<span class="op">.</span>size<span class="op">();</span> <span class="op">++</span>k<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb9-21"><a href="#cb9-21" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>rec<span class="op">[</span>k<span class="op">].</span>time <span class="op">==</span> times<span class="op">[</span>i<span class="op">])</span> <span class="op">{</span> rows<span class="op">.</span>push_back<span class="op">(</span>k<span class="op">);</span> <span class="op">++</span>i<span class="op">;</span> <span class="op">}</span></span>
-<span id="cb9-22"><a href="#cb9-22" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb9-18"><a href="#cb9-18" tabindex="-1"></a>  <span class="at">const</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>size_t<span class="op">&gt;</span> rows <span class="op">=</span> s<span class="op">.</span>rows_at<span class="op">(</span>times<span class="op">);</span></span>
+<span id="cb9-19"><a href="#cb9-19" tabindex="-1"></a>  <span class="at">const</span> <span class="bu">std::</span>vector<span class="op">&lt;</span>adjoint_batch<span class="op">&gt;</span> at<span class="op">(</span>rows<span class="op">.</span>size<span class="op">(),</span></span>
+<span id="cb9-20"><a href="#cb9-20" tabindex="-1"></a>                                      adjoint_batch<span class="op">::</span>one<span class="op">({</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">}));</span>  <span class="co">// d x(t_i)</span></span>
+<span id="cb9-21"><a href="#cb9-21" tabindex="-1"></a>  adjoint_batch lambda<span class="op">,</span> dp<span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">3</span><span class="op">);</span>                <span class="co">// dp zeroed; lambda is written</span></span>
+<span id="cb9-22"><a href="#cb9-22" tabindex="-1"></a>  s<span class="op">.</span>sweep_adjoint_at<span class="op">(</span>rows<span class="op">,</span> at<span class="op">,</span> lambda<span class="op">,</span> dp<span class="op">);</span>      <span class="co">// one sweep, row by row</span></span>
 <span id="cb9-23"><a href="#cb9-23" tabindex="-1"></a></span>
-<span id="cb9-24"><a href="#cb9-24" tabindex="-1"></a>  adjoint_batch lambda<span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">3</span><span class="op">),</span> dp<span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">3</span><span class="op">);</span>          <span class="co">// zeroed</span></span>
-<span id="cb9-25"><a href="#cb9-25" tabindex="-1"></a>  <span class="bu">std::</span>size_t hi <span class="op">=</span> rows<span class="op">.</span>back<span class="op">();</span></span>
-<span id="cb9-26"><a href="#cb9-26" tabindex="-1"></a>  lambda<span class="op">[</span><span class="dv">0</span><span class="op">][</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="fl">1.0</span><span class="op">;</span>                            <span class="co">// d x(t_n)</span></span>
-<span id="cb9-27"><a href="#cb9-27" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t i <span class="op">=</span> rows<span class="op">.</span>size<span class="op">()</span> <span class="op">-</span> <span class="dv">1</span><span class="op">;</span> i<span class="op">--</span> <span class="op">&gt;</span> <span class="dv">0</span><span class="op">;)</span> <span class="op">{</span></span>
-<span id="cb9-28"><a href="#cb9-28" tabindex="-1"></a>    s<span class="op">.</span>sweep_adjoint<span class="op">(</span>lambda<span class="op">,</span> dp<span class="op">,</span> rows<span class="op">[</span>i<span class="op">],</span> hi<span class="op">);</span>    <span class="co">// down to the time before</span></span>
-<span id="cb9-29"><a href="#cb9-29" tabindex="-1"></a>    lambda<span class="op">[</span><span class="dv">0</span><span class="op">][</span><span class="dv">0</span><span class="op">]</span> <span class="op">+=</span> <span class="fl">1.0</span><span class="op">;</span>                         <span class="co">// and add that time's own adjoint</span></span>
-<span id="cb9-30"><a href="#cb9-30" tabindex="-1"></a>    hi <span class="op">=</span> rows<span class="op">[</span>i<span class="op">];</span></span>
-<span id="cb9-31"><a href="#cb9-31" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb9-32"><a href="#cb9-32" tabindex="-1"></a></span>
-<span id="cb9-33"><a href="#cb9-33" tabindex="-1"></a>  tangent_directions wrt<span class="op">{{</span><span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">},</span> <span class="op">{}};</span></span>
-<span id="cb9-34"><a href="#cb9-34" tabindex="-1"></a>  <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> forward<span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
-<span id="cb9-35"><a href="#cb9-35" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span><span class="at">const</span> tangent_row<span class="op">&amp;</span> d <span class="op">:</span> s<span class="op">.</span>sweep_tangent<span class="op">&lt;</span><span class="dv">3</span><span class="op">&gt;(</span>wrt<span class="op">,</span> rows<span class="op">))</span> <span class="op">{</span></span>
-<span id="cb9-36"><a href="#cb9-36" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t j <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> <span class="op">++</span>j<span class="op">)</span> forward<span class="op">[</span>j<span class="op">]</span> <span class="op">+=</span> d<span class="op">.</span>at<span class="op">(</span><span class="dv">0</span><span class="op">,</span> j<span class="op">);</span></span>
-<span id="cb9-37"><a href="#cb9-37" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb9-38"><a href="#cb9-38" tabindex="-1"></a>  <span class="cf">return</span> Rcpp<span class="op">::</span>List<span class="op">::</span>create<span class="op">(</span></span>
-<span id="cb9-39"><a href="#cb9-39" tabindex="-1"></a>    Rcpp<span class="op">::</span>Named<span class="op">(</span><span class="st">"steps"</span><span class="op">)</span>   <span class="op">=</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;(</span>rec<span class="op">.</span>size<span class="op">())</span> <span class="op">-</span> <span class="dv">1</span><span class="op">,</span></span>
-<span id="cb9-40"><a href="#cb9-40" tabindex="-1"></a>    Rcpp<span class="op">::</span>Named<span class="op">(</span><span class="st">"reverse"</span><span class="op">)</span> <span class="op">=</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;(</span>dp<span class="op">[</span><span class="dv">0</span><span class="op">].</span>begin<span class="op">(),</span> dp<span class="op">[</span><span class="dv">0</span><span class="op">].</span>end<span class="op">()),</span></span>
-<span id="cb9-41"><a href="#cb9-41" tabindex="-1"></a>    Rcpp<span class="op">::</span>Named<span class="op">(</span><span class="st">"forward"</span><span class="op">)</span> <span class="op">=</span> forward<span class="op">);</span></span>
-<span id="cb9-42"><a href="#cb9-42" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>The last sweep ends at row 0, where <code>lambda</code> holds the
+<span id="cb9-24"><a href="#cb9-24" tabindex="-1"></a>  tangent_directions wrt<span class="op">{{</span><span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">},</span> <span class="op">{}};</span></span>
+<span id="cb9-25"><a href="#cb9-25" tabindex="-1"></a>  <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> forward<span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb9-26"><a href="#cb9-26" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span><span class="at">const</span> tangent_row<span class="op">&amp;</span> d <span class="op">:</span> s<span class="op">.</span>sweep_tangent<span class="op">&lt;</span><span class="dv">3</span><span class="op">&gt;(</span>wrt<span class="op">,</span> rows<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb9-27"><a href="#cb9-27" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t j <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> <span class="op">++</span>j<span class="op">)</span> forward<span class="op">[</span>j<span class="op">]</span> <span class="op">+=</span> d<span class="op">.</span>at<span class="op">(</span><span class="dv">0</span><span class="op">,</span> j<span class="op">);</span></span>
+<span id="cb9-28"><a href="#cb9-28" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb9-29"><a href="#cb9-29" tabindex="-1"></a>  <span class="cf">return</span> Rcpp<span class="op">::</span>List<span class="op">::</span>create<span class="op">(</span></span>
+<span id="cb9-30"><a href="#cb9-30" tabindex="-1"></a>    Rcpp<span class="op">::</span>Named<span class="op">(</span><span class="st">"steps"</span><span class="op">)</span>   <span class="op">=</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;(</span>s<span class="op">.</span>recording<span class="op">().</span>size<span class="op">())</span> <span class="op">-</span> <span class="dv">1</span><span class="op">,</span></span>
+<span id="cb9-31"><a href="#cb9-31" tabindex="-1"></a>    Rcpp<span class="op">::</span>Named<span class="op">(</span><span class="st">"reverse"</span><span class="op">)</span> <span class="op">=</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;(</span>dp<span class="op">[</span><span class="dv">0</span><span class="op">].</span>begin<span class="op">(),</span> dp<span class="op">[</span><span class="dv">0</span><span class="op">].</span>end<span class="op">()),</span></span>
+<span id="cb9-32"><a href="#cb9-32" tabindex="-1"></a>    Rcpp<span class="op">::</span>Named<span class="op">(</span><span class="st">"forward"</span><span class="op">)</span> <span class="op">=</span> forward<span class="op">);</span></span>
+<span id="cb9-33"><a href="#cb9-33" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The sweep ends at row 0, where <code>lambda</code> holds the
 derivative with respect to the initial state and <code>dp</code> the
 derivative with respect to the parameters, accumulated across every
 interval. The forward pass of the same run (<a href="forward-mode.html">Forward mode</a>) gives the derivative at each
@@ -505,17 +496,17 @@ least-squares loss and its exact gradient. Underneath
 <code>Solver_loss_and_gradient_impl</code>): a schedule of steps is
 built from <code>times</code>, replayed with
 <code>advance_schedule</code> under <code>set_keep_states(true)</code>,
-an adjoint of <code>2 * (y - target)</code> is added at each observed
-index, and <code>sweep_adjoint</code> is called once per observation
-interval from the last to the first. <code>times</code> must therefore
-be a step schedule, normally a reference run’s <code>$times()</code>,
-not an output grid; a replay that cannot take the schedule’s steps one
-row each is refused. <code>mode = "forward"</code> walks the same
-schedule once carrying one direction per input and takes each
-observation’s term against <code>dy/dθ</code> at its row; it is the
-default for a <code>"rodas"</code> solver, which cannot be swept. The
-optimiser is the caller’s; <code><a href="../articles/parameter-fitting.html">vignette("parameter-fitting")</a></code>
-hands the gradient to <code><a href="https://rdrr.io/r/stats/optim.html" class="external-link">optim()</a></code>.</p>
+an adjoint of <code>2 * (y - target)</code> is formed at each observed
+index, and <code>sweep_adjoint_at</code> sweeps them as above.
+<code>times</code> must therefore be a step schedule, normally a
+reference run’s <code>$times()</code>, not an output grid; a replay that
+cannot take the schedule’s steps one row each is refused.
+<code>mode = "forward"</code> walks the same schedule once carrying one
+direction per input and takes each observation’s term against
+<code>dy/dθ</code> at its row; it is the default for a
+<code>"rodas"</code> solver, which cannot be swept. The optimiser is the
+caller’s; <code><a href="../articles/parameter-fitting.html">vignette("parameter-fitting")</a></code> hands the gradient
+to <code><a href="https://rdrr.io/r/stats/optim.html" class="external-link">optim()</a></code>.</p>
 </div>
 <div class="section level2">
 <h2 id="reading-order-through-the-headers">Reading order through the headers<a class="anchor" aria-label="anchor" href="#reading-order-through-the-headers"></a>
@@ -548,8 +539,9 @@ the step both take where a System names a subsystem, which the sweep
 transposes with its substeps as recorded.</li>
 <li>
 <code>ode_solver.hpp</code>: <code>sweep_adjoint</code>, the loop
-over rows and insertions; <code>advance_schedule</code>, the
-replay.</li>
+over rows and insertions; <code>sweep_adjoint_at</code> and
+<code>rows_at</code>, one sweep seeded at several output times;
+<code>advance_schedule</code>, the replay.</li>
 <li>
 <code>implicit_node.hpp</code>: supplied rows and
 <code>implicit_value</code>, independent of the solver.</li>

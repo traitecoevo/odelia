@@ -48,12 +48,7 @@ Rcpp::List lorenz_forward(std::vector<double> times, std::string method) {
   s.set_keep_states(true);
   s.advance_adaptive(times);                    // a step lands on every time
 
-  std::vector<std::size_t> rows;                // which recorded row is which time
-  for (std::size_t k = 0; k < s.recording().size(); ++k) {
-    if (std::find(times.begin(), times.end(), s.recording()[k].time) != times.end()) {
-      rows.push_back(k);
-    }
-  }
+  const std::vector<std::size_t> rows = s.rows_at(times);   // the row of each time
   tangent_directions wrt{{0, 1, 2}, {0}};       // sigma, R, b; and x(0)
   std::vector<tangent_row> d = s.sweep_tangent<4>(wrt, rows);
 
@@ -212,19 +207,14 @@ Rcpp::NumericVector forced_costs(int P) {
   s.set_keep_states(true);
   s.advance_adaptive(times);
   const auto rec = s.recording();
-  std::vector<std::size_t> rows;
-  for (std::size_t k = 0, i = 0; k < rec.size() && i < times.size(); ++k) {
-    if (rec[k].time == times[i]) { rows.push_back(k); ++i; }
+  const std::vector<std::size_t> rows = s.rows_at(times);
+  std::vector<adjoint_batch> at;                // 2 y(t_i): a sum of squares' adjoints
+  for (const std::size_t k : rows) {
+    at.push_back(adjoint_batch::one({2 * rec[k].state[0], 2 * rec[k].state[1]}));
   }
   const double reverse = fastest([&] {
-    adjoint_batch lambda(1, 2), dp(1, P);
-    std::size_t hi = rows.back();
-    for (int j = 0; j < 2; ++j) lambda[0][j] = 2 * rec[hi].state[j];
-    for (std::size_t m = rows.size() - 1; m-- > 0;) {
-      s.sweep_adjoint(lambda, dp, rows[m], hi);
-      for (int j = 0; j < 2; ++j) lambda[0][j] += 2 * rec[rows[m]].state[j];
-      hi = rows[m];
-    }
+    adjoint_batch lambda, dp(1, P);
+    s.sweep_adjoint_at(rows, at, lambda, dp);
   });
   tangent_directions wrt;
   for (int j = 0; j < P; ++j) wrt.parameters.push_back(j);
@@ -241,13 +231,13 @@ costs <- t(vapply(P, forced_costs, numeric(2)))
 data.frame(P = P, reverse = round(costs[, "reverse"], 1),
            forward = round(costs[, "forward"], 1))
 #>    P reverse forward
-#> 1  1    55.2     2.3
-#> 2  2    49.7     2.1
-#> 3  4    32.7     1.8
-#> 4  8    20.8     1.5
-#> 5 16     9.5     2.7
-#> 6 32     4.9     4.9
-#> 7 64     2.8     8.5
+#> 1  1    47.2     2.3
+#> 2  2    40.3     2.0
+#> 3  4    27.9     1.8
+#> 4  8    17.7     1.6
+#> 5 16     8.1     2.7
+#> 6 32     4.4     4.8
+#> 7 64     2.6     8.4
 ```
 
 On a small System the sweep costs several plain solves whatever `P` is.

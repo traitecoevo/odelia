@@ -350,12 +350,12 @@ its gradient needs an adjoint at each of them. One sweep still serves,
 taken interval by interval from the last output time to the first: the
 sweep from the top is seeded with the last time’s adjoint; at each
 output time below, that time’s own adjoint is added to what the sweep
-has carried down to it, and the sweep continues.
-`sweep_adjoint(lambda, dp, k_first, k_last)` sweeps the rows between two
-indices into the recording, and `advance_adaptive(times)` lands a step
-on every time asked for, so each output time is a recorded row, found by
-matching `recording()[k].time`. For the derivative of the sum of
-`x(t_i)` over the output times:
+has carried down to it, and the sweep continues to row 0.
+`sweep_adjoint_at(rows, at, lambda, dp)` is that loop: one adjoint batch
+per row, the rows ascending. `advance_adaptive(times)` lands a step on
+every time asked for, so each output time is a recorded row, and
+`rows_at(times)` finds them. For the derivative of the sum of `x(t_i)`
+over the output times:
 
 ``` cpp
 // [[Rcpp::plugins(cpp20)]]
@@ -375,20 +375,11 @@ Rcpp::List lorenz_series_adjoint(std::vector<double> times) {
   s.set_keep_states(true);
   s.advance_adaptive(times);                     // a step lands on every time
 
-  const auto rec = s.recording();
-  std::vector<std::size_t> rows;                 // the recorded row of each time
-  for (std::size_t k = 0, i = 0; k < rec.size() && i < times.size(); ++k) {
-    if (rec[k].time == times[i]) { rows.push_back(k); ++i; }
-  }
-
-  adjoint_batch lambda(1, 3), dp(1, 3);          // zeroed
-  std::size_t hi = rows.back();
-  lambda[0][0] = 1.0;                            // d x(t_n)
-  for (std::size_t i = rows.size() - 1; i-- > 0;) {
-    s.sweep_adjoint(lambda, dp, rows[i], hi);    // down to the time before
-    lambda[0][0] += 1.0;                         // and add that time's own adjoint
-    hi = rows[i];
-  }
+  const std::vector<std::size_t> rows = s.rows_at(times);
+  const std::vector<adjoint_batch> at(rows.size(),
+                                      adjoint_batch::one({1.0, 0.0, 0.0}));  // d x(t_i)
+  adjoint_batch lambda, dp(1, 3);                // dp zeroed; lambda is written
+  s.sweep_adjoint_at(rows, at, lambda, dp);      // one sweep, row by row
 
   tangent_directions wrt{{0, 1, 2}, {}};
   std::vector<double> forward(3, 0.0);
@@ -396,13 +387,13 @@ Rcpp::List lorenz_series_adjoint(std::vector<double> times) {
     for (std::size_t j = 0; j < 3; ++j) forward[j] += d.at(0, j);
   }
   return Rcpp::List::create(
-    Rcpp::Named("steps")   = static_cast<int>(rec.size()) - 1,
+    Rcpp::Named("steps")   = static_cast<int>(s.recording().size()) - 1,
     Rcpp::Named("reverse") = std::vector<double>(dp[0].begin(), dp[0].end()),
     Rcpp::Named("forward") = forward);
 }
 ```
 
-The last sweep ends at row 0, where `lambda` holds the derivative with
+The sweep ends at row 0, where `lambda` holds the derivative with
 respect to the initial state and `dp` the derivative with respect to the
 parameters, accumulated across every interval. The forward pass of the
 same run ([Forward
@@ -443,15 +434,14 @@ schedule and observations; `$loss_and_gradient(initial_state, params)`
 returns a least-squares loss and its exact gradient. Underneath
 (`solver_interface.hpp`, `Solver_loss_and_gradient_impl`): a schedule of
 steps is built from `times`, replayed with `advance_schedule` under
-`set_keep_states(true)`, an adjoint of `2 * (y - target)` is added at
-each observed index, and `sweep_adjoint` is called once per observation
-interval from the last to the first. `times` must therefore be a step
-schedule, normally a reference run’s `$times()`, not an output grid; a
-replay that cannot take the schedule’s steps one row each is refused.
-`mode = "forward"` walks the same schedule once carrying one direction
-per input and takes each observation’s term against `dy/dθ` at its row;
-it is the default for a `"rodas"` solver, which cannot be swept. The
-optimiser is the caller’s;
+`set_keep_states(true)`, an adjoint of `2 * (y - target)` is formed at
+each observed index, and `sweep_adjoint_at` sweeps them as above.
+`times` must therefore be a step schedule, normally a reference run’s
+`$times()`, not an output grid; a replay that cannot take the schedule’s
+steps one row each is refused. `mode = "forward"` walks the same
+schedule once carrying one direction per input and takes each
+observation’s term against `dy/dθ` at its row; it is the default for a
+`"rodas"` solver, which cannot be swept. The optimiser is the caller’s;
 [`vignette("parameter-fitting")`](https://traitecoevo.github.io/odelia/articles/parameter-fitting.md)
 hands the gradient to [`optim()`](https://rdrr.io/r/stats/optim.html).
 
@@ -473,7 +463,8 @@ hands the gradient to [`optim()`](https://rdrr.io/r/stats/optim.html).
     `ode_substeps.hpp`: the step both take where a System names a
     subsystem, which the sweep transposes with its substeps as recorded.
 6.  `ode_solver.hpp`: `sweep_adjoint`, the loop over rows and
-    insertions; `advance_schedule`, the replay.
+    insertions; `sweep_adjoint_at` and `rows_at`, one sweep seeded at
+    several output times; `advance_schedule`, the replay.
 7.  `implicit_node.hpp`: supplied rows and `implicit_value`, independent
     of the solver.
 8.  `sweep.hpp`: helpers for a consumer that drives a sweep segment by
