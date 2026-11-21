@@ -6,12 +6,7 @@ Authors@R: c(
     person("Daniel", "Falster", , "daniel.falster@unsw.edu.au", c("aut", "cre"), 
             comment = c(ORCID = "0000-0002-9814-092X")),
     person("Richard", "FitzJohn", , "", "aut"),
-    person("Andrew", "O'Reilly-Nugent", , "", "aut"),
-    person("Ernst", "Hairer", role = "cph",
-           comment = "rodas.f and dopri5.f, adapted in ode_step_rodas.hpp and ode_step_dopri.hpp"),
-    person("John", "Maddock", role = "cph", comment = "Boost.Math, adapted in root_find.hpp"),
-    person("Matt", "Borland", role = "cph", comment = "Boost.Math, adapted in root_find.hpp"),
-    person("Xcelerit Computing Ltd.", role = "cph", comment = "XAD, bundled in inst/include/XAD")
+    person("Andrew", "O'Reilly-Nugent", , "", "aut")
     )
 Maintainer: Daniel Falster <daniel.falster@unsw.edu.au>
 Description: odelia provides an ODE solver in C++ header files, offering both
