@@ -1,12 +1,17 @@
 Package: odelia
 Type: Package
 Title: ODE Solver with Automatic Differentiation, in C++ Header Files
-Version: 0.12.4
+Version: 0.12.5
 Authors@R: c(
     person("Daniel", "Falster", , "daniel.falster@unsw.edu.au", c("aut", "cre"), 
             comment = c(ORCID = "0000-0002-9814-092X")),
     person("Richard", "FitzJohn", , "", "aut"),
-    person("Andrew", "O'Reilly-Nugent", , "", "aut")
+    person("Andrew", "O'Reilly-Nugent", , "", "aut"),
+    person("Ernst", "Hairer", role = "cph",
+           comment = "rodas.f and dopri5.f, adapted in ode_step_rodas.hpp and ode_step_dopri.hpp"),
+    person("John", "Maddock", role = "cph", comment = "Boost.Math, adapted in root_find.hpp"),
+    person("Matt", "Borland", role = "cph", comment = "Boost.Math, adapted in root_find.hpp"),
+    person("Xcelerit Computing Ltd.", role = "cph", comment = "XAD, bundled in inst/include/XAD")
     )
 Maintainer: Daniel Falster <daniel.falster@unsw.edu.au>
 Description: odelia provides an ODE solver in C++ header files, offering both
@@ -39,6 +44,7 @@ LinkingTo:
 VignetteBuilder: knitr
 Encoding: UTF-8
 License: AGPL (>= 3)
+Copyright: See inst/COPYRIGHTS for the code adapted from Hairer and Wanner, Boost.Math and XAD.
 URL: https://github.com/traitecoevo/odelia, https://traitecoevo.github.io/odelia/
 BugReports: https://github.com/traitecoevo/odelia/issues
 Config/testthat/edition: 3

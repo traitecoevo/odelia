@@ -1,0 +1,30 @@
+odelia is licensed under the GNU Affero General Public License, version 3 or
+later (LICENSE.md). It carries code adapted from three other sources, each
+under its own licence, whose notices are kept where the code is.
+
+1. Ernst Hairer and Gerhard Wanner's ODE codes (http://www.unige.ch/~hairer/software.html)
+
+   inst/include/odelia/ode_step_rodas.hpp: the RODAS4(3) coefficients and
+   stage formulation, from rodas.f (version of October 28, 1996).
+   inst/include/odelia/ode_step_dopri.hpp: the Dormand-Prince continuous
+   extension, from dopri5.f (version of April 25, 1996).
+
+   Copyright (c) 2004, Ernst Hairer. Two-clause BSD licence
+   (http://www.unige.ch/~hairer/prog/licence.txt), reproduced in full at the
+   end of each file.
+
+2. Boost.Math (https://www.boost.org/)
+
+   inst/include/odelia/root_find.hpp: TOMS748 and bisection, adapted from
+   boost/math/tools/toms748_solve.hpp and boost/math/tools/roots.hpp
+   (Boost 1.90).
+
+   (C) Copyright John Maddock 2006. (C) Copyright Matt Borland 2024. Boost
+   Software License, version 1.0, reproduced in full at the end of the file.
+
+3. XAD (https://github.com/auto-differentiation/xad)
+
+   inst/include/XAD/ and src/Tape.cpp: the automatic-differentiation library.
+
+   Copyright (C) 2010-2025 Xcelerit Computing Ltd. GNU Affero General Public
+   License, version 3 or later (inst/include/XAD/LICENSE.md).
