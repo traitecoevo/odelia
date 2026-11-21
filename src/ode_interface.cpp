@@ -59,15 +59,18 @@ Rcpp::List OdeControl_get_controls(SEXP control_xp) {
   );
 }
 
-// Inf is no limit (the control's 0); otherwise a whole number of at least 1.
+// Inf is no limit (the control's 0); otherwise a whole number of at least 1
+// that a double holds exactly, so the count it becomes is the one given.
 // [[Rcpp::export]]
 void OdeControl_set_max_steps(SEXP control_xp, double max_steps) {
   if (max_steps == R_PosInf) {
     get_OdeControl(control_xp)->max_steps = 0;
     return;
   }
-  if (!(max_steps >= 1) || max_steps != std::floor(max_steps)) {
-    Rcpp::stop("max_steps must be a whole number of at least 1, or Inf for no limit");
+  if (!(max_steps >= 1) || !(max_steps <= 9007199254740992.0) ||
+      max_steps != std::floor(max_steps)) {
+    Rcpp::stop("max_steps must be a whole number of at least 1 and at most "
+               "2^53, or Inf for no limit");
   }
   get_OdeControl(control_xp)->max_steps = static_cast<std::size_t>(max_steps);
 }

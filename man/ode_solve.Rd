@@ -51,7 +51,8 @@ tolerances when `control` is `NULL`.}
 
 \item{max_steps}{Shorthand for the control's `max_steps` when `control` is
 `NULL`: the most steps one interval between two of `times` may take, or
-`Inf` for no limit; see [OdeControl].}
+`Inf` for no limit; see [OdeControl]. Under dense output an interval
+starts where the step that passed the previous time ended.}
 
 \item{autonomous}{`TRUE` if `func` does not depend on `t`.}
 

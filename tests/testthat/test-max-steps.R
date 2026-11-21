@@ -83,3 +83,11 @@ testthat::test_that("a compiled solver honours the cap", {
   runner <- Lorenz_Solver$new(lz$ptr, ctrl$ptr)
   expect_silent(runner$advance_adaptive(c(0, 10)))
 })
+
+testthat::test_that("a count a double cannot hold exactly is refused", {
+  ctrl <- OdeControl$new()
+  expect_error(ctrl$set_max_steps(1e300), "at most 2\\^53")
+  expect_error(ctrl$set_max_steps(2^53 + 2), "at most 2\\^53")
+  ctrl$set_max_steps(2^53)
+  expect_identical(ctrl$get_max_steps(), 2^53)
+})

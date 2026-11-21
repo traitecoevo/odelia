@@ -314,7 +314,8 @@ OdeSolver <- R6::R6Class(
 #'   tolerances when `control` is `NULL`.
 #' @param max_steps Shorthand for the control's `max_steps` when `control` is
 #'   `NULL`: the most steps one interval between two of `times` may take, or
-#'   `Inf` for no limit; see [OdeControl].
+#'   `Inf` for no limit; see [OdeControl]. Under dense output an interval
+#'   starts where the step that passed the previous time ended.
 #' @param autonomous `TRUE` if `func` does not depend on `t`.
 #' @param jac_fd_step,jac_fd_floor The finite-difference Jacobian's relative
 #'   step and small-component floor; see [OdeSolver].

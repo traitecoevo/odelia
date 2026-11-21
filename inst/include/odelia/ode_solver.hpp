@@ -516,6 +516,7 @@ public:
       solver.retract_step(system);
       while (time() < t_event)
       {
+        solver.check_max_steps(taken++, from, time_max);
         step(t_event);
       }
       return t_event;

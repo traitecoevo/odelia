@@ -190,7 +190,7 @@ public:
   // counts its own accepted steps and asks before each one.
   void check_max_steps(size_t taken, double from, double to) const {
     if (control.max_steps > 0 && taken >= control.max_steps) {
-      util::stop("Took " + util::to_string(static_cast<int>(taken)) +
+      util::stop("Took " + util::to_string(taken) +
                  " steps, the most allowed (max_steps), from t = " +
                  util::format_double(from) + " without reaching t = " +
                  util::format_double(to) + "; at t = " +
