@@ -330,32 +330,29 @@ inline Rcpp::List Solver_loss_and_gradient_impl(
   }
 
   // Each observed row's term, summed where two observations share a row.
-  std::map<std::size_t, std::vector<double>> adjoints;
+  std::map<std::size_t, ode::adjoint_batch> adjoints;
   double loss = 0.0;
   for (std::size_t i = 0; i < observed.size(); ++i) {
     const std::size_t row = observed[i];
-    std::vector<double>& adjoint = adjoints[row];
-    adjoint.resize(n, 0.0);
+    auto found = adjoints.find(row);
+    if (found == adjoints.end()) {
+      found = adjoints.emplace(row, ode::adjoint_batch(1, n)).first;
+    }
     for (std::size_t j = 0; j < n; ++j) {
       const double diff = rec[row].state[j] - target(i, j);
       loss += diff * diff;
-      adjoint[j] += 2.0 * diff;
+      found->second[0][j] += 2.0 * diff;
     }
   }
-
-  ode::adjoint_batch lambda(1, n);
+  std::vector<std::size_t> at_rows;
+  std::vector<ode::adjoint_batch> at;
+  for (const auto& [row, adjoint] : adjoints) {
+    at_rows.push_back(row);
+    at.push_back(adjoint);
+  }
+  ode::adjoint_batch lambda;
   ode::adjoint_batch parameter_adjoint(1, n_par);
-  auto it = adjoints.rbegin();
-  std::size_t hi = it->first;
-  for (std::size_t j = 0; j < n; ++j) lambda[0][j] = it->second[j];
-  for (++it; it != adjoints.rend(); ++it) {
-    replay.sweep_adjoint(lambda, parameter_adjoint, it->first, hi);
-    for (std::size_t j = 0; j < n; ++j) lambda[0][j] += it->second[j];
-    hi = it->first;
-  }
-  if (hi > 0) {
-    replay.sweep_adjoint(lambda, parameter_adjoint, 0, hi);
-  }
+  replay.sweep_adjoint_at(at_rows, at, lambda, parameter_adjoint);
 
   std::vector<double> gradient;
   if (params.isNotNull()) {

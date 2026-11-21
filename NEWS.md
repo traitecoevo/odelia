@@ -1,3 +1,9 @@
+## odelia 0.12.3
+
+**One sweep over several output times, as a method.** `Solver::sweep_adjoint_at(rows, at, lambda, parameter_adjoint)` takes one adjoint batch per recorded row, the rows ascending, and runs the interval-by-interval sweep that a loss over a time series needs: seeded at the last row, adding each row's adjoint on the way down, to row 0. `Solver::rows_at(times)` finds the recorded row of each output time, which a run that was given those times landed a step on. `Solver_loss_and_gradient_impl` and both articles call them in place of a loop each wrote out. A standalone test checks the method is that loop bit for bit and agrees with the forward pass summed over the same rows, and across an insertion that shares a time with an output time; and that a time no row holds, a repeated time, rows out of order and a row's adjoint of another width are refused. `rows_at` names the step's row where an insertion shares its time, since a sweep cannot start from an insertion's.
+
+A **patch** bump: additions only; no number moves.
+
 ## odelia 0.12.2
 
 **A cap on the steps an interval may take.** `OdeControl::max_steps` (`OdeControl$set_max_steps()`, `ode_solve(max_steps = )`) is the most accepted steps one interval of an adaptive advance may take: an interval between two requested times, under `advance_adaptive()` and the dense output of `advance_collect()`, or one event search under `advance_until()`. A solve that reaches it fails with an error naming the count, the interval and where it had got to. `step_size_min` is a floor an inaccurate step is accepted at, not a cap, so this is what bounds the cost of a problem too stiff for an explicit stepper, as `deSolve`'s `maxsteps` and Stan's `max_num_steps` do. Unlimited unless set, so no existing solve moves.
