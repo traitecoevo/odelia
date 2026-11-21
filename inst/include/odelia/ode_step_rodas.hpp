@@ -5,6 +5,9 @@
 // RODAS4(3): a 6-stage, L-stable, stiffly-accurate Rosenbrock method of order 4
 // with an embedded 3rd-order error estimate (Hairer & Wanner, Solving ODEs II,
 // section IV.7; reference implementation `rodas.f`, coefficient set METH=1).
+// The coefficients below are rodas.f's (its ROCOE, METH=1), and the stage
+// formulation against W follows rodas.f. Hairer's code is under a BSD
+// licence, reproduced at the end of this file.
 //
 // A Rosenbrock (linearly-implicit) method: each stage is one RHS evaluation plus
 // one linear solve against a single matrix W = (1/(h*gamma)) I - J, factorized
@@ -250,3 +253,32 @@ private:
 } // namespace odelia
 
 #endif
+
+// The RODAS coefficients and stage formulation in this file are taken from
+// rodas.f (E. Hairer and G. Wanner, version of October 28, 1996), which is
+// distributed under this licence (http://www.unige.ch/~hairer/prog/licence.txt):
+//
+//   Copyright (c) 2004, Ernst Hairer
+//
+//   Redistribution and use in source and binary forms, with or without
+//   modification, are permitted provided that the following conditions are
+//   met:
+//
+//   - Redistributions of source code must retain the above copyright
+//   notice, this list of conditions and the following disclaimer.
+//
+//   - Redistributions in binary form must reproduce the above copyright
+//   notice, this list of conditions and the following disclaimer in the
+//   documentation and/or other materials provided with the distribution.
+//
+//   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+//   IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+//   TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+//   PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR
+//   CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+//   EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+//   PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+//   PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+//   LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+//   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+//   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

@@ -1,3 +1,9 @@
+## odelia 0.12.5
+
+**The code adapted from other projects carries their licences, and `inst/COPYRIGHTS` lists it.** The RODAS4(3) stepper's coefficients and stage formulation come from Hairer and Wanner's `rodas.f`, and the Dormand-Prince stepper's dense output from their `dopri5.f`. Both are under Ernst Hairer's two-clause BSD licence, which asks that source redistributions keep its notice. odelia cited both codes but did not carry the notice. It is now reproduced at the end of `ode_step_rodas.hpp` and `ode_step_dopri.hpp`, as Boost's already is in `root_find.hpp`. `inst/COPYRIGHTS` lists the three sources (Hairer and Wanner, Boost.Math, XAD), with the files each reaches and its licence. DESCRIPTION's new `Copyright:` field points to that file; the authors list is unchanged. All three licences are compatible with odelia's AGPL.
+
+A **patch** bump: comments and package metadata only; no number moves.
+
 ## odelia 0.12.4
 
 **A reverse sweep allocates nothing per step.** The buffers a step's recording is taken through (the registered state, the outputs, the start state, the stage rates and the stage state) are held on the active System a sweep already keeps across its recordings, and released with its own values before each clear, so after the first step a sweep under either explicit stepper allocates nothing. Under an allocator that hands every freed block back to the operating system, as CmdStan's TBB proxy does, a sweep that allocated per step spent most of its time there. A new standalone probe, `sweep_alloc`, counts every allocation through `operator new` and requires a sweep over a whole Lorenz run to make no more than one over half of it. The gradients are bit-identical to before. A step that substeps a System's subsystem still allocates inside the substeps.
