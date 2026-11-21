@@ -185,6 +185,18 @@ public:
   // construction. A diagnostic: with the system's own count of right-hand-side
   // evaluations it says what a solve cost and why.
   size_t get_n_rejections() const { return n_rejections; }
+  // Refuse the next step of an interval that has already taken the most the
+  // control allows (OdeControl::max_steps). Each loop that owns an interval
+  // counts its own accepted steps and asks before each one.
+  void check_max_steps(size_t taken, double from, double to) const {
+    if (control.max_steps > 0 && taken >= control.max_steps) {
+      util::stop("Took " + util::to_string(taken) +
+                 " steps, the most allowed (max_steps), from t = " +
+                 util::format_double(from) + " without reaching t = " +
+                 util::format_double(to) + "; at t = " +
+                 util::format_double(time));
+    }
+  }
   // True while an attempt is in progress, and therefore afterwards if one was
   // abandoned by an exception that escaped step(): y and the system then hold
   // a half-finished attempt and must be reset (reset()) before stepping
@@ -587,7 +599,9 @@ template <class System>
 void SolverInternal<System>::advance_adaptive(System &system, double time_max_)
 {
   set_time_max(time_max_);
-  while (time < time_max) {
+  const double from = time;
+  for (size_t taken = 0; time < time_max; ++taken) {
+    check_max_steps(taken, from, time_max);
     step(system);
   }
 }

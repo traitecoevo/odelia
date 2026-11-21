@@ -24,6 +24,8 @@
 \alias{OdeControl_get_controller}
 \alias{OdeControl_set_stabilisation}
 \alias{OdeControl_get_stabilisation}
+\alias{OdeControl_set_max_steps}
+\alias{OdeControl_get_max_steps}
 \title{Low-level Drivers and OdeControl wrappers}
 \description{
 Low-level exported wrappers around native C++ interfaces for driver

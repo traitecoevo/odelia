@@ -30,6 +30,8 @@ R6 wrapper for ODE solver control settings
     \item \href{#method-OdeControl-set_stabilisation}{\code{OdeControl$set_stabilisation()}}
     \item \href{#method-OdeControl-get_stabilisation}{\code{OdeControl$get_stabilisation()}}
     \item \href{#method-OdeControl-set_step_size_initial}{\code{OdeControl$set_step_size_initial()}}
+    \item \href{#method-OdeControl-set_max_steps}{\code{OdeControl$set_max_steps()}}
+    \item \href{#method-OdeControl-get_max_steps}{\code{OdeControl$get_max_steps()}}
     \item \href{#method-OdeControl-clone}{\code{OdeControl$clone()}}
   }
 }
@@ -292,6 +294,43 @@ is large and the error sits in a few components.}
     \describe{
       \item{\code{step_size_initial}}{Initial step size.}
     }
+    \if{html}{\out{</div>}}
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-OdeControl-set_max_steps"></a>}}
+\if{latex}{\out{\hypertarget{method-OdeControl-set_max_steps}{}}}
+\subsection{\code{OdeControl$set_max_steps()}}{
+  Set the most steps an interval may take, or `Inf`.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{OdeControl$set_max_steps(max_steps)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{max_steps}}{The most accepted steps one interval of an adaptive
+advance may take (an interval between two requested times, or one event
+search), or `Inf`, the default, for no limit. A step the tolerance would
+shrink below `step_size_min` is taken at the floor and accepted, so a
+problem too stiff for an explicit stepper crawls rather than failing;
+this bounds its cost, and the error names the count and where the solve
+had reached.}
+    }
+    \if{html}{\out{</div>}}
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-OdeControl-get_max_steps"></a>}}
+\if{latex}{\out{\hypertarget{method-OdeControl-get_max_steps}{}}}
+\subsection{\code{OdeControl$get_max_steps()}}{
+  The most steps an interval may take; `Inf` for no limit.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{OdeControl$get_max_steps()}
     \if{html}{\out{</div>}}
   }
 }

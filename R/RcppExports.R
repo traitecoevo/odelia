@@ -125,6 +125,14 @@ OdeControl_get_controls <- function(control_xp) {
     .Call(`_odelia_OdeControl_get_controls`, control_xp)
 }
 
+OdeControl_set_max_steps <- function(control_xp, max_steps) {
+    invisible(.Call(`_odelia_OdeControl_set_max_steps`, control_xp, max_steps))
+}
+
+OdeControl_get_max_steps <- function(control_xp) {
+    .Call(`_odelia_OdeControl_get_max_steps`, control_xp)
+}
+
 OdeControl_set_controls <- function(control_xp, tol_abs, tol_rel, a_y, a_dydt, step_size_min, step_size_max, step_size_initial) {
     invisible(.Call(`_odelia_OdeControl_set_controls`, control_xp, tol_abs, tol_rel, a_y, a_dydt, step_size_min, step_size_max, step_size_initial))
 }
