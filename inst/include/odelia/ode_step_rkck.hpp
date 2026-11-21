@@ -383,9 +383,13 @@ void Step<System>::step_adjoint(adjoint_system<System>& active,
   auto whole_step = [&](auto& sys,
                         typename std::vector<scalar>::const_iterator x,
                         std::vector<scalar>& y_end) -> void {
-    const std::vector<scalar> y0(x, x + static_cast<std::ptrdiff_t>(size));
-    std::vector<std::vector<scalar>> rate(6, std::vector<scalar>(size));
-    std::vector<scalar> stage(size);
+    std::vector<scalar>& y0 = active.stage_start;
+    y0.assign(x, x + static_cast<std::ptrdiff_t>(size));
+    std::vector<std::vector<scalar>>& rate = active.stage_rates;
+    rate.resize(6);
+    for (std::vector<scalar>& r : rate) r.assign(size, scalar(0.0));
+    std::vector<scalar>& stage = active.stage;
+    stage.assign(size, scalar(0.0));
     // k1 is re-derived at this step's own start state, as `k1` says the run took
     // it. A row is what a replay's k1 stood in, so dropping it re-solves what the
     // replay was told; and a row loaded where the run took none is a choice the

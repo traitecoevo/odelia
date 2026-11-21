@@ -301,7 +301,7 @@ struct adjoint_system {
       return;
     }
     tape_scope<adjoint_tape<double>> holding{*tape_};
-    system.for_each_active([](scalar& x) { release_slot(x); });
+    release_held();
   }
 
   // The parameter addresses point into `system`, so a copy would hand its own
@@ -323,7 +323,7 @@ struct adjoint_system {
   // returns the count to zero, every recording registers this System's values,
   // and the temporaries a recording makes are gone by the time it ends.
   void release() {
-    system.for_each_active([](scalar& x) { release_slot(x); });
+    release_held();
     const std::size_t still = tape_->getNumVariables();
     if (still != 0) {
       util::stop(
@@ -351,6 +351,27 @@ struct adjoint_system {
 
   system_type system;
   std::vector<scalar*> parameters;
+
+  // The buffers a recording is taken through: the registered inputs and the
+  // outputs, and a step's start state, stage rates and stage state. Held here,
+  // across every recording this System serves, so a step allocates nothing;
+  // what they hold after a recording carries slots like the System's own
+  // values, and is released with them.
+  std::vector<scalar> inputs, outputs;
+  std::vector<scalar> stage_start, stage;
+  std::vector<std::vector<scalar>> stage_rates;
+
+private:
+  void release_held() {
+    system.for_each_active([](scalar& x) { release_slot(x); });
+    for (scalar& x : inputs) release_slot(x);
+    for (scalar& x : outputs) release_slot(x);
+    for (scalar& x : stage_start) release_slot(x);
+    for (scalar& x : stage) release_slot(x);
+    for (std::vector<scalar>& rates : stage_rates) {
+      for (scalar& x : rates) release_slot(x);
+    }
+  }
 };
 
 namespace internal {
@@ -527,14 +548,16 @@ std::size_t state_and_parameter_adjoints(
     // recording's own and arrives as doubles; the parameters live on the System
     // and are registered where they sit. So no value is copied in and no adjoint
     // is split back out by position.
-    std::vector<scalar> state_active(state.begin(), state.end());
+    std::vector<scalar>& state_active = active.inputs;
+    state_active.assign(state.begin(), state.end());
     tape.registerInputs(state_active);
     for (scalar* p : parameters) {
         tape.registerInput(*p);
     }
     tape.newRecording();
 
-    std::vector<scalar> outputs(n_out);
+    std::vector<scalar>& outputs = active.outputs;
+    outputs.assign(n_out, scalar(0.0));
     evaluate(active.system, state_active.begin(), outputs);
     if (outputs.size() != n_out) {
         util::stop("state_and_parameter_adjoints: the map resized the output "

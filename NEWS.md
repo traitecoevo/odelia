@@ -1,3 +1,9 @@
+## odelia 0.12.4
+
+**A reverse sweep allocates nothing per step.** The buffers a step's recording is taken through (the registered state, the outputs, the start state, the stage rates and the stage state) are held on the active System a sweep already keeps across its recordings, and released with its own values before each clear, so after the first step a sweep under either explicit stepper allocates nothing. Under an allocator that hands every freed block back to the operating system, as CmdStan's TBB proxy does, a sweep that allocated per step spent most of its time there. A new standalone probe, `sweep_alloc`, counts every allocation and requires a sweep over a whole Lorenz run to make no more than one over half of it. The gradients are bit-identical to before. A step that substeps a System's subsystem still allocates inside the substeps.
+
+A **patch** bump: no number moves.
+
 ## odelia 0.12.3
 
 **One sweep over several output times, as a method.** `Solver::sweep_adjoint_at(rows, at, lambda, parameter_adjoint)` takes one adjoint batch per recorded row, the rows ascending, and runs the interval-by-interval sweep that a loss over a time series needs: seeded at the last row, adding each row's adjoint on the way down, to row 0. `Solver::rows_at(times)` finds the recorded row of each output time, which a run that was given those times landed a step on. `Solver_loss_and_gradient_impl` and both articles call them in place of a loop each wrote out. A standalone test checks the method is that loop bit for bit and agrees with the forward pass summed over the same rows, and across an insertion that shares a time with an output time; and that a time no row holds, a repeated time, rows out of order and a row's adjoint of another width are refused. `rows_at` names the step's row where an insertion shares its time, since a sweep cannot start from an insertion's.
