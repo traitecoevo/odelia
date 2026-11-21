@@ -231,13 +231,13 @@ costs <- t(vapply(P, forced_costs, numeric(2)))
 data.frame(P = P, reverse = round(costs[, "reverse"], 1),
            forward = round(costs[, "forward"], 1))
 #>    P reverse forward
-#> 1  1    47.2     2.3
-#> 2  2    40.3     2.0
-#> 3  4    27.9     1.8
-#> 4  8    17.7     1.6
-#> 5 16     8.1     2.7
-#> 6 32     4.4     4.8
-#> 7 64     2.6     8.4
+#> 1  1    48.2     2.2
+#> 2  2    42.8     2.2
+#> 3  4    29.5     2.0
+#> 4  8    18.3     1.6
+#> 5 16     8.3     2.8
+#> 6 32     4.5     4.9
+#> 7 64     2.6     8.5
 ```
 
 On a small System the sweep costs several plain solves whatever `P` is.

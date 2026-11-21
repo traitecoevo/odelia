@@ -1,5 +1,23 @@
 # Changelog
 
+## odelia 0.12.4
+
+**A reverse sweep allocates nothing per step.** The buffers a step’s
+recording is taken through (the registered state, the outputs, the start
+state, the stage rates and the stage state) are held on the active
+System a sweep already keeps across its recordings, and released with
+its own values before each clear, so after the first step a sweep under
+either explicit stepper allocates nothing. Under an allocator that hands
+every freed block back to the operating system, as CmdStan’s TBB proxy
+does, a sweep that allocated per step spent most of its time there. A
+new standalone probe, `sweep_alloc`, counts every allocation through
+`operator new` and requires a sweep over a whole Lorenz run to make no
+more than one over half of it. The gradients are bit-identical to
+before. A step that substeps a System’s subsystem still allocates inside
+the substeps.
+
+A **patch** bump: no number moves.
+
 ## odelia 0.12.3
 
 **One sweep over several output times, as a method.**

@@ -19,7 +19,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.4</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -284,13 +284,13 @@ first, to fix the steps, so add one to its numbers.</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>P <span class="op">=</span> <span class="va">P</span>, reverse <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">costs</span><span class="op">[</span>, <span class="st">"reverse"</span><span class="op">]</span>, <span class="fl">1</span><span class="op">)</span>,</span>
 <span>           forward <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">costs</span><span class="op">[</span>, <span class="st">"forward"</span><span class="op">]</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;    P reverse forward</span></span>
-<span><span class="co">#&gt; 1  1    47.2     2.3</span></span>
-<span><span class="co">#&gt; 2  2    40.3     2.0</span></span>
-<span><span class="co">#&gt; 3  4    27.9     1.8</span></span>
-<span><span class="co">#&gt; 4  8    17.7     1.6</span></span>
-<span><span class="co">#&gt; 5 16     8.1     2.7</span></span>
-<span><span class="co">#&gt; 6 32     4.4     4.8</span></span>
-<span><span class="co">#&gt; 7 64     2.6     8.4</span></span></code></pre></div>
+<span><span class="co">#&gt; 1  1    48.2     2.2</span></span>
+<span><span class="co">#&gt; 2  2    42.8     2.2</span></span>
+<span><span class="co">#&gt; 3  4    29.5     2.0</span></span>
+<span><span class="co">#&gt; 4  8    18.3     1.6</span></span>
+<span><span class="co">#&gt; 5 16     8.3     2.8</span></span>
+<span><span class="co">#&gt; 6 32     4.5     4.9</span></span>
+<span><span class="co">#&gt; 7 64     2.6     8.5</span></span></code></pre></div>
 <p>On a small System the sweep costs several plain solves whatever
 <code>P</code> is. Forward mode starts near one, grows with
 <code>P</code>, and passes the sweep at a few tens of parameters. A
