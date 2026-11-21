@@ -75,4 +75,6 @@ prefer the R6 classes above.
   [`OdeControl_get_controller`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
   [`OdeControl_set_stabilisation`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
   [`OdeControl_get_stabilisation`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
+  [`OdeControl_set_max_steps`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
+  [`OdeControl_get_max_steps`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
   : Low-level Drivers and OdeControl wrappers

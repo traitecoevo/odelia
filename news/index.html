@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -40,6 +40,11 @@
       <small>Source: <a href="https://github.com/traitecoevo/odelia/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.12.2" id="odelia-0122">odelia 0.12.2<a class="anchor" aria-label="anchor" href="#odelia-0122"></a></h2>
+<p><strong>A cap on the steps an interval may take.</strong> <code>OdeControl::max_steps</code> (<code>OdeControl$set_max_steps()</code>, <code>ode_solve(max_steps = )</code>) is the most accepted steps one interval of an adaptive advance may take: an interval between two requested times, under <code>advance_adaptive()</code> and the dense output of <code>advance_collect()</code>, or one event search under <code>advance_until()</code>. A solve that reaches it fails with an error naming the count, the interval and where it had got to. <code>step_size_min</code> is a floor an inaccurate step is accepted at, not a cap, so this is what bounds the cost of a problem too stiff for an explicit stepper, as <code>deSolve</code>’s <code>maxsteps</code> and Stan’s <code>max_num_steps</code> do. Unlimited unless set, so no existing solve moves.</p>
+<p>A <strong>patch</strong> bump: an addition with an inert default; no number moves.</p>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.12.1" id="odelia-0121">odelia 0.12.1<a class="anchor" aria-label="anchor" href="#odelia-0121"></a></h2>
 <p><strong>Documentation for a user outside the plant family.</strong> A one-file example, <code>inst/examples/consumer_resource/consumer_resource.cpp</code>, is a consumer-resource System with a solve and forward-mode sensitivities as its exports, built with <code><a href="https://rdrr.io/pkg/Rcpp/man/sourceCpp.html" class="external-link">Rcpp::sourceCpp()</a></code> as the README’s new “Your own model in one file” shows; a test compiles it and checks it against the same model as an R function. The reverse-mode article gains “Several output times, one sweep”: the interval-by-interval loop that seeds one adjoint per output time, checked against the forward pass, and what landing a step on every output time costs. The getting-started vignette says what bounds a solve (no step count, and <code>step_size_min</code> is a floor an inaccurate step is accepted at, not a cap; only an invalid step fails there), compares RODAS with <code><a href="https://rdrr.io/pkg/deSolve/man/lsoda.html" class="external-link">deSolve::lsoda</a></code> on Van der Pol, and traces an equilibrium across a parameter with <code><a href="../reference/ode_steady_state.html">ode_steady_state()</a></code>, continuing from the last solution with <code>warmup</code> as the fallback and reading the response curve’s slope from <code>sensitivity</code>. The speed claims in the README and the vignette now say what they compare against: a hundred times is against an explicit stepper on a non-stiff problem; against <code>lsoda</code> on a stiff one the gain is nearer fifteen times.</p>

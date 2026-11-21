@@ -121,25 +121,39 @@ ctrl$get_controls()
 #> 
 #> $step_size_initial
 #> [1] 1e-06
+#> 
+#> $max_steps
+#> [1] Inf
 
 # Tighten tolerances for a more accurate (but slower) solve
 ctrl$set_tol_abs(1e-8)
 ctrl$set_tol_rel(1e-8)
 ```
 
-There is no limit on the number of steps a solve may take, and
-`step_size_min` is not one either: a step the tolerance would shrink
-below it is taken at the floor and accepted, inaccurate, with no error.
-What stops a solve at the floor is a step that is invalid rather than
-inaccurate. A non-finite error estimate fails with “Cannot achieve the
-desired accuracy”, and a state the system refuses
+`step_size_min` is a floor, not a cap on cost: a step the tolerance
+would shrink below it is taken at the floor and accepted, inaccurate,
+with no error. What stops a solve at the floor is a step that is invalid
+rather than inaccurate. A non-finite error estimate fails with “Cannot
+achieve the desired accuracy”, and a state the system refuses
 ([`domain_error()`](https://traitecoevo.github.io/odelia/reference/domain_error.md)
 from an R right-hand side, or a C++ system’s `ode_state_valid()`) fails
 naming the time and the reason. An explicit stepper on a stiff problem
 holds its step near 3/λ for the fastest rate λ whatever the tolerance,
-so a problem too stiff for it crawls rather than failing: watch
-[`ode_counts()`](https://traitecoevo.github.io/odelia/reference/ode_counts.md),
-and switch to `"rodas"` (below).
+so a problem too stiff for it crawls rather than failing. The cap on
+that is `max_steps`, the most steps one interval between two requested
+times may take, unlimited unless set; a solve that reaches it fails
+naming the count and where it had got to, which in a fit turns a
+proposal the stepper cannot handle into a quick rejection. For the
+problems that hit it, switch to `"rodas"` (below).
+
+``` r
+
+ctrl$set_max_steps(100)
+Lorenz_Solver$new(lz$ptr, ctrl$ptr)$advance_adaptive(c(0, 100))
+#> Error:
+#> ! Took 100 steps, the most allowed (max_steps), from t = 0 without reaching t = 100; at t = 0.786535
+ctrl$set_max_steps(Inf)
+```
 
 ## Choosing an integration method
 

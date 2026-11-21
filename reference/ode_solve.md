@@ -22,6 +22,7 @@ ode_solve(
   rtol = 1e-06,
   atol = 1e-06,
   controller = "hairer",
+  max_steps = Inf,
   autonomous = FALSE,
   jac_fd_step = 1e-06,
   jac_fd_floor = 1e-05,
@@ -62,8 +63,8 @@ ode_solve(
   An \[OdeControl\], or \`NULL\` for the defaults with the tolerances
   below, the \`controller\` below, and the largest step set to the span
   of \`times\` (an \[OdeControl\] made directly caps the step at 10).
-  With a \`control\` given, \`rtol\`, \`atol\` and \`controller\` are
-  ignored.
+  With a \`control\` given, \`rtol\`, \`atol\`, \`controller\` and
+  \`max_steps\` are ignored.
 
 - rtol, atol:
 
@@ -74,6 +75,13 @@ ode_solve(
 
   The step-size rule when \`control\` is \`NULL\`: \`"hairer"\` (the
   default) or \`"gsl"\`; see \[OdeControl\].
+
+- max_steps:
+
+  Shorthand for the control's \`max_steps\` when \`control\` is
+  \`NULL\`: the most steps one interval between two of \`times\` may
+  take, or \`Inf\` for no limit; see \[OdeControl\]. Under dense output
+  an interval starts where the step that passed the previous time ended.
 
 - autonomous:
 

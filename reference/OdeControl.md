@@ -40,6 +40,10 @@ R6 wrapper for ODE solver control settings
 
 - [`OdeControl$set_step_size_initial()`](#method-OdeControl-set_step_size_initial)
 
+- [`OdeControl$set_max_steps()`](#method-OdeControl-set_max_steps)
+
+- [`OdeControl$get_max_steps()`](#method-OdeControl-get_max_steps)
+
 - [`OdeControl$clone()`](#method-OdeControl-clone)
 
 ------------------------------------------------------------------------
@@ -284,6 +288,38 @@ Set initial step size.
 - `step_size_initial`:
 
   Initial step size.
+
+------------------------------------------------------------------------
+
+### `OdeControl$set_max_steps()`
+
+Set the most steps an interval may take, or \`Inf\`.
+
+#### Usage
+
+    OdeControl$set_max_steps(max_steps)
+
+#### Arguments
+
+- `max_steps`:
+
+  The most accepted steps one interval of an adaptive advance may take
+  (an interval between two requested times, or one event search), or
+  \`Inf\`, the default, for no limit. A step the tolerance would shrink
+  below \`step_size_min\` is taken at the floor and accepted, so a
+  problem too stiff for an explicit stepper crawls rather than failing;
+  this bounds its cost, and the error names the count and where the
+  solve had reached.
+
+------------------------------------------------------------------------
+
+### `OdeControl$get_max_steps()`
+
+The most steps an interval may take; \`Inf\` for no limit.
+
+#### Usage
+
+    OdeControl$get_max_steps()
 
 ------------------------------------------------------------------------
 

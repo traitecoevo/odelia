@@ -19,7 +19,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -181,22 +181,34 @@ or tighten them:</p>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $step_size_initial</span></span>
 <span><span class="co">#&gt; [1] 1e-06</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $max_steps</span></span>
+<span><span class="co">#&gt; [1] Inf</span></span>
 <span></span>
 <span><span class="co"># Tighten tolerances for a more accurate (but slower) solve</span></span>
 <span><span class="va">ctrl</span><span class="op">$</span><span class="fu">set_tol_abs</span><span class="op">(</span><span class="fl">1e-8</span><span class="op">)</span></span>
 <span><span class="va">ctrl</span><span class="op">$</span><span class="fu">set_tol_rel</span><span class="op">(</span><span class="fl">1e-8</span><span class="op">)</span></span></code></pre></div>
-<p>There is no limit on the number of steps a solve may take, and
-<code>step_size_min</code> is not one either: a step the tolerance would
-shrink below it is taken at the floor and accepted, inaccurate, with no
-error. What stops a solve at the floor is a step that is invalid rather
-than inaccurate. A non-finite error estimate fails with “Cannot achieve
-the desired accuracy”, and a state the system refuses
-(<code><a href="../reference/domain_error.html">domain_error()</a></code> from an R right-hand side, or a C++
+<p><code>step_size_min</code> is a floor, not a cap on cost: a step the
+tolerance would shrink below it is taken at the floor and accepted,
+inaccurate, with no error. What stops a solve at the floor is a step
+that is invalid rather than inaccurate. A non-finite error estimate
+fails with “Cannot achieve the desired accuracy”, and a state the system
+refuses (<code><a href="../reference/domain_error.html">domain_error()</a></code> from an R right-hand side, or a C++
 system’s <code>ode_state_valid()</code>) fails naming the time and the
 reason. An explicit stepper on a stiff problem holds its step near 3/λ
 for the fastest rate λ whatever the tolerance, so a problem too stiff
-for it crawls rather than failing: watch <code><a href="../reference/ode_counts.html">ode_counts()</a></code>, and
-switch to <code>"rodas"</code> (below).</p>
+for it crawls rather than failing. The cap on that is
+<code>max_steps</code>, the most steps one interval between two
+requested times may take, unlimited unless set; a solve that reaches it
+fails naming the count and where it had got to, which in a fit turns a
+proposal the stepper cannot handle into a quick rejection. For the
+problems that hit it, switch to <code>"rodas"</code> (below).</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">ctrl</span><span class="op">$</span><span class="fu">set_max_steps</span><span class="op">(</span><span class="fl">100</span><span class="op">)</span></span>
+<span><span class="va"><a href="../reference/Lorenz_Solver.html">Lorenz_Solver</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="va">lz</span><span class="op">$</span><span class="va">ptr</span>, <span class="va">ctrl</span><span class="op">$</span><span class="va">ptr</span><span class="op">)</span><span class="op">$</span><span class="fu">advance_adaptive</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">100</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;">:</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> Took 100 steps, the most allowed (max_steps), from t = 0 without reaching t = 100; at t = 0.786535</span></span>
+<span><span class="va">ctrl</span><span class="op">$</span><span class="fu">set_max_steps</span><span class="op">(</span><span class="cn">Inf</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="choosing-an-integration-method">Choosing an integration method<a class="anchor" aria-label="anchor" href="#choosing-an-integration-method"></a>
@@ -223,7 +235,7 @@ size is limited by accuracy rather than stability. On a stiff problem
 the explicit method is forced into tiny steps (or fails), while RODAS
 keeps large steps.</li>
 </ul>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">runner_stiff</span> <span class="op">&lt;-</span> <span class="va"><a href="../reference/Lorenz_Solver.html">Lorenz_Solver</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="va">lz</span><span class="op">$</span><span class="va">ptr</span>, <span class="va">ctrl</span><span class="op">$</span><span class="va">ptr</span>, method <span class="op">=</span> <span class="st">"rodas"</span><span class="op">)</span></span></code></pre></div>
 <p>All three share the same adaptive step-size controller and
 <code>OdeControl</code> tolerances, so you can switch between them
@@ -255,7 +267,7 @@ right-hand side written in R. There is nothing to compile:
 <code><a href="../reference/ode_solve.html">ode_solve()</a></code> is shaped like <code><a href="https://rdrr.io/pkg/deSolve/man/ode.html" class="external-link">deSolve::ode()</a></code>, so
 a function written for deSolve runs unchanged, and returns a matrix with
 a <code>time</code> column and one column per state variable.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">lorenz_r</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">y</span>, <span class="va">p</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">p</span><span class="op">[[</span><span class="st">"sigma"</span><span class="op">]</span><span class="op">]</span> <span class="op">*</span> <span class="op">(</span><span class="va">y</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span> <span class="op">-</span> <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span>,</span>
 <span>         <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span> <span class="op">*</span> <span class="op">(</span><span class="va">p</span><span class="op">[[</span><span class="st">"R"</span><span class="op">]</span><span class="op">]</span> <span class="op">-</span> <span class="va">y</span><span class="op">[</span><span class="fl">3</span><span class="op">]</span><span class="op">)</span> <span class="op">-</span> <span class="va">y</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span>,</span>
@@ -289,7 +301,7 @@ it out and it is formed by forward differences at <code>n</code> extra
 evaluations per step. <code><a href="../reference/ode_counts.html">ode_counts()</a></code> says what the solve
 cost, which for a right-hand side that is itself expensive is the only
 number that matters:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">lorenz_jac</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">y</span>, <span class="va">p</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">-</span><span class="va">p</span><span class="op">[[</span><span class="st">"sigma"</span><span class="op">]</span><span class="op">]</span>, <span class="va">p</span><span class="op">[[</span><span class="st">"R"</span><span class="op">]</span><span class="op">]</span> <span class="op">-</span> <span class="va">y</span><span class="op">[</span><span class="fl">3</span><span class="op">]</span>, <span class="va">y</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span>,</span>
 <span>           <span class="va">p</span><span class="op">[[</span><span class="st">"sigma"</span><span class="op">]</span><span class="op">]</span>, <span class="op">-</span><span class="fl">1</span>, <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span>,</span>
@@ -305,7 +317,7 @@ number that matters:</p>
 Pol with a small <code>eps</code> forces the explicit stepper into
 thousands of tiny steps for stability while RODAS stays
 accuracy-limited:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">vdp</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">y</span>, <span class="va">eps</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">y</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span>, <span class="op">(</span><span class="op">(</span><span class="fl">1</span> <span class="op">-</span> <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span> <span class="op">*</span> <span class="va">y</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span> <span class="op">-</span> <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span> <span class="op">/</span> <span class="va">eps</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
@@ -320,7 +332,7 @@ accuracy-limited:</p>
 problem. It detects the stiffness and switches to a multistep method,
 which takes about as many steps as RODAS but forms a Jacobian only when
 the last one stops working, where RODAS forms one every step:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">stiff_lsoda</span> <span class="op">&lt;-</span> <span class="fu">deSolve</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/deSolve/man/lsoda.html" class="external-link">lsoda</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">0</span><span class="op">)</span>, <span class="va">times</span>, <span class="va">vdp</span>, parms <span class="op">=</span> <span class="fl">1e-4</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>steps <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">stiff_lsoda</span>, <span class="st">"istate"</span><span class="op">)</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span>, n_rhs <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">stiff_lsoda</span>, <span class="st">"istate"</span><span class="op">)</span><span class="op">[</span><span class="fl">3</span><span class="op">]</span>,</span>
 <span>  n_jac <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">stiff_lsoda</span>, <span class="st">"istate"</span><span class="op">)</span><span class="op">[</span><span class="fl">14</span><span class="op">]</span><span class="op">)</span></span>
@@ -337,7 +349,7 @@ step. The right-hand side here is <code>rhs(t, y)</code> returning the
 rates directly, and a callback that finds its state impossible calls
 <code><a href="../reference/domain_error.html">domain_error()</a></code> to have the step rejected and retried
 smaller rather than committed:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">logistic</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">y</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span> <span class="op">&lt;</span> <span class="fl">0</span> <span class="op">||</span> <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span> <span class="op">&gt;</span> <span class="fl">1</span><span class="op">)</span> <span class="fu"><a href="../reference/domain_error.html">domain_error</a></span><span class="op">(</span><span class="st">"y has left [0, 1]"</span><span class="op">)</span></span>
 <span>  <span class="fl">50</span> <span class="op">*</span> <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1</span> <span class="op">-</span> <span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span></span>
@@ -388,7 +400,7 @@ function theorem, with no integration through the transient. A consumer
 <code>N</code> taking up a resource <code>R</code> with a saturating
 response, under a harvest rate <code>m</code> (Rosenzweig and
 MacArthur’s model):</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cr</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">y</span>, <span class="va">p</span><span class="op">)</span> <span class="op">{</span>           <span class="co"># y = (N, R)</span></span>
 <span>  <span class="va">uptake</span> <span class="op">&lt;-</span> <span class="va">p</span><span class="op">[[</span><span class="st">"a"</span><span class="op">]</span><span class="op">]</span> <span class="op">*</span> <span class="va">y</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span> <span class="op">/</span> <span class="op">(</span><span class="va">p</span><span class="op">[[</span><span class="st">"h"</span><span class="op">]</span><span class="op">]</span> <span class="op">+</span> <span class="va">y</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">y</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span> <span class="op">*</span> <span class="op">(</span><span class="va">uptake</span> <span class="op">-</span> <span class="va">p</span><span class="op">[[</span><span class="st">"m"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span>,</span>
@@ -402,7 +414,7 @@ a repelling root or does not converge. <code>sensitivity = "m"</code> is
 the slope of the response curve, <code>dy*/dm</code>, read off the
 equilibrium directly rather than by differencing neighbouring
 solves:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">y</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>N <span class="op">=</span> <span class="fl">0.5</span>, R <span class="op">=</span> <span class="fl">0.5</span><span class="op">)</span></span>
 <span><span class="va">curve</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>, <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0.35</span>, <span class="fl">0.65</span>, by <span class="op">=</span> <span class="fl">0.05</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">m</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">p</span><span class="op">[[</span><span class="st">"m"</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">m</span></span>
@@ -425,7 +437,7 @@ solves:</p>
 the column: the slope from <code>sensitivity</code> agrees with the
 slope of the closed form to the accuracy of the finite difference it
 takes in <code>m</code>.</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">N_star</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">m</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">R</span> <span class="op">&lt;-</span> <span class="va">p</span><span class="op">[[</span><span class="st">"h"</span><span class="op">]</span><span class="op">]</span> <span class="op">*</span> <span class="va">m</span> <span class="op">/</span> <span class="op">(</span><span class="va">p</span><span class="op">[[</span><span class="st">"a"</span><span class="op">]</span><span class="op">]</span> <span class="op">-</span> <span class="va">m</span><span class="op">)</span></span>
 <span>  <span class="va">p</span><span class="op">[[</span><span class="st">"r"</span><span class="op">]</span><span class="op">]</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1</span> <span class="op">-</span> <span class="va">R</span> <span class="op">/</span> <span class="va">p</span><span class="op">[[</span><span class="st">"K"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span> <span class="op">*</span> <span class="op">(</span><span class="va">p</span><span class="op">[[</span><span class="st">"h"</span><span class="op">]</span><span class="op">]</span> <span class="op">+</span> <span class="va">R</span><span class="op">)</span> <span class="op">/</span> <span class="op">(</span><span class="va">p</span><span class="op">[[</span><span class="st">"a"</span><span class="op">]</span><span class="op">]</span> <span class="op">*</span> <span class="va">p</span><span class="op">[[</span><span class="st">"q"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span>

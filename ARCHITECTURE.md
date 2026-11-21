@@ -29,7 +29,7 @@ those above it.
 | `adjoint_scalar.hpp` | `adjoint_scalar<T>` and `adjoint_tape<T>`, the reverse-mode scalar and its tape; `visit_active` and `count_active_slots`, the walk over the active values a class holds |
 | `with_slope.hpp` | `with_slope<T>`, a value paired with its slope; no includes |
 | `spline.hpp` → `interpolator.hpp` → `drivers.hpp` | cubic Hermite backend, `hermite_interpolator`, `Drivers` (time-varying forcing) |
-| `ode_control.hpp` | `OdeControl`: tolerances, step bounds, the `gsl` / `hairer` controller |
+| `ode_control.hpp` | `OdeControl`: tolerances, step bounds, the most steps an interval may take, the `gsl` / `hairer` controller |
 | `ode_interface.hpp` | the System concepts (`HasOdeTime`, `Rebindable`, `SolvesForValues`, `ChecksState`, `Sweepable`, `TangentSweepable`, `HasSubsystem`, `ScalesTolerances`), `schedule_row`, `step_record`, `be_at_step`, `apply_insertion` |
 | `adjoint.hpp` | `adjoint_batch`, `adjoint_system`, `vector_jacobian_product`, `state_and_parameter_adjoints`: the transpose of one map |
 | `implicit_node.hpp` | `supply_derivatives`, `implicit_value`: a value on the tape carrying rows obtained elsewhere; includes no solver header |

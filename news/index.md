@@ -1,5 +1,21 @@
 # Changelog
 
+## odelia 0.12.2
+
+**A cap on the steps an interval may take.** `OdeControl::max_steps`
+(`OdeControl$set_max_steps()`, `ode_solve(max_steps = )`) is the most
+accepted steps one interval of an adaptive advance may take: an interval
+between two requested times, under `advance_adaptive()` and the dense
+output of `advance_collect()`, or one event search under
+`advance_until()`. A solve that reaches it fails with an error naming
+the count, the interval and where it had got to. `step_size_min` is a
+floor an inaccurate step is accepted at, not a cap, so this is what
+bounds the cost of a problem too stiff for an explicit stepper, as
+`deSolve`’s `maxsteps` and Stan’s `max_num_steps` do. Unlimited unless
+set, so no existing solve moves.
+
+A **patch** bump: an addition with an inert default; no number moves.
+
 ## odelia 0.12.1
 
 **Documentation for a user outside the plant family.** A one-file
