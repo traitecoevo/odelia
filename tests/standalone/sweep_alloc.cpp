@@ -15,7 +15,9 @@
 #include <string>
 #include <vector>
 
-// Every allocation in this program is counted.
+// Every allocation through operator new is counted. XAD's tape storage goes
+// around it (AllocHelper::aligned_alloc), and keeps its chunks across a clear,
+// so a tape that regrew every step would not show here.
 static std::size_t allocations = 0;
 
 void* operator new(std::size_t n) {
@@ -62,17 +64,16 @@ void test_a_sweep_allocates_nothing_per_step(Method m) {
   const std::size_t last = s.recording().size() - 1;
   check(last > 200, "the run took more than 200 steps");
 
-  // Twice over the whole run, so the first sweep's one-off growth is paid
-  // before anything is counted.
-  sweep_allocations(s, 0, last);
+  // Each sweep builds its own tape and active System, a fixed cost; comparing
+  // two lengths cancels it and leaves what a step adds.
   const std::size_t whole = sweep_allocations(s, 0, last);
   const std::size_t half = sweep_allocations(s, last / 2, last);
   const std::size_t steps_apart = last - last / 2;
   std::printf("       (%zu steps: %zu allocations; %zu steps: %zu)\n", last,
-              whole, last - last / 2, half);
+              whole, steps_apart, half);
   check(whole == half,
-        "a sweep over " + std::to_string(last) + " steps allocates no more "
-        "than one over " + std::to_string(steps_apart) + ": nothing per step");
+        "a sweep over " + std::to_string(last) + " steps allocates as much as "
+        "one over " + std::to_string(steps_apart) + ": nothing per step");
 }
 
 }  // namespace

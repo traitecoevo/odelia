@@ -314,14 +314,15 @@ struct adjoint_system {
   // Every active value back to unregistered, so the clear below it is safe and
   // the next recording registers them fresh.
   //
-  // Releasing every value `for_each_active` reaches has to return the tape to
-  // the number of values it counted before this System existed. So a System
-  // holding one the walk does not reach is caught here, rather than producing a
-  // row that is finite and is not the model's.
+  // Releasing every value `for_each_active` reaches, and the buffers held here,
+  // has to return the tape to the number of values it counted before this
+  // System existed. So a System holding one the walk does not reach is caught
+  // here, rather than producing a row that is finite and is not the model's.
   //
   // Against zero, which the destructor above is what makes true: every clear
-  // returns the count to zero, every recording registers this System's values,
-  // and the temporaries a recording makes are gone by the time it ends.
+  // returns the count to zero, every recording registers this System's values
+  // and the held buffers' entries, and the temporaries a recording makes are
+  // gone by the time it ends.
   void release() {
     release_held();
     const std::size_t still = tape_->getNumVariables();
