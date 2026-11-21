@@ -942,30 +942,32 @@ void test_sweep_at_several_rows(odelia::ode::Method m) {
         "and the sum of the forward pass's rows");
   std::printf("       (d/dr %.10g, d/dy0 %.10g)\n", dp[0][0], lambda[0][0]);
 
-  bool refused = false;
-  try {
-    s.rows_at(std::vector<double>{0.0, 0.3});
-  } catch (const std::exception&) {
-    refused = true;
-  }
-  check(refused, "a time no row holds is refused");
-  refused = false;
-  try {
-    const std::vector<std::size_t> back{rows[2], rows[1]};
-    const std::vector<adjoint_batch> two(2, adjoint_batch::one({1.0}));
-    s.sweep_adjoint_at(back, two, lambda, dp);
-  } catch (const std::exception&) {
-    refused = true;
-  }
-  check(refused, "rows out of order are refused");
-  refused = false;
-  try {
-    const std::vector<adjoint_batch> wide(rows.size(), adjoint_batch::one({1.0, 1.0}));
-    s.sweep_adjoint_at(rows, wide, lambda, dp);
-  } catch (const std::exception&) {
-    refused = true;
-  }
-  check(refused, "an adjoint of another width is refused");
+  const auto refuses = [](auto&& call, const std::string& naming) {
+    try {
+      call();
+    } catch (const std::runtime_error& e) {
+      return std::string(e.what()).find(naming) != std::string::npos;
+    }
+    return false;
+  };
+  check(refuses([&] { s.rows_at(std::vector<double>{0.0, 0.3}); },
+                "no recorded row at t = 0.3"),
+        "a time no row holds is refused");
+  check(refuses([&] { s.rows_at(std::vector<double>{0.0, 0.2, 0.2}); },
+                "ascend strictly"),
+        "a repeated time is refused by rows_at, naming the times");
+  check(refuses([&] {
+          const std::vector<std::size_t> back{rows[2], rows[1]};
+          const std::vector<adjoint_batch> two(2, adjoint_batch::one({1.0}));
+          s.sweep_adjoint_at(back, two, lambda, dp);
+        }, "rows must ascend"),
+        "rows out of order are refused");
+  check(refuses([&] {
+          std::vector<adjoint_batch> mixed(rows.size(), adjoint_batch::one({1.0}));
+          mixed[1] = adjoint_batch::one({1.0, 1.0});
+          s.sweep_adjoint_at(rows, mixed, lambda, dp);
+        }, "the adjoint at row " + std::to_string(rows[1])),
+        "a lower row's adjoint of another width is refused, naming the row");
 }
 
 // A pinned interval the domain refused is crossed in several sub-steps and
@@ -2784,6 +2786,46 @@ void test_tangent_across_an_insertion(odelia::ode::Method m) {
   check(d[1].at(1, 0) != 0.0, "the newborn carries a derivative in r");
 }
 
+// Output times on either side of an insertion that shares a time with one of
+// them: rows_at names the step's row, below the insertion, and one sweep
+// carries each output's adjoint at its own width across it.
+void test_sweep_at_rows_across_an_insertion(odelia::ode::Method m) {
+  using namespace odelia::ode;
+  Cells<double> c(2.0, {0.5});
+  Solver<Cells<double>> s(c, OdeControl(), m);
+  s.set_keep_states(true);
+  s.reset();
+  s.advance_adaptive(std::vector<double>{0.0, 0.25, 0.5});
+  insert_cell(s);
+  s.advance_adaptive(std::vector<double>{0.5, 0.75, 1.0});
+  const std::vector<double> times{0.0, 0.25, 0.5, 0.75, 1.0};
+  const std::vector<std::size_t> rows = s.rows_at(times);
+  const auto rec = s.recording();
+  check(!rec[rows[2]].insertion && rec[rows[2] + 1].insertion,
+        "at the insertion's time, the step's row, the insertion's just above");
+
+  // d sum_i (first cell at t_i) / d r, and / d the first cell at 0.
+  std::vector<adjoint_batch> at;
+  for (const std::size_t k : rows) {
+    std::vector<double> unit(rec[k].state.size(), 0.0);
+    unit[0] = 1.0;
+    at.push_back(adjoint_batch::one(unit));
+  }
+  adjoint_batch lambda, dp(1, 1);
+  s.sweep_adjoint_at(rows, at, lambda, dp);
+
+  double forward_r = 0.0, forward_y = 0.0;
+  for (const tangent_row& d : s.sweep_tangent<2>(tangent_directions{{0}, {0}}, rows)) {
+    forward_r += d.at(0, 0);
+    forward_y += d.at(0, 1);
+  }
+  check(lambda.width() == 1, "the adjoint comes back at the width the run started at");
+  check(relative_gap(dp[0][0], forward_r) < 1e-10 &&
+        relative_gap(lambda[0][0], forward_y) < 1e-10,
+        "and agrees with the forward pass summed over the same rows");
+  std::printf("       (d/dr %.10g against %.10g)\n", dp[0][0], forward_r);
+}
+
 // Under RODAS there is no sweep to compare with, so the walk is refereed against
 // a central difference of the same pinned RODAS walk.
 void test_tangent_through_rodas() {
@@ -2979,6 +3021,7 @@ int main() {
   test_controller_memory();
   for_each_explicit_stepper(test_tangent_matches_the_sweep);
   for_each_explicit_stepper(test_tangent_across_an_insertion);
+  for_each_explicit_stepper(test_sweep_at_rows_across_an_insertion);
   test_tangent_through_rodas();
   test_tangent_width_changes_nothing();
   test_tangent_directions_are_columns();

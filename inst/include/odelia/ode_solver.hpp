@@ -646,7 +646,8 @@ public:
   // `lambda` comes back as the adjoint at row 0, the initial state;
   // `parameter_adjoint` accumulates, zeroed by the caller, as sweep_adjoint has
   // it. Every batch in `at` has the same number of outputs, each at the width
-  // of its row.
+  // of its row; an insertion's row cannot be one of `rows` (see rows_at).
+  // Returns the segments swept that carried a step, summed over the intervals.
   std::size_t sweep_adjoint_at(std::span<const std::size_t> rows,
                                std::span<const ode::adjoint_batch> at,
                                ode::adjoint_batch& lambda,
@@ -690,24 +691,28 @@ public:
     return swept;
   }
 
-  // The recorded row at each of `times`, ascending, which the run landed a
-  // step on (advance_adaptive lands on every time it is given). Where an
-  // insertion's row shares its time with the row below, the insertion's: the
-  // state the run carried forward. A time no row holds is refused.
+  // The recorded row at each of `times`, strictly ascending, which the run
+  // landed a step on (advance_adaptive lands on every time it is given). Where
+  // an insertion's row shares its time with the step's, the step's: the state
+  // advance_adaptive left at that time, and a row a sweep can start from, which
+  // an insertion's is not. A time no row holds is refused.
   std::vector<std::size_t> rows_at(std::span<const double> times) const
   {
     const auto rec = recording();
     std::vector<std::size_t> rows;
     rows.reserve(times.size());
     std::size_t k = 0;
-    for (const double t : times) {
+    for (std::size_t i = 0; i < times.size(); ++i) {
+      const double t = times[i];
+      if (i > 0 && !(t > times[i - 1])) {
+        util::stop("rows_at: the times must ascend strictly");
+      }
       while (k < rec.size() && rec[k].time < t) ++k;
       if (k == rec.size() || rec[k].time != t) {
         util::stop("rows_at: no recorded row at t = " + util::format_double(t) +
                    "; a run lands a step on every time advance_adaptive is "
-                   "given, and the times asked for here must ascend");
+                   "given");
       }
-      while (k + 1 < rec.size() && rec[k + 1].time == t) ++k;
       rows.push_back(k);
     }
     return rows;

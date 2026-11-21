@@ -246,7 +246,7 @@ A sum of squares against observations is the same loop with `2 * (y - target)` a
 
 ## From R: what `$loss_and_gradient()` does
 
-`Lorenz_Solver$set_target(schedule, target, obs_indices)` stores a schedule and observations; `$loss_and_gradient(initial_state, params)` returns a least-squares loss and its exact gradient. Underneath (`solver_interface.hpp`, `Solver_loss_and_gradient_impl`): a schedule of steps is built from `times`, replayed with `advance_schedule` under `set_keep_states(true)`, an adjoint of `2 * (y - target)` is added at each observed index, and `sweep_adjoint` is called once per observation interval from the last to the first. `times` must therefore be a step schedule, normally a reference run's `$times()`, not an output grid; a replay that cannot take the schedule's steps one row each is refused. `mode = "forward"` walks the same schedule once carrying one direction per input and takes each observation's term against `dy/dθ` at its row; it is the default for a `"rodas"` solver, which cannot be swept. The optimiser is the caller's; `vignette("parameter-fitting")` hands the gradient to `optim()`.
+`Lorenz_Solver$set_target(schedule, target, obs_indices)` stores a schedule and observations; `$loss_and_gradient(initial_state, params)` returns a least-squares loss and its exact gradient. Underneath (`solver_interface.hpp`, `Solver_loss_and_gradient_impl`): a schedule of steps is built from `times`, replayed with `advance_schedule` under `set_keep_states(true)`, an adjoint of `2 * (y - target)` is formed at each observed index, and `sweep_adjoint_at` sweeps them as above. `times` must therefore be a step schedule, normally a reference run's `$times()`, not an output grid; a replay that cannot take the schedule's steps one row each is refused. `mode = "forward"` walks the same schedule once carrying one direction per input and takes each observation's term against `dy/dθ` at its row; it is the default for a `"rodas"` solver, which cannot be swept. The optimiser is the caller's; `vignette("parameter-fitting")` hands the gradient to `optim()`.
 
 ## Reading order through the headers
 
@@ -255,6 +255,6 @@ A sum of squares against observations is the same loop with `2 * (y - target)` a
 3. `ode_solver_internal.hpp`: `push_step` and `push_insertion`, the two places a row is written; `step_to` for the pinned path.
 4. `adjoint.hpp`: `adjoint_batch`, `adjoint_system`, `vector_jacobian_product`, `state_and_parameter_adjoints`, the transpose of one map.
 5. `ode_step_rkck.hpp`: `Step::step_adjoint`, the transpose of one step, and the `solved` channel; `ode_step_dopri.hpp`: `DopriStep::step_adjoint`, the same on the Dormand-Prince tableau; `ode_substeps.hpp`: the step both take where a System names a subsystem, which the sweep transposes with its substeps as recorded.
-6. `ode_solver.hpp`: `sweep_adjoint`, the loop over rows and insertions; `advance_schedule`, the replay.
+6. `ode_solver.hpp`: `sweep_adjoint`, the loop over rows and insertions; `sweep_adjoint_at` and `rows_at`, one sweep seeded at several output times; `advance_schedule`, the replay.
 7. `implicit_node.hpp`: supplied rows and `implicit_value`, independent of the solver.
 8. `sweep.hpp`: helpers for a consumer that drives a sweep segment by segment itself.
