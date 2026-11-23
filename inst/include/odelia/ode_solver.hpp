@@ -586,48 +586,9 @@ public:
                             size_t k_first, size_t k_last,
                             const std::vector<size_t>& extra_stops = {})
   {
-    if (&lambda == &parameter_adjoint) {
-      util::stop("sweep_adjoint: the state adjoints are replaced and the "
-                 "parameter adjoints accumulated, so they cannot be the same "
-                 "batch");
-    }
-    const ode::adjoint_multiples multiples = ode::adjoint_multiples::of(lambda);
-    if (!multiples.any()) {
-      return sweep_rows(lambda, parameter_adjoint, k_first, k_last, extra_stops);
-    }
-    // Asked here, before the batch is narrowed: the recordings below see only
-    // the kept rows, and the rebuild writes every row.
-    if (parameter_adjoint.size() < lambda.size()) {
-      util::stop("sweep_adjoint: one row of parameter adjoints per output, to "
-                 "accumulate into");
-    }
-    // The kept rows' parameter adjoints start where the caller's do and are
-    // written back whole, so they accumulate in the order a sweep of the whole
-    // batch would; a multiple takes c times what its row added.
-    ode::adjoint_batch carried = lambda.select(multiples.kept);
-    const ode::adjoint_batch before = parameter_adjoint.select(multiples.kept);
-    ode::adjoint_batch carried_parameters = before;
-    const std::size_t swept = sweep_rows(carried, carried_parameters, k_first,
-                                         k_last, extra_stops);
-    lambda.assign(lambda.size(), carried.width());
-    for (std::size_t m = 0; m < lambda.size(); ++m) {
-      const std::size_t b = multiples.from[m];
-      const double c = multiples.factor[m];
-      const std::span<double> state = lambda[m], parameters = parameter_adjoint[m];
-      if (multiples.kept[b] == m) {
-        std::copy(carried[b].begin(), carried[b].end(), state.begin());
-        std::copy(carried_parameters[b].begin(), carried_parameters[b].end(),
-                  parameters.begin());
-        continue;
-      }
-      for (std::size_t i = 0; i < state.size(); ++i) {
-        state[i] = c * carried[b][i];
-      }
-      for (std::size_t p = 0; p < parameters.size(); ++p) {
-        parameters[p] += c * (carried_parameters[b][p] - before[b][p]);
-      }
-    }
-    return swept;
+    sweep_workspace work;
+    return sweep_adjoint_on(work, lambda, parameter_adjoint, k_first, k_last,
+                            extra_stops);
   }
 
   // The whole recording.
@@ -676,17 +637,20 @@ public:
         for (std::size_t j = 0; j < to.size(); ++j) to[j] += from[j];
       }
     };
+    // One tape and one active System for every interval, as for the segments of
+    // one sweep: a time series has an interval per output time.
+    sweep_workspace work;
     std::size_t i = rows.size() - 1;
     lambda = at[i];
     std::size_t hi = rows[i];
     std::size_t swept = 0;
     while (i-- > 0) {
-      swept += sweep_adjoint(lambda, parameter_adjoint, rows[i], hi);
+      swept += sweep_adjoint_on(work, lambda, parameter_adjoint, rows[i], hi, {});
       add(at[i], rows[i]);
       hi = rows[i];
     }
     if (hi > 0) {
-      swept += sweep_adjoint(lambda, parameter_adjoint, 0, hi);
+      swept += sweep_adjoint_on(work, lambda, parameter_adjoint, 0, hi, {});
     }
     return swept;
   }
@@ -777,8 +741,77 @@ public:
 std::vector<System> history;
 
 private:
+  // What a sweep records on, made once per public call and handed down: the
+  // tape, and the active System every recording is taken on. One per call
+  // rather than one per sweep_rows, so sweep_adjoint_at's intervals share them.
+  // Constructing a tape reserves a large block, and under an allocator that
+  // hands freed blocks back to the operating system (CmdStan's tbbmalloc
+  // proxy) a tape per interval cost more than the arithmetic of the sweep.
+  //
+  // The active System is declared after the tape, so it is destroyed first and
+  // releases its slots on a tape that still exists. Between sweeps it is left
+  // holding slots; the next seat() releases them (reseat) or destroys it, either
+  // before anything is recorded.
+  struct sweep_workspace {
+    ode::adjoint_tape<double> tape{false};
+    std::optional<ode::adjoint_system<System>> active;
+  };
+
+  // sweep_adjoint on a workspace the caller holds.
+  std::size_t sweep_adjoint_on(sweep_workspace& work,
+                               ode::adjoint_batch& lambda,
+                               ode::adjoint_batch& parameter_adjoint,
+                               size_t k_first, size_t k_last,
+                               const std::vector<size_t>& extra_stops)
+  {
+    if (&lambda == &parameter_adjoint) {
+      util::stop("sweep_adjoint: the state adjoints are replaced and the "
+                 "parameter adjoints accumulated, so they cannot be the same "
+                 "batch");
+    }
+    const ode::adjoint_multiples multiples = ode::adjoint_multiples::of(lambda);
+    if (!multiples.any()) {
+      return sweep_rows(work, lambda, parameter_adjoint, k_first, k_last,
+                        extra_stops);
+    }
+    // Asked here, before the batch is narrowed: the recordings below see only
+    // the kept rows, and the rebuild writes every row.
+    if (parameter_adjoint.size() < lambda.size()) {
+      util::stop("sweep_adjoint: one row of parameter adjoints per output, to "
+                 "accumulate into");
+    }
+    // The kept rows' parameter adjoints start where the caller's do and are
+    // written back whole, so they accumulate in the order a sweep of the whole
+    // batch would; a multiple takes c times what its row added.
+    ode::adjoint_batch carried = lambda.select(multiples.kept);
+    const ode::adjoint_batch before = parameter_adjoint.select(multiples.kept);
+    ode::adjoint_batch carried_parameters = before;
+    const std::size_t swept = sweep_rows(work, carried, carried_parameters,
+                                         k_first, k_last, extra_stops);
+    lambda.assign(lambda.size(), carried.width());
+    for (std::size_t m = 0; m < lambda.size(); ++m) {
+      const std::size_t b = multiples.from[m];
+      const double c = multiples.factor[m];
+      const std::span<double> state = lambda[m], parameters = parameter_adjoint[m];
+      if (multiples.kept[b] == m) {
+        std::copy(carried[b].begin(), carried[b].end(), state.begin());
+        std::copy(carried_parameters[b].begin(), carried_parameters[b].end(),
+                  parameters.begin());
+        continue;
+      }
+      for (std::size_t i = 0; i < state.size(); ++i) {
+        state[i] = c * carried[b][i];
+      }
+      for (std::size_t p = 0; p < parameters.size(); ++p) {
+        parameters[p] += c * (carried_parameters[b][p] - before[b][p]);
+      }
+    }
+    return swept;
+  }
+
   // sweep_adjoint, every output adjoint carried down.
-  std::size_t sweep_rows(ode::adjoint_batch& lambda,
+  std::size_t sweep_rows(sweep_workspace& work,
+                         ode::adjoint_batch& lambda,
                          ode::adjoint_batch& parameter_adjoint,
                          size_t k_first, size_t k_last,
                          const std::vector<size_t>& extra_stops)
@@ -835,18 +868,18 @@ private:
       }
     } restore{system, solver, rec};
 
-    // One tape for the whole sweep, held active across every recording it takes.
-    // Clearing between recordings keeps the capacity the largest of them grew,
-    // where one tape per recording regrows it every time.
-    ode::adjoint_tape<double> tape(false);
+    // One tape for the whole sweep, the workspace's, held active across every
+    // recording it takes. Clearing between recordings keeps the capacity the
+    // largest of them grew, where one tape per recording regrows it every time.
+    ode::adjoint_tape<double>& tape = work.tape;
     ode::tape_scope<ode::adjoint_tape<double>> running{tape};
 
-    // The active System every recording below is taken on. A System that
-    // declares assign_from is built at the first and re-seated at each after
-    // it, so a sweep pays one System construction however many widths it
-    // passes through; any other is built afresh at each. Declared after the
-    // tape's scope, so it releases its slots with the tape still active.
-    std::optional<ode::adjoint_system<System>> active;
+    // The active System every recording below is taken on, the workspace's. A
+    // System that declares assign_from is built at the first and re-seated at
+    // each after it, so a sweep pays one System construction however many widths
+    // it passes through, and a workspace one however many sweeps it serves; any
+    // other is built afresh at each.
+    std::optional<ode::adjoint_system<System>>& active = work.active;
     const auto seat = [&]() -> ode::adjoint_system<System>& {
       if (active) {
         if constexpr (ode::AssignsFrom<
