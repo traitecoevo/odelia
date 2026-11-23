@@ -22,9 +22,9 @@
 // df/dt is formed and kept with J: the time row of the autonomous form's
 // Jacobian is part of the matrix a W-method may approximate.
 //
-// The stage formulation against W is that of ode_step_rodas.hpp (Hairer and
-// Wanner, Solving ODEs II, section IV.7, eq. 7.25), with its coefficients
-// derived below from the paper's alpha, Gamma, b and b-hat.
+// The stages are solved against W in the form of Hairer and Wanner, Solving
+// ODEs II, section IV.7, eq. 7.25, as RODAS's are, with the coefficients that
+// form takes derived below from the paper's alpha, Gamma, b and b-hat.
 
 #include <array>
 #include <vector>

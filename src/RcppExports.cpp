@@ -388,6 +388,28 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// OdeControl_set_jacobian_max_age
+void OdeControl_set_jacobian_max_age(SEXP control_xp, double max_age);
+RcppExport SEXP _odelia_OdeControl_set_jacobian_max_age(SEXP control_xpSEXP, SEXP max_ageSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type control_xp(control_xpSEXP);
+    Rcpp::traits::input_parameter< double >::type max_age(max_ageSEXP);
+    OdeControl_set_jacobian_max_age(control_xp, max_age);
+    return R_NilValue;
+END_RCPP
+}
+// OdeControl_get_jacobian_max_age
+double OdeControl_get_jacobian_max_age(SEXP control_xp);
+RcppExport SEXP _odelia_OdeControl_get_jacobian_max_age(SEXP control_xpSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type control_xp(control_xpSEXP);
+    rcpp_result_gen = Rcpp::wrap(OdeControl_get_jacobian_max_age(control_xp));
+    return rcpp_result_gen;
+END_RCPP
+}
 // OdeControl_set_controls
 void OdeControl_set_controls(SEXP control_xp, double tol_abs, double tol_rel, double a_y, double a_dydt, double step_size_min, double step_size_max, double step_size_initial);
 RcppExport SEXP _odelia_OdeControl_set_controls(SEXP control_xpSEXP, SEXP tol_absSEXP, SEXP tol_relSEXP, SEXP a_ySEXP, SEXP a_dydtSEXP, SEXP step_size_minSEXP, SEXP step_size_maxSEXP, SEXP step_size_initialSEXP) {
@@ -861,6 +883,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_odelia_OdeControl_get_controls", (DL_FUNC) &_odelia_OdeControl_get_controls, 1},
     {"_odelia_OdeControl_set_max_steps", (DL_FUNC) &_odelia_OdeControl_set_max_steps, 2},
     {"_odelia_OdeControl_get_max_steps", (DL_FUNC) &_odelia_OdeControl_get_max_steps, 1},
+    {"_odelia_OdeControl_set_jacobian_max_age", (DL_FUNC) &_odelia_OdeControl_set_jacobian_max_age, 2},
+    {"_odelia_OdeControl_get_jacobian_max_age", (DL_FUNC) &_odelia_OdeControl_get_jacobian_max_age, 1},
     {"_odelia_OdeControl_set_controls", (DL_FUNC) &_odelia_OdeControl_set_controls, 8},
     {"_odelia_OdeControl_set_tol_abs", (DL_FUNC) &_odelia_OdeControl_set_tol_abs, 2},
     {"_odelia_OdeControl_set_tol_rel", (DL_FUNC) &_odelia_OdeControl_set_tol_rel, 2},

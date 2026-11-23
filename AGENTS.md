@@ -1,12 +1,13 @@
 # `odelia` — developer guide for agents
 
 `odelia` is an **ODE solver with automatic differentiation, implemented in C++ header
-files**, with an R interface via Rcpp. Three adaptive steppers (Cash–Karp RK4(5),
-Dormand–Prince 5(4), RODAS4(3) for stiff systems) run entirely in compiled code. ODE
+files**, with an R interface via Rcpp. Four adaptive steppers (Cash–Karp RK4(5),
+Dormand–Prince 5(4), and for stiff systems RODAS4(3) and the Rosenbrock-W ROS34PW2,
+which keeps its Jacobian across steps) run entirely in compiled code. ODE
 systems are templated on their scalar type, so a recorded run can be differentiated in
 **reverse mode** (one sweep gives the derivative with respect to every parameter and
 initial condition) or in **forward mode** (the run's steps walked again carrying a few
-directions, under every stepper, RODAS included), and the implicit stepper's Jacobian
+directions, under every stepper but ROS34PW2, RODAS included), and the implicit steppers' Jacobian
 is taken in forward mode, all through the vendored [XAD](https://github.com/auto-differentiation/xad) library. Time-varying
 external drivers are interpolated with a cubic Hermite spline. A right-hand side written
 in R can be solved by the same steppers.

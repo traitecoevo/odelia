@@ -12,8 +12,10 @@
 #' @param params Numeric vector of system parameters, one entry per parameter
 #'   in the system's order (for Lorenz: sigma, R, b).
 #' @param method Integration method: \code{"rkck"} (default, explicit Cash-Karp
-#'   RK 4(5)), \code{"dopri"} (explicit Dormand-Prince 5(4)) or \code{"rodas"}
-#'   (implicit RODAS4(3) Rosenbrock, for stiff systems).
+#'   RK 4(5)), \code{"dopri"} (explicit Dormand-Prince 5(4)), \code{"rodas"}
+#'   (implicit RODAS4(3) Rosenbrock, for stiff systems) or \code{"ros34pw2"}
+#'   (Rosenbrock-W of order 3, which keeps its Jacobian across steps and
+#'   cannot be differentiated).
 #' @export
 Lorenz_Solver <- R6::R6Class(
   "Lorenz_Solver",

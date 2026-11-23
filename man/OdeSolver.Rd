@@ -7,8 +7,9 @@
 Integrate a system whose right-hand side is an R function, with odelia's
 adaptive step control and any of its steppers: the explicit Dormand--Prince
 5(4) pair (the method behind `deSolve`'s `ode45`, with dense output of its
-own order), the explicit Cash--Karp 4(5) pair, or the implicit RODAS4(3)
-Rosenbrock stepper for stiff problems. The solver is
+own order), the explicit Cash--Karp 4(5) pair, the implicit RODAS4(3)
+Rosenbrock stepper for stiff problems, or the ROS34PW2 Rosenbrock-W
+stepper, which keeps its Jacobian across steps. The solver is
 driven a step at a time (or to a sequence of times), and the state can be
 reset between steps -- at a different length if need be -- which is
 what a consumer with events needs.
@@ -16,7 +17,7 @@ what a consumer with events needs.
 The right-hand side `rhs(t, y)` returns the rates as a numeric vector the
 length of `y`; with `parms` given it is called as `rhs(t, y, parms)`, and
 a list whose first element is the rates is accepted, so a function written
-for `deSolve` runs unchanged. The implicit stepper needs the Jacobian
+for `deSolve` runs unchanged. The implicit steppers need the Jacobian
 `d(dy/dt)/dy`: supply `jac(t, y)` (or `jac(t, y, parms)`) returning the n
 by n matrix whose column j is the derivative with respect to `y[j]`, or
 leave it `NULL` and it is formed by forward differences at `n` extra
@@ -28,7 +29,25 @@ step RODAS makes six (five stages and the derivative at the new point),
 plus one for the time derivative unless `autonomous = TRUE`, plus the
 Jacobian once -- `n` evaluations by finite differences, one call to `jac`
 otherwise -- which is kept across a retry of a rejected step. A rejected
-attempt costs its six stage evaluations. For a cheap right-hand side the
+attempt costs its six stage evaluations.
+
+Where the Jacobian is the expensive part, `"ros34pw2"` forms it less
+often. It is a Rosenbrock-W method of order 3, whose order and error
+estimate hold whatever matrix stands in for the Jacobian, so it keeps one
+across steps: a Jacobian (and the time derivative with it) serves up to
+the control's `jacobian_max_age` steps (20 by default; see [OdeControl]),
+and a new one is formed sooner where a step is rejected. A step costs
+four evaluations, accepted or rejected (three stages and the derivative at
+the new point), plus the Jacobian and time derivative on the steps that
+form them. It saves most at a loose tolerance: at a tight one it takes
+more steps than RODAS, being of order 3, and a kept Jacobian more often
+gets a step rejected and is replaced. On Robertson's kinetics to `t = 1e4`
+it forms 5 Jacobians where RODAS forms 36 at `rtol = 1e-2`, 29 against 73
+at `1e-4`, and 131 against 187 at `1e-6`. A solve under `"ros34pw2"` cannot be
+differentiated, because the steps at which it formed a Jacobian are not
+recorded.
+
+For a cheap right-hand side the
 cost is instead one R call per stage, which is why an R right-hand side
 runs no faster here than through `deSolve`; see the Lorenz benchmark.
 
@@ -106,9 +125,12 @@ callback.}
       \item{\code{control}}{An [OdeControl], or `NULL` for the defaults.}
       \item{\code{method}}{`"dopri"` (explicit Dormand--Prince 5(4), the default; the
 one with dense output of its own order), `"rkck"` (explicit Cash--Karp
-4(5)) or `"rodas"` (implicit RODAS4(3), for stiff problems).}
+4(5)), `"rodas"` (implicit RODAS4(3), for stiff problems) or
+`"ros34pw2"` (Rosenbrock-W of order 3, for a stiff problem whose
+Jacobian is expensive).}
       \item{\code{autonomous}}{`TRUE` if `rhs` does not depend on `t`, which saves the
-implicit stepper one evaluation per step for the time derivative.}
+implicit steppers one evaluation for the time derivative each time they
+form a Jacobian.}
       \item{\code{jac_fd_step}}{Relative step for the finite-difference Jacobian:
 `h_j = jac_fd_step * max(abs(y[j]), jac_fd_floor)`. A right-hand side
 that is itself an iterative solve wants a larger step than the default to
@@ -177,7 +199,7 @@ point with [domain_error()].}
   are the controller's own and each other time is read off the
   interpolant of the step that spans it, so the integration costs the
   same however many rows are asked for. Under `"dopri"` that
-  interpolant has the stepper's own order; under the other two it is
+  interpolant has the stepper's own order; under the others it is
   cubic Hermite on the step's endpoints, one order short, so prefer
   `"dopri"` for dense output or `dense = FALSE`, which lands a step on
   every time.

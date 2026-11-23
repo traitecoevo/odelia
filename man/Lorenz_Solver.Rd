@@ -58,8 +58,10 @@ R6 wrapper for the Lorenz ODE solver.
       \item{\code{System_xp}}{External pointer to the Lorenz system object.}
       \item{\code{control_xp}}{External pointer to the ODE control object.}
       \item{\code{method}}{Integration method: \code{"rkck"} (default, explicit Cash-Karp
-RK 4(5)), \code{"dopri"} (explicit Dormand-Prince 5(4)) or \code{"rodas"}
-(implicit RODAS4(3) Rosenbrock, for stiff systems).}
+RK 4(5)), \code{"dopri"} (explicit Dormand-Prince 5(4)), \code{"rodas"}
+(implicit RODAS4(3) Rosenbrock, for stiff systems) or \code{"ros34pw2"}
+(Rosenbrock-W of order 3, which keeps its Jacobian across steps and
+cannot be differentiated).}
     }
     \if{html}{\out{</div>}}
   }

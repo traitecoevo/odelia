@@ -48,7 +48,7 @@ vector of at least two times, the first `t0`, is taken as the times to
 land on instead.}
 
 \item{method}{The stepper for the warm-up: `"rodas"` (implicit RODAS4(3),
-the default, for a stiff system), `"dopri"` or `"rkck"`.}
+the default, for a stiff system), `"ros34pw2"`, `"dopri"` or `"rkck"`.}
 
 \item{control}{An [OdeControl] for the warm-up, or `NULL` for the defaults
 with `rtol` and `atol`.}
