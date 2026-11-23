@@ -355,7 +355,7 @@ with the number of inputs. \code{"forward"}: the schedule walked again
 carrying one direction per input, whose cost does; it is the only mode
 under \code{"rodas"}, which cannot be swept. \code{NULL} (the default)
 is \code{"forward"} for a \code{"rodas"} solver and \code{"reverse"}
-otherwise.}
+otherwise. A \code{"ros34pw2"} solver is refused in either mode.}
     }
     \if{html}{\out{</div>}}
   }
@@ -375,7 +375,8 @@ otherwise.}
   forward-mode automatic differentiation. The solve starts from where
   this solver stands, with its step size afresh, and lands a step on
   every time; the solver itself does not move. Those steps are then walked again carrying one direction per
-  input, under the solver's own \code{method}, \code{"rodas"} included.
+  input, under the solver's own \code{method}, \code{"rodas"} included;
+  a \code{"ros34pw2"} solver is refused.
   The cost grows with the number of inputs and not with the number of
   times.
   \subsection{Usage}{

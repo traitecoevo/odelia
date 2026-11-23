@@ -353,8 +353,9 @@ had reached.}
     \describe{
       \item{\code{jacobian_max_age}}{The most steps one Jacobian may serve under the
 Rosenbrock-W stepper (`method = "ros34pw2"`), or `Inf` for no limit; the
-default is 20. That stepper forms a new Jacobian sooner after a rejected
-step, and 1 forms one at every step. RODAS forms one at every step
+default is 20. That stepper forms a new Jacobian sooner where a step
+from a later point than the one it was formed at is rejected, and 1
+forms one at every step. RODAS forms one at every step
 whatever this says.}
     }
     \if{html}{\out{</div>}}

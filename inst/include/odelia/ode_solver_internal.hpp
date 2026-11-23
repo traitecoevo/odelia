@@ -50,8 +50,8 @@ public:
   void step(System& system);
 
   // The adjoint of one step, from the state that step started at, for several
-  // outputs at once. The two explicit steppers only: the Rosenbrock stepper
-  // steppers record no stages, so they carry no reverse counterpart.
+  // outputs at once. The two explicit steppers only: the Rosenbrock steppers
+  // record no stages, so they carry no reverse counterpart.
   // `substeps` holds the row's substeps where the step substepped the System's
   // subsystem.
   void step_adjoint(adjoint_system<System>& active,
@@ -209,9 +209,10 @@ public:
   // step, at no further evaluation. Under Dormand-Prince it is the method's
   // own order-4 continuous extension, from the step's stages, with an error of
   // the step's own order. Under the other steppers it is cubic Hermite on the
-  // step's endpoints and the derivatives there: exact for a cubic, otherwise
-  // one order below the step, so a consumer that wants dense output within
-  // tolerance uses Method::dopri. Refuses a t outside [previous time, current time], and is
+  // step's endpoints and the derivatives there, whose error is fourth order:
+  // one order below the step under RKCK and RODAS, so a consumer that wants
+  // dense output within tolerance uses Method::dopri, and the step's own order
+  // under ROS34PW2, a third-order method. Refuses a t outside [previous time, current time], and is
   // unavailable until a step has been accepted since the last reset.
   bool can_interpolate() const { return have_prev; }
   double previous_time() const { return time_prev; }

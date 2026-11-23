@@ -65,8 +65,9 @@ requested times off the interpolant of the step spanning each, as
 `deSolve`'s `lsoda` does; `FALSE` to land a step on every requested time,
 as its `ode45` does, which costs more steps when the output is finer than
 the steps. `NULL`, the default, means `TRUE` under `"dopri"`, whose
-interpolant has the stepper's order, and `FALSE` under the others,
-whose interpolant is cubic Hermite, one order short (on Lorenz
+interpolant has the stepper's order, and under `"ros34pw2"`, whose cubic
+Hermite interpolant has its order 3; `FALSE` under `"rkck"` and
+`"rodas"`, whose interpolant is that cubic, one order short (on Lorenz
 at 1e-6 the Cash--Karp dense rows err by 6e-4 where landed rows err by
 3e-11, measured).}
 }

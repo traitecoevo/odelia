@@ -127,7 +127,8 @@ struct OdeControl {
   std::size_t get_max_steps() const { return max_steps; }
 
   // The most steps one Jacobian may serve under the Rosenbrock-W stepper
-  // (ode_step_rosw.hpp), which forms a new one sooner after a rejection. 1
+  // (ode_step_rosw.hpp), which forms a new one sooner where a step from a
+  // point after the one it was formed at is rejected. 1
   // forms one at every step; 0 is no limit. RODAS forms one at every step
   // whatever this says.
   void set_jacobian_max_age(std::size_t value) { jacobian_max_age = value; }

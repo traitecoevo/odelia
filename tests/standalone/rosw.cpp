@@ -119,6 +119,71 @@ void test_order() {
   check(rodas_wrong < 1.5, "while RODAS with the wrong J loses its order");
 }
 
+// One step against the method written as the paper writes it, with the matrix
+// A in place of J in both places it appears (Hairer and Wanner IV.7, eq. 7.4
+// on the autonomous form):
+//   (I - h gamma A) k_i = h f(t + alpha_i h, y + sum_j alpha_ij k_j)
+//                         + h A sum_j gamma_ij k_j + h^2 gamma_i df/dt,
+//   y1 = y + sum_i b_i k_i,  y1_hat = y + sum_i b_hat_i k_i,
+// on the pendulum with its exact df/dt and a wrong A. The stepper solves the
+// transformed stages of eq. 7.25 instead, with a finite-difference df/dt, so
+// its solution and its estimate y1 - y1_hat must agree with these to the
+// difference's error, and both carry the df/dt term.
+void test_one_step_against_the_paper() {
+  std::printf("one step against the untransformed method\n");
+  namespace rw = ode::rosw;
+  const double t = 0.3, h = 0.2;
+  const State y0{1.0, -0.4};
+  State A, f0(2), dfdt{0.0, -0.5 * std::sin(t)};
+  pendulum_jac_wrong(t, y0, f0, A);
+  pendulum(t, y0, f0);
+
+  State k[rw::s];
+  for (std::size_t i = 0; i < rw::s; ++i) {
+    State arg = y0, g(2, 0.0), f(2);
+    for (std::size_t j = 0; j < i; ++j) {
+      for (std::size_t q = 0; q < 2; ++q) {
+        arg[q] += rw::alpha[i][j] * k[j][q];
+        g[q] += rw::Gamma[i][j] * k[j][q];
+      }
+    }
+    pendulum(t + rw::node[i] * h, arg, f);
+    State rhs(2);
+    for (std::size_t q = 0; q < 2; ++q) {
+      rhs[q] = h * f[q] + h * (A[2 * q] * g[0] + A[2 * q + 1] * g[1]) +
+               h * h * rw::d[i] * dfdt[q];
+    }
+    const double m00 = 1.0 - h * rw::gamma * A[0], m01 = -h * rw::gamma * A[1],
+                 m10 = -h * rw::gamma * A[2], m11 = 1.0 - h * rw::gamma * A[3];
+    const double det = m00 * m11 - m01 * m10;
+    k[i] = {(m11 * rhs[0] - m01 * rhs[1]) / det,
+            (m00 * rhs[1] - m10 * rhs[0]) / det};
+  }
+  State y1 = y0, y1_hat = y0;
+  for (std::size_t i = 0; i < rw::s; ++i) {
+    for (std::size_t q = 0; q < 2; ++q) {
+      y1[q] += rw::b[i] * k[i][q];
+      y1_hat[q] += rw::b_hat[i] * k[i][q];
+    }
+  }
+
+  CallbackSystem sys(pendulum, y0, t, pendulum_jac_wrong);
+  ode::RosWStep<CallbackSystem> stepper;
+  stepper.resize(2);
+  State y = y0, yerr(2), dydt_out(2);
+  stepper.step(sys, t, h, y, yerr, f0, dydt_out, 1);
+  double gap = 0.0, gap_err = 0.0, err = 0.0;
+  for (std::size_t q = 0; q < 2; ++q) {
+    gap = std::max(gap, std::abs(y[q] - y1[q]));
+    gap_err = std::max(gap_err, std::abs(yerr[q] - (y1[q] - y1_hat[q])));
+    err = std::max(err, std::abs(y1[q] - y1_hat[q]));
+  }
+  std::printf("       (solution gap %.1e; estimate gap %.1e on an estimate of %.1e)\n",
+              gap, gap_err, err);
+  check(gap < 1e-9, "the solution is the untransformed method's");
+  check(gap_err < 1e-6 * err, "and so is the error estimate");
+}
+
 // Robertson's kinetics, and Van der Pol at eps = 1e-3.
 void robertson(double, const State& y, State& f) {
   f[0] = -0.04 * y[0] + 1e4 * y[1] * y[2];
@@ -226,6 +291,13 @@ void test_when_formed() {
           "age " + std::to_string(age) +
             ": between one J per `age` steps and that plus one per rejection");
   }
+  // With no limit on its age, a Jacobian is replaced only at a retry, so a
+  // run with rejections forms more than the first.
+  const outcome unlimited = solve(p, Method::ros34pw2, 1e-4, 0);
+  std::printf("       (no age limit: %zu J, %zu accepted, %zu rejected)\n",
+              unlimited.jac, unlimited.accepted, unlimited.rejected);
+  check(unlimited.rejected > 0 && unlimited.jac > 1,
+        "with no age limit, a rejected step from a later point forms a new J");
   // 4 evaluations per attempt (three stages and the new point), and one at
   // the start; df/dt is not asked of an autonomous system.
   check(every.rhs == 1 + 4 * (every.accepted + every.rejected),
@@ -280,6 +352,7 @@ void test_refusals() {
 int main() {
   std::printf("odelia Rosenbrock-W stepper, standalone\n");
   test_order();
+  test_one_step_against_the_paper();
   test_fewer_jacobians();
   test_when_formed();
   test_set_state_starts_afresh();

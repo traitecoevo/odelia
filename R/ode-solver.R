@@ -85,14 +85,16 @@ check_callback <- function(f, name, nullable = FALSE) {
 #' estimate hold whatever matrix stands in for the Jacobian, so it keeps one
 #' across steps: a Jacobian (and the time derivative with it) serves up to
 #' the control's `jacobian_max_age` steps (20 by default; see [OdeControl]),
-#' and a new one is formed sooner where a step is rejected. A step costs
+#' and a new one is formed sooner where a step from a later point than the
+#' one it was formed at is rejected. A step costs
 #' four evaluations, accepted or rejected (three stages and the derivative at
 #' the new point), plus the Jacobian and time derivative on the steps that
 #' form them. It saves most at a loose tolerance: at a tight one it takes
 #' more steps than RODAS, being of order 3, and a kept Jacobian more often
-#' gets a step rejected and is replaced. On Robertson's kinetics to `t = 1e4`
-#' it forms 5 Jacobians where RODAS forms 36 at `rtol = 1e-2`, 29 against 73
-#' at `1e-4`, and 131 against 187 at `1e-6`. A solve under `"ros34pw2"` cannot be
+#' gets a step rejected and is replaced. On Robertson's kinetics to `t = 1e4`,
+#' with `atol = 1e-6 * rtol` and an analytic Jacobian, it forms 5 Jacobians
+#' where RODAS forms 36 at `rtol = 1e-2`, 29 against 73 at `1e-4`, and 131
+#' against 187 at `1e-6`. A solve under `"ros34pw2"` cannot be
 #' differentiated, because the steps at which it formed a Jacobian are not
 #' recorded.
 #'
@@ -211,9 +213,10 @@ OdeSolver <- R6::R6Class(
     #'   interpolant of the step that spans it, so the integration costs the
     #'   same however many rows are asked for. Under `"dopri"` that
     #'   interpolant has the stepper's own order; under the others it is
-    #'   cubic Hermite on the step's endpoints, one order short, so prefer
-    #'   `"dopri"` for dense output or `dense = FALSE`, which lands a step on
-    #'   every time.
+    #'   cubic Hermite on the step's endpoints, of order 3: one order short of
+    #'   `"rkck"` and `"rodas"`, so prefer `"dopri"` for dense output or
+    #'   `dense = FALSE`, which lands a step on every time, and the order of
+    #'   `"ros34pw2"` itself.
     advance_collect = function(times, dense = TRUE) {
       private$guard()
       RSolver_advance_collect(private$ptr, as.numeric(times), isTRUE(dense))
@@ -349,8 +352,9 @@ OdeSolver <- R6::R6Class(
 #'   `deSolve`'s `lsoda` does; `FALSE` to land a step on every requested time,
 #'   as its `ode45` does, which costs more steps when the output is finer than
 #'   the steps. `NULL`, the default, means `TRUE` under `"dopri"`, whose
-#'   interpolant has the stepper's order, and `FALSE` under the others,
-#'   whose interpolant is cubic Hermite, one order short (on Lorenz
+#'   interpolant has the stepper's order, and under `"ros34pw2"`, whose cubic
+#'   Hermite interpolant has its order 3; `FALSE` under `"rkck"` and
+#'   `"rodas"`, whose interpolant is that cubic, one order short (on Lorenz
 #'   at 1e-6 the Cash--Karp dense rows err by 6e-4 where landed rows err by
 #'   3e-11, measured).
 #' @return A numeric matrix of class `odelia_solution`, `length(times)` rows;
@@ -381,7 +385,7 @@ ode_solve <- function(func, y0, times, parms = NULL, jacfunc = NULL,
   }
   if (is.null(dense)) {
     # Only Dormand-Prince has dense output of its own order; see ?ode_solve.
-    dense <- method %in% c("dopri", "dopri5", "ode45", "rk45dp7")
+    dense <- method %in% c("dopri", "dopri5", "ode45", "rk45dp7", "ros34pw2")
   }
   if (is.null(control)) {
     control <- OdeControl$new()

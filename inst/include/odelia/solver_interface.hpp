@@ -390,6 +390,12 @@ inline Rcpp::List Solver_sensitivities_impl(SEXP solver_xp,
                                             Rcpp::IntegerVector parameters,
                                             Rcpp::IntegerVector initial) {
   auto solver = get_solver<SystemType>(solver_xp);
+  if (solver->method() == ode::Method::ros34pw2) {
+    Rcpp::stop("method = 'ros34pw2' cannot be differentiated: the steps at "
+               "which it formed a new Jacobian are not recorded, so no walk "
+               "of the run takes them again; use a solver built with 'rodas', "
+               "'rkck' or 'dopri'");
+  }
   const std::size_t n_t = times.size();
   if (n_t == 0) {
     Rcpp::stop("'times' must hold at least the current time");

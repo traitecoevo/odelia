@@ -12,8 +12,8 @@
 // and so do its embedded pair's, so the error estimate stays honest when the
 // matrix is out of date. That is what lets this stepper keep J across steps:
 // it is formed at a step's start and then serves the steps after it, until a
-// step it served is rejected or it reaches the age the control allows
-// (OdeControl::jacobian_max_age). W = (1/(h*gamma)) I - J is formed and
+// step it serves from a later point is rejected or it reaches the age the
+// control allows (OdeControl::jacobian_max_age). W = (1/(h*gamma)) I - J is formed and
 // factored at every step, at that step's h, so a change of step size never
 // makes the kept J wrong. Where the Jacobian is cheap, set the age to 1: J is
 // then formed at every step and the method is an ordinary Rosenbrock method of
