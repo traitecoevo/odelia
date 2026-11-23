@@ -40,11 +40,11 @@ namespace ode {
 // of one map; Step::step_adjoint (ode_step_rkck.hpp) for the transpose of one
 // step, which DopriStep::step_adjoint (ode_step_dopri.hpp) repeats on its own
 // tableau; sweep_adjoint below for the loop over rows and insertions. Under
-// method = rkck or dopri a run records, replays and sweeps; rodas refuses a sweep
-// or a replay.
+// method = rkck or dopri a run records, replays and sweeps; rodas and ros34pw2
+// refuse a sweep or a replay.
 //
 // The same recording is differentiated forward, for few inputs and many
-// outputs and under any of the three steppers, by sweep_tangent: see the free
+// outputs and under every stepper but ros34pw2, by sweep_tangent: see the free
 // sweep_tangent below, and the article "Forward mode" for a worked example.
 //
 // `collect` (default on) keeps a copy of the whole System at every step in
@@ -1130,6 +1130,12 @@ std::vector<tangent_row> sweep_tangent(const System& start,
   {
     util::stop("sweep_tangent: 'schedule' must hold at least the row it "
                "starts from");
+  }
+  if (method == Method::ros34pw2)
+  {
+    util::stop("sweep_tangent: method='ros34pw2' cannot be walked: the steps "
+               "at which the run formed a new Jacobian are not recorded, so "
+               "the walk would not take the run's steps");
   }
   if (method == Method::rodas && !RodasStep<lane_system>::supported)
   {

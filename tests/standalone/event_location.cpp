@@ -61,7 +61,7 @@ bool same(const std::vector<double>& a, const std::vector<double>& b) {
 }
 
 const char* name(Method m) {
-  return m == Method::rkck ? "rkck" : m == Method::dopri ? "dopri" : "rodas";
+  return ode::method_name(m);
 }
 
 // x' = v, v' = -x from (1, 0): x = cos t, which crosses zero at pi/2 + k pi.
@@ -199,7 +199,7 @@ void test_finds_the_crossing(Method m) {
   ode::Solver<Oscillator> s(Oscillator{}, control(ode::Controller::hairer), m);
   s.set_collect(false);
   const std::optional<double> t = s.advance_until(x_is_zero, 10.0, tight);
-  const double tol = m == Method::rodas ? 1e-6 : 1e-7;
+  const double tol = ode::is_rosenbrock(m) ? 1e-6 : 1e-7;
   check(t.has_value() && std::abs(*t - std::numbers::pi / 2) < tol,
         std::string(name(m)) + ": x = cos t first reaches zero at pi/2");
   check(t.has_value() && s.time() == *t,
@@ -255,6 +255,50 @@ void test_is_a_landing_time(Method m, ode::Controller rule) {
   landing_check(s, x_is_zero, 10.0,
                 std::string(name(m)) + ", " +
                     (rule == ode::Controller::hairer ? "hairer" : "gsl") + ": ");
+}
+
+// The same under the Rosenbrock-W stepper on a pendulum, whose Jacobian moves
+// with the state: a retracted step must also put back the Jacobian the stepper
+// kept, its age, and where its last attempt started, all of which decide
+// whether the next step forms a new one.
+struct Pendulum {
+  using value_type = double;
+  double x = 2.5, v = 0.0, time = 0.0;
+
+  std::size_t ode_size() const { return 2; }
+  double ode_time() const { return time; }
+  template <typename It> It set_ode_state(It it, double t) {
+    x = *it++;
+    v = *it++;
+    time = t;
+    return it;
+  }
+  template <typename It> It ode_state(It it) const {
+    *it++ = x;
+    *it++ = v;
+    return it;
+  }
+  template <typename It> It ode_rates(It it) const {
+    *it++ = v;
+    *it++ = -std::sin(x);
+    return it;
+  }
+  template <typename It> It ode_aux(It it) const { return it; }
+  void ode_jacobian(const std::vector<double>& y, double,
+                    const std::vector<double>&, std::vector<double>& J) {
+    J.assign({0.0, 1.0, -std::cos(y[0]), 0.0});
+  }
+};
+
+void test_is_a_landing_time_keeping_a_jacobian(ode::Controller rule) {
+  ode::OdeControl c = control(rule);
+  c.set_jacobian_max_age(3);
+  ode::Solver<Pendulum> s(Pendulum{}, c, Method::ros34pw2);
+  s.set_collect(false);
+  landing_check(s, x_is_zero, 10.0,
+                std::string("ros34pw2, ") +
+                    (rule == ode::Controller::hairer ? "hairer" : "gsl") +
+                    ", keeping J for 3 steps: ");
 }
 
 // The same, where steps substep a subsystem: a retracted step must also put
@@ -458,10 +502,10 @@ void test_retract_refusals() {
 
 int main() {
   std::printf("odelia event location, standalone\n");
-  for (Method m : {Method::rkck, Method::dopri, Method::rodas}) {
+  for (Method m : {Method::rkck, Method::dopri, Method::rodas, Method::ros34pw2}) {
     test_finds_the_crossing(m);
   }
-  for (Method m : {Method::rkck, Method::dopri, Method::rodas}) {
+  for (Method m : {Method::rkck, Method::dopri, Method::rodas, Method::ros34pw2}) {
     for (ode::Controller rule : {ode::Controller::hairer, ode::Controller::gsl}) {
       test_is_a_landing_time(m, rule);
     }
@@ -471,7 +515,10 @@ int main() {
       test_is_a_landing_time_with_subsystem(m, rule);
     }
   }
-  for (Method m : {Method::rkck, Method::dopri, Method::rodas}) {
+  for (ode::Controller rule : {ode::Controller::hairer, ode::Controller::gsl}) {
+    test_is_a_landing_time_keeping_a_jacobian(rule);
+  }
+  for (Method m : {Method::rkck, Method::dopri, Method::rodas, Method::ros34pw2}) {
     test_no_event_is_an_ordinary_run(m);
     test_a_sequence_of_levels(m);
   }

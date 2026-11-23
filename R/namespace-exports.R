@@ -30,4 +30,6 @@
 #' @rawNamespace export(OdeControl_get_stabilisation)
 #' @rawNamespace export(OdeControl_set_max_steps)
 #' @rawNamespace export(OdeControl_get_max_steps)
+#' @rawNamespace export(OdeControl_set_jacobian_max_age)
+#' @rawNamespace export(OdeControl_get_jacobian_max_age)
 NULL

@@ -155,18 +155,26 @@ struct schedule_row {
 };
 
 // Integration method: the explicit Cash-Karp RKCK 4(5) stepper (default), the
-// implicit RODAS4(3) Rosenbrock stepper for stiff systems, or the explicit
-// Dormand-Prince 5(4) stepper with order-4 dense output. Here rather than with
-// the solver because a recorded row names the stepper that made it.
-enum class Method { rkck, rodas, dopri };
+// implicit RODAS4(3) Rosenbrock stepper for stiff systems, the explicit
+// Dormand-Prince 5(4) stepper with order-4 dense output, or the ROS34PW2
+// Rosenbrock-W stepper, which keeps its Jacobian across steps. Here rather
+// than with the solver because a recorded row names the stepper that made it.
+enum class Method { rkck, rodas, dopri, ros34pw2 };
 
 // The name R passes for each, for messages.
 inline const char* method_name(Method m) {
   switch (m) {
     case Method::rodas: return "rodas";
     case Method::dopri: return "dopri";
+    case Method::ros34pw2: return "ros34pw2";
     default: return "rkck";
   }
+}
+
+// The two linearly implicit steppers. Neither records its stages, so a run
+// under either is not swept, replayed from a row, or substepped.
+inline bool is_rosenbrock(Method m) {
+  return m == Method::rodas || m == Method::ros34pw2;
 }
 
 // What one step's rate evaluations solve for, in the order the explicit

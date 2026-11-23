@@ -26,6 +26,7 @@
 #include <odelia/ode_interface.hpp>
 #include <odelia/ode_step_rkck.hpp>
 #include <odelia/ode_step_rodas.hpp>
+#include <odelia/ode_step_rosw.hpp>
 #include <odelia/ode_step_dopri.hpp>
 #include <odelia/ode_solver_internal.hpp>
 #include <odelia/ode_solver.hpp>

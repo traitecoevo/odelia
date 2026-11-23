@@ -261,6 +261,12 @@ inline Rcpp::List Solver_loss_and_gradient_impl(
   if (mode != "forward" && mode != "reverse") {
     Rcpp::stop("'mode' must be \"forward\" or \"reverse\"");
   }
+  if (method == ode::Method::ros34pw2) {
+    Rcpp::stop("method = 'ros34pw2' cannot be differentiated: the steps at "
+               "which it formed a new Jacobian are not recorded, so no walk "
+               "of the run takes them again; use a solver built with 'rodas', "
+               "'rkck' or 'dopri'");
+  }
   if (mode == "reverse" && method == ode::Method::rodas) {
     Rcpp::stop("method = 'rodas' cannot be swept in reverse; use mode = "
                "\"forward\", or a solver built with 'rkck' or 'dopri'");

@@ -7,6 +7,7 @@
 #include <odelia/ode_control.hpp>
 #include <odelia/ode_step_rkck.hpp>
 #include <odelia/ode_step_rodas.hpp>
+#include <odelia/ode_step_rosw.hpp>
 #include <odelia/ode_step_dopri.hpp>
 #include <odelia/root_find.hpp>
 
@@ -50,7 +51,7 @@ public:
 
   // The adjoint of one step, from the state that step started at, for several
   // outputs at once. The two explicit steppers only: the Rosenbrock stepper
-  // records no stages, so it carries no reverse counterpart.
+  // steppers record no stages, so they carry no reverse counterpart.
   // `substeps` holds the row's substeps where the step substepped the System's
   // subsystem.
   void step_adjoint(adjoint_system<System>& active,
@@ -60,9 +61,9 @@ public:
                     const adjoint_batch& lambda_out, adjoint_batch& lambda_in,
                     adjoint_batch& parameter_adjoint,
                     const subsystem_substeps* substeps = nullptr) {
-    if (method == Method::rodas) {
-      util::stop("method='rodas' has no adjoint; use method='rkck' or "
-                 "method='dopri'.");
+    if (is_rosenbrock(method)) {
+      util::stop(std::string("method='") + method_name(method) +
+                 "' has no adjoint; use method='rkck' or method='dopri'.");
     }
     // The System can be a different width from the one the forward pass left,
     // because a caller sweeping a segment narrows it between segments. Every
@@ -260,16 +261,17 @@ private:
   // hairer rule's RMS, the sums of squares compare, so a subsystem of a few
   // components among many sets the step only where its error is large enough
   // to. Each part is read at the levels the step's `tolerance_scales` scaled.
-  // False under the implicit stepper, which measures none of these.
+  // False under the implicit steppers, which measure none of these.
   bool subsystem_error_sets_step(const System& system, const state_type& u0,
                                  const std::vector<double>& input_slope,
                                  double h, bool substepped,
                                  std::span<const double> tolerance_scales) const;
   bool spans_subsystem_knot(const System& system, double step_end) const;
-  void refuse_substeps_under_rodas(const subsystem_substeps* substeps) const {
-    if (substeps != nullptr && method == Method::rodas) {
-      util::stop("A step that substepped a System's subsystem is taken only by "
-                 "method='rkck' or method='dopri', not method='rodas'");
+  void refuse_substeps_under_rosenbrock(const subsystem_substeps* substeps) const {
+    if (substeps != nullptr && is_rosenbrock(method)) {
+      util::stop(std::string("A step that substepped a System's subsystem is "
+                             "taken only by method='rkck' or method='dopri', "
+                             "not method='") + method_name(method) + "'");
     }
   }
   // What both explicit steppers answer alike, asked of the one the method
@@ -286,7 +288,7 @@ private:
   void save_dydt_out_as_in();
   void set_time(double t);
 
-  // Stepper dispatch: SolverInternal holds all three steppers and forwards to
+  // Stepper dispatch: SolverInternal holds all four steppers and forwards to
   // the one selected at construction. The adaptive controller (see step()) is
   // otherwise stepper-agnostic.
   // The step index the stages are addressed by is this object's own count of
@@ -305,7 +307,7 @@ private:
                     const solved_row<System>* replay = nullptr,
                     const subsystem_substeps* substeps = nullptr,
                     const state_type& inputs = {}) {
-    refuse_substeps_under_rodas(substeps);
+    refuse_substeps_under_rosenbrock(substeps);
     // Each stepper's last evaluation is at the state the step ends at, at this
     // time, which is what first-same-as-last carries on with dydt_out.
     dydt_out_time = time_ + step_size;
@@ -337,21 +339,28 @@ private:
     };
     if (method == Method::dopri) {
       with_row(dopri_stepper, substeps, inputs);
-    } else if (method == Method::rodas) {
+    } else if (is_rosenbrock(method)) {
       if (replay != nullptr) {
-        // RODAS takes no row at all, so it has nowhere to put one. Said here
-        // rather than dropped silently, which would replay a run's choices by
-        // re-deriving them.
-        util::stop("method='rodas' cannot replay what a run solved for: the "
-                   "Rosenbrock stepper keeps no per-stage row; use "
-                   "method='rkck' or method='dopri'.");
+        // A Rosenbrock step takes no row at all, so it has nowhere to put one.
+        // Said here rather than dropped silently, which would replay a run's
+        // choices by re-deriving them.
+        util::stop(std::string("method='") + method_name(method) +
+                   "' cannot replay what a run solved for: the Rosenbrock "
+                   "steppers keep no per-stage row; use method='rkck' or "
+                   "method='dopri'.");
       }
       if constexpr (RodasStep<System>::supported) {
-        rodas_stepper.step(system, time_, step_size, y_, yerr_, dydt_in_,
-                           dydt_out_);
+        if (method == Method::rodas) {
+          rodas_stepper.step(system, time_, step_size, y_, yerr_, dydt_in_,
+                             dydt_out_);
+        } else {
+          rosw_stepper.step(system, time_, step_size, y_, yerr_, dydt_in_,
+                            dydt_out_, control.get_jacobian_max_age());
+        }
       } else {
         // No Jacobian for this System at this scalar: see Jacobian::supported.
-        util::stop("method='rodas' has no Jacobian for this System at this "
+        util::stop(std::string("method='") + method_name(method) +
+                   "' has no Jacobian for this System at this "
                    "scalar: it needs an ode_jacobian() hook, or a rebind() for "
                    "the AD Jacobian, which is closed at a scalar carrying an "
                    "adjoint and open at a tangent scalar only where the System "
@@ -365,6 +374,7 @@ private:
   size_t stepper_order() const {
     switch (method) {
     case Method::rodas: return rodas_stepper.order();
+    case Method::ros34pw2: return rosw_stepper.order();
     case Method::dopri: return dopri_stepper.order();
     default: return stepper.order();
     }
@@ -372,6 +382,7 @@ private:
   bool stepper_can_use_dydt_in() const {
     switch (method) {
     case Method::rodas: return RodasStep<System>::can_use_dydt_in;
+    case Method::ros34pw2: return RosWStep<System>::can_use_dydt_in;
     case Method::dopri: return DopriStep<System>::can_use_dydt_in;
     default: return Step<System>::can_use_dydt_in;
     }
@@ -379,6 +390,7 @@ private:
   bool stepper_first_same_as_last() const {
     switch (method) {
     case Method::rodas: return RodasStep<System>::first_same_as_last;
+    case Method::ros34pw2: return RosWStep<System>::first_same_as_last;
     case Method::dopri: return DopriStep<System>::first_same_as_last;
     default: return Step<System>::first_same_as_last;
     }
@@ -388,6 +400,7 @@ private:
   Method method;
   Step<System> stepper;
   RodasStep<System> rodas_stepper;
+  RosWStep<System> rosw_stepper;
   DopriStep<System> dopri_stepper;
 
   double step_size_last; // Size of last successful step (or suggestion)
@@ -472,6 +485,7 @@ private:
     bool subsystem_error_set_step = false;
     double rkck_stiffness = 0.0;
     double dopri_stiffness = 0.0;
+    typename RosWStep<System>::kept_jacobian rosw_jacobian;
   };
   held_step held_;
 
@@ -1066,7 +1080,7 @@ template <class System>
 bool SolverInternal<System>::substeps_subsystem(const System& system,
                                                 double step_end) const {
   if constexpr (HasSubsystem<System>) {
-    if (method == Method::rodas) {
+    if (is_rosenbrock(method)) {
       return false;
     }
     return spans_subsystem_knot(system, step_end) ||
@@ -1085,7 +1099,7 @@ bool SolverInternal<System>::subsystem_error_sets_step(
     const System& system, const state_type& u0,
     const std::vector<double>& input_slope, double h, bool substepped,
     std::span<const double> tolerance_scales) const {
-  if (method == Method::rodas) {
+  if (is_rosenbrock(method)) {
     return false;
   }
   const auto [first, n] = system.subsystem();
@@ -1111,7 +1125,7 @@ template <class System>
 bool SolverInternal<System>::spans_subsystem_knot(const System& system,
                                                   double step_end) const {
   if constexpr (HasSubsystem<System>) {
-    return method != Method::rodas &&
+    return !is_rosenbrock(method) &&
       !system.subsystem_knots(time, step_end).empty();
   } else {
     return false;
@@ -1182,6 +1196,9 @@ void SolverInternal<System>::hold_step_start() {
   held_.subsystem_error_set_step = subsystem_error_set_step_;
   held_.rkck_stiffness = stepper.subsystem_stiffness;
   held_.dopri_stiffness = dopri_stepper.subsystem_stiffness;
+  if (method == Method::ros34pw2) {
+    held_.rosw_jacobian = rosw_stepper.jacobian_state();
+  }
 }
 
 template <class System>
@@ -1213,6 +1230,9 @@ void SolverInternal<System>::retract_step(System& system) {
   subsystem_error_set_step_ = held_.subsystem_error_set_step;
   stepper.subsystem_stiffness = held_.rkck_stiffness;
   dopri_stepper.subsystem_stiffness = held_.dopri_stiffness;
+  if (method == Method::ros34pw2) {
+    rosw_stepper.set_jacobian_state(held_.rosw_jacobian);
+  }
   taken.pop_back();
   if (keep_states_) {
     recorded.pop_back();
@@ -1246,6 +1266,8 @@ void SolverInternal<System>::resize(size_t size_) {
   // per recorded step.
   if (method == Method::rodas) {
     rodas_stepper.resize(size_);
+  } else if (method == Method::ros34pw2) {
+    rosw_stepper.resize(size_);
   } else if (method == Method::dopri) {
     dopri_stepper.resize(size_);
   } else {

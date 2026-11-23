@@ -1,8 +1,8 @@
 # Build and run the R-free core check as plain C++ (#43), the check that
 # every copy of a stage time rounds it the same way (stage_times.cpp), the
 # bracketed root-finders' tests (root_find.cpp), event location's
-# (event_location.cpp), and the count of what a reverse sweep allocates per
-# step (sweep_alloc.cpp).
+# (event_location.cpp), the count of what a reverse sweep allocates per
+# step (sweep_alloc.cpp), and the Rosenbrock-W stepper's (rosw.cpp).
 #
 #   make          build and run
 #   make build    build only
@@ -40,8 +40,9 @@ all: build selfcontained layering refusals
 	./root_find
 	./event_location
 	./sweep_alloc
+	./rosw
 
-build: r_free stage_times root_find event_location sweep_alloc
+build: r_free stage_times root_find event_location sweep_alloc rosw
 
 # Every core header must also compile on its own -- no leaning on whichever
 # sibling header happened to be included first to have pulled in <vector> or
@@ -111,10 +112,18 @@ sweep_alloc: sweep_alloc.o Tape.o
 sweep_alloc.o: sweep_alloc.cpp $(HEADERS)
 	$(CXX) $(CXXSTD) -O2 $(WARN) $(INCLUDES) -c -o $@ $<
 
+# Optimised: it solves two stiff problems at several tolerances.
+rosw: rosw.o Tape.o
+	$(CXX) $(CXXSTD) -o $@ $^
+
+rosw.o: rosw.cpp $(HEADERS)
+	$(CXX) $(CXXSTD) -O2 $(WARN) $(INCLUDES) -c -o $@ $<
+
 # Vendored third-party code: build it quietly, we do not police its warnings.
 Tape.o: ../../src/Tape.cpp
 	$(CXX) $(CXXSTD) $(OPT) -w $(INCLUDES) -c -o $@ $<
 
 clean:
 	rm -f r_free r_free.o stage_times stage_times.o root_find \
-	  event_location event_location.o sweep_alloc sweep_alloc.o Tape.o tangent_refusal.log
+	  event_location event_location.o sweep_alloc sweep_alloc.o rosw rosw.o \
+	  Tape.o tangent_refusal.log
