@@ -16,5 +16,6 @@
 #' @aliases OdeControl_set_controller OdeControl_get_controller
 #' @aliases OdeControl_set_stabilisation OdeControl_get_stabilisation
 #' @aliases OdeControl_set_max_steps OdeControl_get_max_steps
+#' @aliases OdeControl_set_jacobian_max_age OdeControl_get_jacobian_max_age
 #' @keywords internal
 NULL

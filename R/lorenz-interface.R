@@ -12,8 +12,10 @@
 #' @param params Numeric vector of system parameters, one entry per parameter
 #'   in the system's order (for Lorenz: sigma, R, b).
 #' @param method Integration method: \code{"rkck"} (default, explicit Cash-Karp
-#'   RK 4(5)), \code{"dopri"} (explicit Dormand-Prince 5(4)) or \code{"rodas"}
-#'   (implicit RODAS4(3) Rosenbrock, for stiff systems).
+#'   RK 4(5)), \code{"dopri"} (explicit Dormand-Prince 5(4)), \code{"rodas"}
+#'   (implicit RODAS4(3) Rosenbrock, for stiff systems) or \code{"ros34pw2"}
+#'   (Rosenbrock-W of order 3, which keeps its Jacobian across steps and
+#'   cannot be differentiated).
 #' @export
 Lorenz_Solver <- R6::R6Class(
   "Lorenz_Solver",
@@ -149,7 +151,7 @@ Lorenz_Solver <- R6::R6Class(
     #'   carrying one direction per input, whose cost does; it is the only mode
     #'   under \code{"rodas"}, which cannot be swept. \code{NULL} (the default)
     #'   is \code{"forward"} for a \code{"rodas"} solver and \code{"reverse"}
-    #'   otherwise.
+    #'   otherwise. A \code{"ros34pw2"} solver is refused in either mode.
     #' @return A list with \code{loss} (sum of squared differences) and
     #'   \code{gradient}: d(loss)/d(params), then d(loss)/d(initial_state), for
     #'   whichever were given.
@@ -169,7 +171,8 @@ Lorenz_Solver <- R6::R6Class(
     #'   forward-mode automatic differentiation. The solve starts from where
     #'   this solver stands, with its step size afresh, and lands a step on
     #'   every time; the solver itself does not move. Those steps are then walked again carrying one direction per
-    #'   input, under the solver's own \code{method}, \code{"rodas"} included.
+    #'   input, under the solver's own \code{method}, \code{"rodas"} included;
+    #'   a \code{"ros34pw2"} solver is refused.
     #'   The cost grows with the number of inputs and not with the number of
     #'   times.
     #' @param parameters The parameters to differentiate with respect to:

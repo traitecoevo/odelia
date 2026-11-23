@@ -5,7 +5,7 @@ template:
 
 reference:
 - title: Solving a system written in R
-  desc: A right-hand side as an R function, with any of the three steppers.
+  desc: A right-hand side as an R function, with any of the four steppers.
   contents:
   - ode_solve
   - ode_steady_state

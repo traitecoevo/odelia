@@ -16,6 +16,12 @@
 #'   problem too stiff for an explicit stepper crawls rather than failing;
 #'   this bounds its cost, and the error names the count and where the solve
 #'   had reached.
+#' @param jacobian_max_age The most steps one Jacobian may serve under the
+#'   Rosenbrock-W stepper (`method = "ros34pw2"`), or `Inf` for no limit; the
+#'   default is 20. That stepper forms a new Jacobian sooner where a step
+#'   from a later point than the one it was formed at is rejected, and 1
+#'   forms one at every step. RODAS forms one at every step
+#'   whatever this says.
 #' @param controller Which rule turns the error estimate into the next step:
 #'   `"hairer"` (the default; the error in the RMS norm over components,
 #'   accept at 1 and rescale after every step, as Hairer's codes and
@@ -131,6 +137,19 @@ OdeControl <- R6::R6Class(
     #' @description The most steps an interval may take; `Inf` for no limit.
     get_max_steps = function() {
       OdeControl_get_max_steps(self$ptr)
+    },
+
+    #' @description Set the most steps one Jacobian may serve under
+    #'   `"ros34pw2"`, or `Inf`.
+    set_jacobian_max_age = function(jacobian_max_age) {
+      OdeControl_set_jacobian_max_age(self$ptr, as.numeric(jacobian_max_age))
+      invisible(self)
+    },
+
+    #' @description The most steps one Jacobian may serve under
+    #'   `"ros34pw2"`; `Inf` for no limit.
+    get_jacobian_max_age = function() {
+      OdeControl_get_jacobian_max_age(self$ptr)
     }
   )
 )

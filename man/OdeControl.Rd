@@ -32,6 +32,8 @@ R6 wrapper for ODE solver control settings
     \item \href{#method-OdeControl-set_step_size_initial}{\code{OdeControl$set_step_size_initial()}}
     \item \href{#method-OdeControl-set_max_steps}{\code{OdeControl$set_max_steps()}}
     \item \href{#method-OdeControl-get_max_steps}{\code{OdeControl$get_max_steps()}}
+    \item \href{#method-OdeControl-set_jacobian_max_age}{\code{OdeControl$set_jacobian_max_age()}}
+    \item \href{#method-OdeControl-get_jacobian_max_age}{\code{OdeControl$get_jacobian_max_age()}}
     \item \href{#method-OdeControl-clone}{\code{OdeControl$clone()}}
   }
 }
@@ -331,6 +333,44 @@ had reached.}
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{OdeControl$get_max_steps()}
+    \if{html}{\out{</div>}}
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-OdeControl-set_jacobian_max_age"></a>}}
+\if{latex}{\out{\hypertarget{method-OdeControl-set_jacobian_max_age}{}}}
+\subsection{\code{OdeControl$set_jacobian_max_age()}}{
+  Set the most steps one Jacobian may serve under
+  `"ros34pw2"`, or `Inf`.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{OdeControl$set_jacobian_max_age(jacobian_max_age)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{jacobian_max_age}}{The most steps one Jacobian may serve under the
+Rosenbrock-W stepper (`method = "ros34pw2"`), or `Inf` for no limit; the
+default is 20. That stepper forms a new Jacobian sooner where a step
+from a later point than the one it was formed at is rejected, and 1
+forms one at every step. RODAS forms one at every step
+whatever this says.}
+    }
+    \if{html}{\out{</div>}}
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-OdeControl-get_jacobian_max_age"></a>}}
+\if{latex}{\out{\hypertarget{method-OdeControl-get_jacobian_max_age}{}}}
+\subsection{\code{OdeControl$get_jacobian_max_age()}}{
+  The most steps one Jacobian may serve under
+  `"ros34pw2"`; `Inf` for no limit.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{OdeControl$get_jacobian_max_age()}
     \if{html}{\out{</div>}}
   }
 }

@@ -34,8 +34,9 @@ ode_solve(
 \item{jacfunc}{`NULL`, or the Jacobian `jacfunc(t, y, parms)`.}
 
 \item{method}{`"dopri"` (explicit Dormand--Prince 5(4), the default, as
-`deSolve`'s `ode45`), `"rkck"` (explicit Cash--Karp 4(5)) or `"rodas"`
-(implicit RODAS4(3), for stiff problems).}
+`deSolve`'s `ode45`), `"rkck"` (explicit Cash--Karp 4(5)), `"rodas"`
+(implicit RODAS4(3), for stiff problems) or `"ros34pw2"` (Rosenbrock-W
+of order 3, which keeps its Jacobian across steps; see [OdeSolver]).}
 
 \item{control}{An [OdeControl], or `NULL` for the defaults with the
 tolerances below, the `controller` below, and the largest step set to
@@ -64,8 +65,9 @@ requested times off the interpolant of the step spanning each, as
 `deSolve`'s `lsoda` does; `FALSE` to land a step on every requested time,
 as its `ode45` does, which costs more steps when the output is finer than
 the steps. `NULL`, the default, means `TRUE` under `"dopri"`, whose
-interpolant has the stepper's order, and `FALSE` under `"rkck"` and
-`"rodas"`, whose interpolant is cubic Hermite, one order short (on Lorenz
+interpolant has the stepper's order, and under `"ros34pw2"`, whose cubic
+Hermite interpolant has its order 3; `FALSE` under `"rkck"` and
+`"rodas"`, whose interpolant is that cubic, one order short (on Lorenz
 at 1e-6 the Cash--Karp dense rows err by 6e-4 where landed rows err by
 3e-11, measured).}
 }

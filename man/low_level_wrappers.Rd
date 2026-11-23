@@ -26,6 +26,8 @@
 \alias{OdeControl_get_stabilisation}
 \alias{OdeControl_set_max_steps}
 \alias{OdeControl_get_max_steps}
+\alias{OdeControl_set_jacobian_max_age}
+\alias{OdeControl_get_jacobian_max_age}
 \title{Low-level Drivers and OdeControl wrappers}
 \description{
 Low-level exported wrappers around native C++ interfaces for driver

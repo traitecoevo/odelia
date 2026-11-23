@@ -55,7 +55,9 @@ Rcpp::List OdeControl_get_controls(SEXP control_xp) {
     Rcpp::Named("step_size_max") = ctrl->step_size_max,
     Rcpp::Named("step_size_initial") = ctrl->step_size_initial,
     Rcpp::Named("max_steps") = ctrl->max_steps == 0
-        ? R_PosInf : static_cast<double>(ctrl->max_steps)
+        ? R_PosInf : static_cast<double>(ctrl->max_steps),
+    Rcpp::Named("jacobian_max_age") = ctrl->jacobian_max_age == 0
+        ? R_PosInf : static_cast<double>(ctrl->jacobian_max_age)
   );
 }
 
@@ -78,6 +80,28 @@ void OdeControl_set_max_steps(SEXP control_xp, double max_steps) {
 // [[Rcpp::export]]
 double OdeControl_get_max_steps(SEXP control_xp) {
   const std::size_t n = get_OdeControl(control_xp)->max_steps;
+  return n == 0 ? R_PosInf : static_cast<double>(n);
+}
+
+// Inf is no limit (the control's 0), as for max_steps.
+// [[Rcpp::export]]
+void OdeControl_set_jacobian_max_age(SEXP control_xp, double max_age) {
+  if (max_age == R_PosInf) {
+    get_OdeControl(control_xp)->jacobian_max_age = 0;
+    return;
+  }
+  if (!(max_age >= 1) || !(max_age <= 9007199254740992.0) ||
+      max_age != std::floor(max_age)) {
+    Rcpp::stop("jacobian_max_age must be a whole number of at least 1 and at "
+               "most 2^53, or Inf for no limit");
+  }
+  get_OdeControl(control_xp)->jacobian_max_age =
+    static_cast<std::size_t>(max_age);
+}
+
+// [[Rcpp::export]]
+double OdeControl_get_jacobian_max_age(SEXP control_xp) {
+  const std::size_t n = get_OdeControl(control_xp)->jacobian_max_age;
   return n == 0 ? R_PosInf : static_cast<double>(n);
 }
 
