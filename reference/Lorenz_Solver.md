@@ -79,8 +79,10 @@ reach the solver. Use the solver's own `$set_params()` and
 - `method`:
 
   Integration method: `"rkck"` (default, explicit Cash-Karp RK 4(5)),
-  `"dopri"` (explicit Dormand-Prince 5(4)) or `"rodas"` (implicit
-  RODAS4(3) Rosenbrock, for stiff systems).
+  `"dopri"` (explicit Dormand-Prince 5(4)), `"rodas"` (implicit
+  RODAS4(3) Rosenbrock, for stiff systems) or `"ros34pw2"` (Rosenbrock-W
+  of order 3, which keeps its Jacobian across steps and cannot be
+  differentiated).
 
 ------------------------------------------------------------------------
 
@@ -342,7 +344,8 @@ automatic differentiation. The schedule is stepped under this solver's
   number of inputs. `"forward"`: the schedule walked again carrying one
   direction per input, whose cost does; it is the only mode under
   `"rodas"`, which cannot be swept. `NULL` (the default) is `"forward"`
-  for a `"rodas"` solver and `"reverse"` otherwise.
+  for a `"rodas"` solver and `"reverse"` otherwise. A `"ros34pw2"`
+  solver is refused in either mode.
 
 #### Returns
 
@@ -359,8 +362,9 @@ parameters and to the state at `times[1]`, by forward-mode automatic
 differentiation. The solve starts from where this solver stands, with
 its step size afresh, and lands a step on every time; the solver itself
 does not move. Those steps are then walked again carrying one direction
-per input, under the solver's own `method`, `"rodas"` included. The cost
-grows with the number of inputs and not with the number of times.
+per input, under the solver's own `method`, `"rodas"` included; a
+`"ros34pw2"` solver is refused. The cost grows with the number of inputs
+and not with the number of times.
 
 #### Usage
 

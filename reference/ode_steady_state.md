@@ -74,7 +74,8 @@ ode_steady_state(
 - method:
 
   The stepper for the warm-up: \`"rodas"\` (implicit RODAS4(3), the
-  default, for a stiff system), \`"dopri"\` or \`"rkck"\`.
+  default, for a stiff system), \`"ros34pw2"\`, \`"dopri"\` or
+  \`"rkck"\`.
 
 - control:
 

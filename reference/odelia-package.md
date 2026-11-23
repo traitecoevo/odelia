@@ -2,7 +2,8 @@
 
 odelia provides an ODE solver in C++ header files, offering both an
 explicit adaptive-step Runge-Kutta 4-5 method and an implicit,
-adaptive-step RODAS4(3) Rosenbrock method for stiff systems, with an
+adaptive-step RODAS4(3) Rosenbrock method for stiff systems, beside a
+Rosenbrock-W method that keeps its Jacobian across steps, with an
 interface to R via Rcpp. ODE systems can be templated on their scalar
 type to support automatic differentiation, enabling exact gradients of a
 recorded run, by a reverse sweep or by forward-mode sensitivities (the

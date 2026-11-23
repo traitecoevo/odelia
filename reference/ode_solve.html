@@ -19,7 +19,7 @@ for deSolve runs unchanged."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.6</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.7</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -110,8 +110,9 @@ for deSolve runs unchanged.</p>
 
 <dt id="arg-method">method<a class="anchor" aria-label="anchor" href="#arg-method"></a></dt>
 <dd><p>`"dopri"` (explicit Dormand–Prince 5(4), the default, as
-`deSolve`'s `ode45`), `"rkck"` (explicit Cash–Karp 4(5)) or `"rodas"`
-(implicit RODAS4(3), for stiff problems).</p></dd>
+`deSolve`'s `ode45`), `"rkck"` (explicit Cash–Karp 4(5)), `"rodas"`
+(implicit RODAS4(3), for stiff problems) or `"ros34pw2"` (Rosenbrock-W
+of order 3, which keeps its Jacobian across steps; see [OdeSolver]).</p></dd>
 
 
 <dt id="arg-control">control<a class="anchor" aria-label="anchor" href="#arg-control"></a></dt>
@@ -154,8 +155,9 @@ requested times off the interpolant of the step spanning each, as
 `deSolve`'s `lsoda` does; `FALSE` to land a step on every requested time,
 as its `ode45` does, which costs more steps when the output is finer than
 the steps. `NULL`, the default, means `TRUE` under `"dopri"`, whose
-interpolant has the stepper's order, and `FALSE` under `"rkck"` and
-`"rodas"`, whose interpolant is cubic Hermite, one order short (on Lorenz
+interpolant has the stepper's order, and under `"ros34pw2"`, whose cubic
+Hermite interpolant has its order 3; `FALSE` under `"rkck"` and
+`"rodas"`, whose interpolant is that cubic, one order short (on Lorenz
 at 1e-6 the Cash–Karp dense rows err by 6e-4 where landed rows err by
 3e-11, measured).</p></dd>
 

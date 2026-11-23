@@ -35,7 +35,7 @@ those above it.
 | `implicit_node.hpp` | `supply_derivatives`, `implicit_value`: a value on the tape carrying rows obtained elsewhere; includes no solver header |
 | `ode_linalg.hpp`, `ode_jacobian.hpp` | dense LU and eigenvalues; the Jacobian from a System’s hook or by forward AD |
 | `ode_substeps.hpp` | `SubsystemSubsteps`: a step that integrates a System’s subsystem (`HasSubsystem`) in substeps of its own, on whichever explicit tableau derives from it |
-| `ode_step_rkck.hpp`, `ode_step_dopri.hpp`, `ode_step_rodas.hpp` | the three steppers; the two explicit ones, `rkck` and `dopri`, record a run, carry `step_adjoint` and substep a subsystem; all three step at a tangent scalar, RODAS with its Jacobian a tangent of a tangent |
+| `ode_step_rkck.hpp`, `ode_step_dopri.hpp`, `ode_step_rodas.hpp`, `ode_step_rosw.hpp` | the four steppers; the two explicit ones, `rkck` and `dopri`, record a run, carry `step_adjoint` and substep a subsystem; those two and RODAS step at a tangent scalar, RODAS with its Jacobian a tangent of a tangent; `ros34pw2`, a Rosenbrock-W method, keeps its Jacobian across steps (`OdeControl::jacobian_max_age`), and a run under it is neither swept nor walked forward, since the steps at which it formed a Jacobian are not recorded |
 | `ode_callback_system.hpp` | `CallbackSystem`, a System over `std::function`s |
 | `ode_solver_internal.hpp` → `ode_solver.hpp` | `SolverInternal` (stepping, the record, `locate`/`retract_step` for events), `Solver<System>` (`advance_*`, `advance_until`, `recording()`, `sweep_adjoint`, `sweep_tangent`, `advance_schedule`); the free `sweep_tangent`, a schedule walked at `tangent_lanes<W>` |
 | `sweep.hpp`, `ode_steady_state.hpp` | segment helpers for a consumer driving a sweep itself; Newton to a fixed point with implicit-function-theorem sensitivity |
@@ -157,7 +157,12 @@ The implicit stepper takes its Jacobian from a System’s own
 `ode_jacobian()` hook when there is one, else by forward-mode AD on a
 `rebind()`-able system (`ode_jacobian.hpp`); `fd_jacobian()` there is
 the one-line finite-difference body for a hook. A system declaring
-`ode_autonomous()` is not asked for a `df/dt` term.
+`ode_autonomous()` is not asked for a `df/dt` term. RODAS forms the
+Jacobian at every step; ROS34PW2, whose order conditions hold for any
+matrix in its place, forms one and keeps it for up to
+`OdeControl::jacobian_max_age` steps, sooner where a step is rejected,
+which is what a consumer whose Jacobian costs many right-hand sides
+wants.
 
 `ode_steady_state.hpp` reuses that Jacobian and the dense LU away from
 the stepper: `SteadyState<System>` solves `f(y*) = 0` by damped Newton,

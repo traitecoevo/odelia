@@ -44,6 +44,10 @@ R6 wrapper for ODE solver control settings
 
 - [`OdeControl$get_max_steps()`](#method-OdeControl-get_max_steps)
 
+- [`OdeControl$set_jacobian_max_age()`](#method-OdeControl-set_jacobian_max_age)
+
+- [`OdeControl$get_jacobian_max_age()`](#method-OdeControl-get_jacobian_max_age)
+
 - [`OdeControl$clone()`](#method-OdeControl-clone)
 
 ------------------------------------------------------------------------
@@ -320,6 +324,38 @@ The most steps an interval may take; \`Inf\` for no limit.
 #### Usage
 
     OdeControl$get_max_steps()
+
+------------------------------------------------------------------------
+
+### `OdeControl$set_jacobian_max_age()`
+
+Set the most steps one Jacobian may serve under \`"ros34pw2"\`, or
+\`Inf\`.
+
+#### Usage
+
+    OdeControl$set_jacobian_max_age(jacobian_max_age)
+
+#### Arguments
+
+- `jacobian_max_age`:
+
+  The most steps one Jacobian may serve under the Rosenbrock-W stepper
+  (\`method = "ros34pw2"\`), or \`Inf\` for no limit; the default is 20.
+  That stepper forms a new Jacobian sooner where a step from a later
+  point than the one it was formed at is rejected, and 1 forms one at
+  every step. RODAS forms one at every step whatever this says.
+
+------------------------------------------------------------------------
+
+### `OdeControl$get_jacobian_max_age()`
+
+The most steps one Jacobian may serve under \`"ros34pw2"\`; \`Inf\` for
+no limit.
+
+#### Usage
+
+    OdeControl$get_jacobian_max_age()
 
 ------------------------------------------------------------------------
 

@@ -124,6 +124,9 @@ ctrl$get_controls()
 #> 
 #> $max_steps
 #> [1] Inf
+#> 
+#> $jacobian_max_age
+#> [1] 20
 
 # Tighten tolerances for a more accurate (but slower) solve
 ctrl$set_tol_abs(1e-8)

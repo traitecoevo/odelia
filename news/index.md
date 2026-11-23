@@ -1,5 +1,65 @@
 # Changelog
 
+## odelia 0.12.7
+
+**A Rosenbrock-W stepper that keeps its Jacobian across steps
+([\#108](https://github.com/traitecoevo/odelia/issues/108)).**
+`Method::ros34pw2` (`method = "ros34pw2"` from R) is ROS34PW2 (Rang and
+Angermann 2005, *BIT Numer. Math.* 45, 761-787): four stages, order 3
+with an embedded order-2 estimate, L-stable and stiffly accurate. It is
+a W-method: its order conditions, and its error estimate’s, hold for any
+matrix in place of the Jacobian, so it forms a Jacobian (and df/dt) at a
+step’s start and keeps it for the steps after. A new one is formed at
+the retry when a step from a later point than the one it was formed at
+is rejected, or when it has served `OdeControl::jacobian_max_age` steps
+(`OdeControl$set_jacobian_max_age()`; 20 by default, 1 for one at every
+step, `Inf` for no limit). W is formed and factored at every step at
+that step’s h. A step costs four right-hand sides. The coefficients are
+the paper’s, derived in the header into the form RODAS’s stages take; no
+code is carried over, so the paper is cited and no licence notice is
+needed.
+
+It is for a stiff system whose Jacobian costs many right-hand sides, as
+regnans’s canonical equation’s does. It saves most at a loose tolerance:
+at a tight one it takes more steps than RODAS, being of order 3, and a
+kept Jacobian more often gets a step rejected and is replaced. On
+Robertson’s kinetics to t = 1e4, with atol = 1e-6 rtol and an analytic
+Jacobian, it forms 5 Jacobians where RODAS forms 36 at rtol 1e-2, 29
+against 73 at 1e-4, and 131 against 187 at 1e-6. A limit on the age is
+needed: with none, a stale Jacobian can hold steps small without a
+rejection to replace it (Van der Pol at 1e-6 took 13,000 steps against
+1,800).
+
+Its dense output, cubic Hermite as under RKCK and RODAS, has its own
+order, so
+[`ode_solve()`](https://traitecoevo.github.io/odelia/reference/ode_solve.md)
+reads requested times off the interpolant by default under it, as under
+Dormand-Prince.
+
+A run under it is not differentiated. `sweep_tangent`,
+`$sensitivities()` and `$loss_and_gradient()` refuse it, as
+`sweep_adjoint` refuses both Rosenbrock steppers: the steps at which a
+run formed a Jacobian depend on its rejections and are not recorded, so
+no walk would take the run’s steps again. `retract_step()` puts back the
+kept Jacobian, its age, and where the last attempt started, so an event
+located under it lands as a run asked to land there would.
+
+New standalone tests (`tests/standalone/rosw.cpp`): order 3 on a driven
+pendulum with the Jacobian formed at every step, formed once and kept
+for the run, and wrong by a matrix its own size, where RODAS with the
+wrong one falls to order 1; one step, solution and error estimate,
+against the method written in the paper’s untransformed form with a
+wrong matrix and an exact df/dt; at least two to three times fewer
+Jacobians than RODAS on Robertson and Van der Pol at three tolerances,
+at an error of the tolerance’s order; when a Jacobian is formed,
+including at a retry with no age limit; a run after `set_state` as a new
+solver’s; the refusals. Event location runs under it, with a pendulum
+whose Jacobian moves with the state; the landing check fails if the
+retraction does not put the Jacobian back. `tests/testthat/test-rosw.R`
+checks it through R.
+
+A **patch** bump: an addition; no number moves under the other steppers.
+
 ## odelia 0.12.6
 
 **`sweep_adjoint_at` holds one tape across its intervals

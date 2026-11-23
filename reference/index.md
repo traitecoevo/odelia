@@ -2,7 +2,7 @@
 
 ## Solving a system written in R
 
-A right-hand side as an R function, with any of the three steppers.
+A right-hand side as an R function, with any of the four steppers.
 
 - [`ode_solve()`](https://traitecoevo.github.io/odelia/reference/ode_solve.md)
   : Solve an ODE given as an R function, deSolve style
@@ -77,4 +77,6 @@ prefer the R6 classes above.
   [`OdeControl_get_stabilisation`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
   [`OdeControl_set_max_steps`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
   [`OdeControl_get_max_steps`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
+  [`OdeControl_set_jacobian_max_age`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
+  [`OdeControl_get_jacobian_max_age`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
   : Low-level Drivers and OdeControl wrappers

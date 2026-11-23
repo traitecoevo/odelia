@@ -1,16 +1,16 @@
 # odelia: ODE solver with automatic differentiation, in C++ header files
 
 `odelia` is an ODE solver implemented in C++ header files, with an
-interface to R via Rcpp. Three adaptive steppers (Cash-Karp RK4(5),
-Dormand-Prince 5(4), and RODAS4(3) for stiff systems) run entirely in
-compiled code, so it is fast. ODE systems are templated on their scalar
-type, so a run can be recorded and differentiated exactly, for
-optimisation and calibration: in **reverse mode**, one sweep over the
-recorded run gives the derivative of a solution with respect to every
-parameter and initial condition at once; in **forward mode**, the run’s
-steps are walked again carrying a few directions, which is cheaper for a
-few parameters and many output times, and works under all three
-steppers.
+interface to R via Rcpp. Four adaptive steppers (Cash-Karp RK4(5),
+Dormand-Prince 5(4), and for stiff systems RODAS4(3) and the
+Rosenbrock-W ROS34PW2) run entirely in compiled code, so it is fast. ODE
+systems are templated on their scalar type, so a run can be recorded and
+differentiated exactly, for optimisation and calibration: in **reverse
+mode**, one sweep over the recorded run gives the derivative of a
+solution with respect to every parameter and initial condition at once;
+in **forward mode**, the run’s steps are walked again carrying a few
+directions, which is cheaper for a few parameters and many output times,
+and works under every stepper but ROS34PW2.
 
 The core solver was first developed by Rich FitzJohn as part of the
 [plant package](https://github.com/traitecoevo/plant/). This package
@@ -18,12 +18,15 @@ spins that code out so it can be used more widely.
 
 ## Features
 
-- Three adaptive steppers running entirely in C++: explicit Cash-Karp
-  RK4(5), Dormand-Prince 5(4) with dense output, and the implicit
-  RODAS4(3) for stiff systems. A compiled system solves about a hundred
-  times faster than the same right-hand side written in R under an
-  explicit stepper (Lorenz: 1 ms against 25-60 ms under `deSolve`). On a
-  stiff problem the comparison is RODAS against
+- Four adaptive steppers running entirely in C++: explicit Cash-Karp
+  RK4(5), Dormand-Prince 5(4) with dense output, the implicit RODAS4(3)
+  for stiff systems, and ROS34PW2, a Rosenbrock-W method of order 3 that
+  keeps its Jacobian across steps, for a stiff system whose Jacobian
+  costs many right-hand sides (on regnans’s two-trait canonical equation
+  it formed 3 Jacobians where RODAS formed 21). A compiled system solves
+  about a hundred times faster than the same right-hand side written in
+  R under an explicit stepper (Lorenz: 1 ms against 25-60 ms under
+  `deSolve`). On a stiff problem the comparison is RODAS against
   [`deSolve::lsoda`](https://rdrr.io/pkg/deSolve/man/lsoda.html), which
   switches to a multistep method and takes far fewer steps: there the
   gain is nearer fifteen times (the shipped consumer-resource model with
@@ -36,8 +39,8 @@ spins that code out so it can be used more widely.
   [Reverse
   mode](https://traitecoevo.github.io/odelia/articles/reverse-mode.html).
 - **Forward-mode sensitivities** `dy(t)/dθ` at every output time, under
-  all three steppers, RODAS included: cheaper than a sweep for up to a
-  few tens of parameters. See the article [Forward
+  every stepper but ROS34PW2, RODAS included: cheaper than a sweep for
+  up to a few tens of parameters. See the article [Forward
   mode](https://traitecoevo.github.io/odelia/articles/forward-mode.html).
 - **External drivers**: time-varying forcing variables, interpolated
   with a cubic Hermite spline and queried by the system at each step.
@@ -372,7 +375,7 @@ context lives in
 
 ## Solving a system written in R
 
-A right-hand side as an R function, with any of the three steppers.
+A right-hand side as an R function, with any of the four steppers.
 
 - [`ode_solve()`](https://traitecoevo.github.io/odelia/reference/ode_solve.md)
   : Solve an ODE given as an R function, deSolve style
@@ -447,6 +450,8 @@ prefer the R6 classes above.
   [`OdeControl_get_stabilisation`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
   [`OdeControl_set_max_steps`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
   [`OdeControl_get_max_steps`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
+  [`OdeControl_set_jacobian_max_age`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
+  [`OdeControl_get_jacobian_max_age`](https://traitecoevo.github.io/odelia/reference/low_level_wrappers.md)
   : Low-level Drivers and OdeControl wrappers
 
 # Articles

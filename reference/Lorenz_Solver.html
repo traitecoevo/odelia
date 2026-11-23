@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.6</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.7</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -98,8 +98,10 @@
 
       <dt><code>method</code></dt>
 <dd><p>Integration method: <code>"rkck"</code> (default, explicit Cash-Karp
-RK 4(5)), <code>"dopri"</code> (explicit Dormand-Prince 5(4)) or <code>"rodas"</code>
-(implicit RODAS4(3) Rosenbrock, for stiff systems).</p></dd>
+RK 4(5)), <code>"dopri"</code> (explicit Dormand-Prince 5(4)), <code>"rodas"</code>
+(implicit RODAS4(3) Rosenbrock, for stiff systems) or <code>"ros34pw2"</code>
+(Rosenbrock-W of order 3, which keeps its Jacobian across steps and
+cannot be differentiated).</p></dd>
 
 
 </dl><p></p></div>
@@ -352,7 +354,7 @@ with the number of inputs. <code>"forward"</code>: the schedule walked again
 carrying one direction per input, whose cost does; it is the only mode
 under <code>"rodas"</code>, which cannot be swept. <code>NULL</code> (the default)
 is <code>"forward"</code> for a <code>"rodas"</code> solver and <code>"reverse"</code>
-otherwise.</p></dd>
+otherwise. A <code>"ros34pw2"</code> solver is refused in either mode.</p></dd>
 
 
 </dl><p></p></div>
@@ -372,7 +374,8 @@ otherwise.</p></dd>
   forward-mode automatic differentiation. The solve starts from where
   this solver stands, with its step size afresh, and lands a step on
   every time; the solver itself does not move. Those steps are then walked again carrying one direction per
-  input, under the solver's own <code>method</code>, <code>"rodas"</code> included.
+  input, under the solver's own <code>method</code>, <code>"rodas"</code> included;
+  a <code>"ros34pw2"</code> solver is refused.
   The cost grows with the number of inputs and not with the number of
   times.</p><div class="section">
 <h4 id="usage-18">Usage<a class="anchor" aria-label="anchor" href="#usage-18"></a></h4>

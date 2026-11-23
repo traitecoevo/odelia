@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.6</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.7</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,7 +42,7 @@
 
 <div id="odelia--developer-guide-for-agents" class="section level1">
 
-<p><code>odelia</code> is an <strong>ODE solver with automatic differentiation, implemented in C++ header files</strong>, with an R interface via Rcpp. Three adaptive steppers (Cash–Karp RK4(5), Dormand–Prince 5(4), RODAS4(3) for stiff systems) run entirely in compiled code. ODE systems are templated on their scalar type, so a recorded run can be differentiated in <strong>reverse mode</strong> (one sweep gives the derivative with respect to every parameter and initial condition) or in <strong>forward mode</strong> (the run’s steps walked again carrying a few directions, under every stepper, RODAS included), and the implicit stepper’s Jacobian is taken in forward mode, all through the vendored <a href="https://github.com/auto-differentiation/xad" class="external-link">XAD</a> library. Time-varying external drivers are interpolated with a cubic Hermite spline. A right-hand side written in R can be solved by the same steppers.</p>
+<p><code>odelia</code> is an <strong>ODE solver with automatic differentiation, implemented in C++ header files</strong>, with an R interface via Rcpp. Four adaptive steppers (Cash–Karp RK4(5), Dormand–Prince 5(4), and for stiff systems RODAS4(3) and the Rosenbrock-W ROS34PW2, which keeps its Jacobian across steps) run entirely in compiled code. ODE systems are templated on their scalar type, so a recorded run can be differentiated in <strong>reverse mode</strong> (one sweep gives the derivative with respect to every parameter and initial condition) or in <strong>forward mode</strong> (the run’s steps walked again carrying a few directions, under every stepper but ROS34PW2, RODAS included), and the implicit steppers’ Jacobian is taken in forward mode, all through the vendored <a href="https://github.com/auto-differentiation/xad" class="external-link">XAD</a> library. Time-varying external drivers are interpolated with a cubic Hermite spline. A right-hand side written in R can be solved by the same steppers.</p>
 <p>The solver core was first written by Rich FitzJohn inside <a href="https://github.com/traitecoevo/plant" class="external-link"><code>plant</code></a>; <code>odelia</code> spins it out as a reusable library (header-only but for the XAD tape runtime, see ARCHITECTURE.md) that other Rcpp packages link against. The next-generation <code>plant</code> core links against it.</p>
 <p><strong>Start here.</strong> <code>ARCHITECTURE.md</code> has the map of the headers in dependency order. <code>vignettes/articles/reverse-mode.Rmd</code> is the design of the gradient machinery and the reading order through the headers; <code>vignettes/articles/forward-mode.Rmd</code> is the forward pass and when it costs less than a sweep. The System contract is the concepts in <code>inst/include/odelia/ode_interface.hpp</code>.</p>
 <div class="section level2">
