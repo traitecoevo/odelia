@@ -5,14 +5,15 @@
 <!-- badges: end -->
 
 `odelia` is an ODE solver implemented in C++ header files, with an interface to R
-via Rcpp. Three adaptive steppers (Cash-Karp RK4(5), Dormand-Prince 5(4), and
-RODAS4(3) for stiff systems) run entirely in compiled code, so it is fast. ODE
+via Rcpp. Four adaptive steppers (Cash-Karp RK4(5), Dormand-Prince 5(4), and
+for stiff systems RODAS4(3) and the Rosenbrock-W ROS34PW2) run entirely in
+compiled code, so it is fast. ODE
 systems are templated on their scalar type, so a run can be recorded and
 differentiated exactly, for optimisation and calibration: in **reverse mode**,
 one sweep over the recorded run gives the derivative of a solution with respect
 to every parameter and initial condition at once; in **forward mode**, the run's
 steps are walked again carrying a few directions, which is cheaper for a few
-parameters and many output times, and works under all three steppers.
+parameters and many output times, and works under every stepper but ROS34PW2.
 
 The core solver was first developed by Rich FitzJohn as part of the
 [plant package](https://github.com/traitecoevo/plant/). This package spins that
@@ -20,9 +21,12 @@ code out so it can be used more widely.
 
 ## Features
 
-- Three adaptive steppers running entirely in C++: explicit Cash-Karp RK4(5),
-  Dormand-Prince 5(4) with dense output, and the implicit RODAS4(3) for stiff
-  systems. A compiled system solves about a hundred times faster than the same
+- Four adaptive steppers running entirely in C++: explicit Cash-Karp RK4(5),
+  Dormand-Prince 5(4) with dense output, the implicit RODAS4(3) for stiff
+  systems, and ROS34PW2, a Rosenbrock-W method of order 3 that keeps its
+  Jacobian across steps, for a stiff system whose Jacobian costs many
+  right-hand sides (on regnans's two-trait canonical equation it formed 3
+  Jacobians where RODAS formed 21). A compiled system solves about a hundred times faster than the same
   right-hand side written in R under an explicit stepper (Lorenz: 1 ms against
   25-60 ms under `deSolve`). On a stiff problem the comparison is RODAS against
   `deSolve::lsoda`, which switches to a multistep method and takes far fewer
@@ -34,8 +38,8 @@ code out so it can be used more widely.
   parameter and initial condition. Sweeps need an explicit stepper (Cash-Karp
   or Dormand-Prince). See the article
   [Reverse mode](https://traitecoevo.github.io/odelia/articles/reverse-mode.html).
-- **Forward-mode sensitivities** `dy(t)/dθ` at every output time, under all
-  three steppers, RODAS included: cheaper than a sweep for up to a few tens of
+- **Forward-mode sensitivities** `dy(t)/dθ` at every output time, under every
+  stepper but ROS34PW2, RODAS included: cheaper than a sweep for up to a few tens of
   parameters. See the article
   [Forward mode](https://traitecoevo.github.io/odelia/articles/forward-mode.html).
 - **External drivers**: time-varying forcing variables, interpolated with a cubic
