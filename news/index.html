@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">odelia</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.5</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.6</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -40,6 +40,11 @@
       <small>Source: <a href="https://github.com/traitecoevo/odelia/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.12.6" id="odelia-0126">odelia 0.12.6<a class="anchor" aria-label="anchor" href="#odelia-0126"></a></h2>
+<p><strong><code>sweep_adjoint_at</code> holds one tape across its intervals (<a href="https://github.com/traitecoevo/odelia/issues/103" class="external-link">#103</a>).</strong> It swept each interval between output times as a call of its own, and each call built its own XAD tape and active System. Constructing a tape reserves a large block, and a time series has an interval per output time, so a gradient over a few hundred outputs reserved and freed that block a few hundred times. Under an allocator that hands freed blocks back to the operating system, as CmdStan’s default tbbmalloc proxy does, that cost more than the sweep: after 0.12.4 removed the per-step allocations, a reverse-sweep gradient of a two-state chemostat fitted to six 200-point series still took 47 ms under tbbmalloc against 2.8 ms with the system allocator, with 80% of the time in <code>__munmap</code> from the tape’s destructor. The intervals now share one workspace (the tape and the active System), as the segments of one sweep already did. <code>sweep_adjoint</code> is unchanged and still makes its own. The <code>sweep_alloc</code> probe gains a check that an interval of <code>sweep_adjoint_at</code> allocates less than a sweep’s fixed setup (5 allocations against 21 on Lorenz; before, 21 against 21). The tape’s block goes around <code>operator new</code>, so the probe counts the active System held beside it. The gradients are bit-identical to before.</p>
+<p>A <strong>patch</strong> bump: no number moves.</p>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.12.5" id="odelia-0125">odelia 0.12.5<a class="anchor" aria-label="anchor" href="#odelia-0125"></a></h2>
 <p><strong>The code adapted from other projects carries their licences, and <code>inst/COPYRIGHTS</code> lists it.</strong> The RODAS4(3) stepper’s coefficients and stage formulation come from Hairer and Wanner’s <code>rodas.f</code>, and the Dormand-Prince stepper’s dense output from their <code>dopri5.f</code>. Both are under Ernst Hairer’s two-clause BSD licence, which asks that source redistributions keep its notice. odelia cited both codes but did not carry the notice. It is now reproduced at the end of <code>ode_step_rodas.hpp</code> and <code>ode_step_dopri.hpp</code>, as Boost’s already is in <code>root_find.hpp</code>. <code>inst/COPYRIGHTS</code> lists the three sources (Hairer and Wanner, Boost.Math, XAD), with the files each reaches and its licence. DESCRIPTION’s new <code>Copyright:</code> field points to that file; the authors list is unchanged. All three licences are compatible with odelia’s AGPL.</p>

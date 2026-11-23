@@ -1,5 +1,30 @@
 # Changelog
 
+## odelia 0.12.6
+
+**`sweep_adjoint_at` holds one tape across its intervals
+([\#103](https://github.com/traitecoevo/odelia/issues/103)).** It swept
+each interval between output times as a call of its own, and each call
+built its own XAD tape and active System. Constructing a tape reserves a
+large block, and a time series has an interval per output time, so a
+gradient over a few hundred outputs reserved and freed that block a few
+hundred times. Under an allocator that hands freed blocks back to the
+operating system, as CmdStan’s default tbbmalloc proxy does, that cost
+more than the sweep: after 0.12.4 removed the per-step allocations, a
+reverse-sweep gradient of a two-state chemostat fitted to six 200-point
+series still took 47 ms under tbbmalloc against 2.8 ms with the system
+allocator, with 80% of the time in `__munmap` from the tape’s
+destructor. The intervals now share one workspace (the tape and the
+active System), as the segments of one sweep already did.
+`sweep_adjoint` is unchanged and still makes its own. The `sweep_alloc`
+probe gains a check that an interval of `sweep_adjoint_at` allocates
+less than a sweep’s fixed setup (5 allocations against 21 on Lorenz;
+before, 21 against 21). The tape’s block goes around `operator new`, so
+the probe counts the active System held beside it. The gradients are
+bit-identical to before.
+
+A **patch** bump: no number moves.
+
 ## odelia 0.12.5
 
 **The code adapted from other projects carries their licences, and
