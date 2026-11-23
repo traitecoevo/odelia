@@ -5,8 +5,8 @@
 // ROS34PW2: a 4-stage, L-stable, stiffly-accurate Rosenbrock-W method of order
 // 3 with an embedded 2nd-order error estimate (J. Rang and L. Angermann, New
 // Rosenbrock W-methods of order 3 for partial differential algebraic equations
-// of index 1, BIT Numer. Math. 45 (2005) 761-787, table 4.2). The tableau
-// below is the paper's.
+// of index 1, BIT Numer. Math. 45 (2005) 761-787). The tableau below is the
+// paper's.
 //
 // A W-method's order conditions hold for any matrix in place of the Jacobian,
 // and so do its embedded pair's, so the error estimate stays honest when the
